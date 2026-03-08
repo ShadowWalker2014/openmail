@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -25,7 +26,16 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Plus, Zap, Play, Pause, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Zap,
+  Play,
+  Pause,
+  Trash2,
+  Mail,
+  Clock,
+  Settings,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -40,9 +50,21 @@ interface Campaign {
   description: string | null;
   status: string;
   triggerType: string;
-  // Drizzle returns camelCase from REST; handle both
   triggerConfig: Record<string, unknown>;
   createdAt: string;
+}
+
+interface CampaignStep {
+  id: string;
+  campaignId: string;
+  stepType: "email" | "wait";
+  config: Record<string, unknown>;
+  position: number;
+  createdAt: string;
+}
+
+interface CampaignDetail extends Campaign {
+  steps: CampaignStep[];
 }
 
 const STATUS_BADGE: Record<
@@ -56,10 +78,18 @@ const STATUS_BADGE: Record<
 };
 
 function getEventName(config: Record<string, unknown>): string {
-  // Handle both camelCase (REST/Drizzle) and snake_case (Electric)
   const name = config.eventName ?? config.event_name;
   return name ? `"${name}"` : "(unnamed event)";
 }
+
+function getTriggerLabel(campaign: Campaign): string {
+  if (campaign.triggerType === "event") {
+    return `Trigger: ${getEventName(campaign.triggerConfig)}`;
+  }
+  return "Manual trigger";
+}
+
+// ─── Skeleton ────────────────────────────────────────────────────────────────
 
 function CampaignCardSkeleton() {
   return (
@@ -76,11 +106,468 @@ function CampaignCardSkeleton() {
   );
 }
 
+// ─── Step config right panel ─────────────────────────────────────────────────
+
+interface StepConfigPanelProps {
+  step: CampaignStep | null;
+  campaignId: string;
+  workspaceId: string;
+  onSaved: () => void;
+  onDeleted: () => void;
+}
+
+function StepConfigPanel({
+  step,
+  campaignId,
+  workspaceId,
+  onSaved,
+  onDeleted,
+}: StepConfigPanelProps) {
+  const qc = useQueryClient();
+
+  // Email step state
+  const [subject, setSubject] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [htmlContent, setHtmlContent] = useState("");
+
+  // Wait step state
+  const [duration, setDuration] = useState(1);
+  const [unit, setUnit] = useState<"hours" | "days" | "weeks">("days");
+
+  // Sync local state when step changes
+  useEffect(() => {
+    if (!step) return;
+    if (step.stepType === "email") {
+      setSubject((step.config.subject as string) ?? "");
+      setFromName((step.config.fromName as string) ?? "");
+      setFromEmail((step.config.fromEmail as string) ?? "");
+      setHtmlContent((step.config.htmlContent as string) ?? "");
+    } else if (step.stepType === "wait") {
+      setDuration((step.config.duration as number) ?? 1);
+      setUnit((step.config.unit as "hours" | "days" | "weeks") ?? "days");
+    }
+  }, [step?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveMutation = useMutation({
+    mutationFn: (config: Record<string, unknown>) =>
+      sessionFetch(workspaceId, `/campaigns/${campaignId}/steps/${step!.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ config }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaignId] });
+      toast.success("Step saved");
+      onSaved();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(workspaceId, `/campaigns/${campaignId}/steps/${step!.id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaignId] });
+      toast.success("Step deleted");
+      onDeleted();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (!step) {
+    return (
+      <div className="flex flex-col min-h-0">
+        <div className="shrink-0 px-4 py-2 border-b text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          No step selected
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center h-full text-center opacity-40 p-5">
+          <Settings className="h-8 w-8 text-muted-foreground mb-2" />
+          <p className="text-[12px] text-muted-foreground">
+            Select a step to configure it, or add one
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  function handleSave() {
+    if (step!.stepType === "email") {
+      saveMutation.mutate({ subject, fromName, fromEmail, htmlContent });
+    } else {
+      saveMutation.mutate({ duration, unit });
+    }
+  }
+
+  function handleDelete() {
+    if (window.confirm("Delete this step?")) {
+      deleteMutation.mutate();
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="shrink-0 px-4 py-2 border-b text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Configure Step
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        {step.stepType === "email" && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Subject</Label>
+              <Input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Subject line"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[12px]">From Name</Label>
+                <Input
+                  value={fromName}
+                  onChange={(e) => setFromName(e.target.value)}
+                  placeholder="Acme Inc."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[12px]">From Email</Label>
+                <Input
+                  value={fromEmail}
+                  onChange={(e) => setFromEmail(e.target.value)}
+                  placeholder="hello@example.com"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">HTML Content</Label>
+              <textarea
+                value={htmlContent}
+                onChange={(e) => setHtmlContent(e.target.value)}
+                placeholder="<p>Hello {{contact.firstName}}</p>"
+                className="w-full min-h-[200px] rounded-md border border-border bg-input px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+              />
+            </div>
+            {htmlContent && (
+              <div className="space-y-1.5">
+                <Label className="text-[12px]">Preview</Label>
+                <iframe
+                  srcDoc={htmlContent}
+                  sandbox="allow-same-origin"
+                  className="w-full min-h-[300px] rounded-md border border-border bg-white"
+                  title="Email preview"
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {step.stepType === "wait" && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Duration</Label>
+              <Input
+                type="number"
+                min={1}
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Unit</Label>
+              <select
+                value={unit}
+                onChange={(e) =>
+                  setUnit(e.target.value as "hours" | "days" | "weeks")
+                }
+                className="flex h-8 w-full items-center rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+              >
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+                <option value="weeks">Weeks</option>
+              </select>
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Wait {duration} {unit} before the next step
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="shrink-0 px-5 py-3 border-t flex items-center justify-between gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete step
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? "Saving…" : "Save step"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Campaign Detail Dialog ───────────────────────────────────────────────────
+
+interface CampaignDetailDialogProps {
+  campaign: Campaign;
+  onClose: () => void;
+  workspaceId: string;
+}
+
+function CampaignDetailDialog({
+  campaign,
+  onClose,
+  workspaceId,
+}: CampaignDetailDialogProps) {
+  const qc = useQueryClient();
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+
+  const { data: detail, isLoading } = useQuery<CampaignDetail>({
+    queryKey: ["campaign-detail", campaign.id],
+    queryFn: () => sessionFetch(workspaceId, `/campaigns/${campaign.id}`),
+    enabled: !!workspaceId,
+  });
+
+  const sortedSteps = [...(detail?.steps ?? [])].sort(
+    (a, b) => a.position - b.position
+  );
+
+  const selectedStep = sortedSteps.find((s) => s.id === selectedStepId) ?? null;
+
+  const addStepMutation = useMutation({
+    mutationFn: (stepType: "email" | "wait") =>
+      sessionFetch<CampaignStep>(workspaceId, `/campaigns/${campaign.id}/steps`, {
+        method: "POST",
+        body: JSON.stringify({
+          stepType,
+          config: {},
+          position: detail?.steps.length ?? 0,
+        }),
+      }),
+    onSuccess: (newStep) => {
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+      setSelectedStepId(newStep.id);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: (status: string) =>
+      sessionFetch(workspaceId, `/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const currentStatus = detail?.status ?? campaign.status;
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <DialogHeader className="flex flex-row items-center justify-between px-5 py-3 border-b shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <DialogTitle className="truncate">{campaign.name}</DialogTitle>
+            <Badge variant={STATUS_BADGE[currentStatus] ?? "secondary"}>
+              {currentStatus}
+            </Badge>
+          </div>
+          <span className="text-[12px] text-muted-foreground shrink-0 mr-7">
+            {getTriggerLabel(campaign)}
+          </span>
+        </DialogHeader>
+
+        {/* Body */}
+        <div className="flex flex-1 min-h-0">
+          {/* Left panel */}
+          <div className="w-[300px] shrink-0 border-r border-border flex flex-col overflow-hidden">
+            {/* Campaign info */}
+            {campaign.description && (
+              <div className="px-4 py-3 border-b">
+                <p className="text-[12px] text-muted-foreground">
+                  {campaign.description}
+                </p>
+              </div>
+            )}
+
+            {/* Step list */}
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              {/* Trigger node */}
+              <div className="bg-muted/40 rounded-lg border border-border px-3 py-2 mb-1 flex items-center gap-2">
+                <Zap className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-[12px] text-muted-foreground truncate">
+                  {campaign.triggerType === "event"
+                    ? `Event: ${getEventName(campaign.triggerConfig)}`
+                    : "Manual trigger"}
+                </span>
+              </div>
+
+              {/* Connector */}
+              {sortedSteps.length > 0 && (
+                <div className="w-px h-3 bg-border/60 mx-auto my-0.5" />
+              )}
+
+              {isLoading && (
+                <div className="space-y-1 mt-1">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="h-10 rounded-lg shimmer" />
+                  ))}
+                </div>
+              )}
+
+              {!isLoading && sortedSteps.length === 0 && (
+                <p className="text-center text-[12px] text-muted-foreground mt-4">
+                  No steps yet
+                </p>
+              )}
+
+              {sortedSteps.map((step, idx) => (
+                <div key={step.id}>
+                  <button
+                    onClick={() => setSelectedStepId(step.id)}
+                    className={cn(
+                      "w-full rounded-lg border px-3 py-2.5 cursor-pointer transition-colors text-left",
+                      selectedStepId === step.id
+                        ? "border-foreground bg-accent"
+                        : "border-border hover:bg-accent/50"
+                    )}
+                  >
+                    {step.stepType === "email" && (
+                      <div className="flex items-start gap-2">
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium">Send Email</p>
+                          {(step.config.subject as string | undefined) && (
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {step.config.subject as string}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {step.stepType === "wait" && (
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium">Wait</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {(step.config.duration as number) ?? "?"}{" "}
+                            {(step.config.unit as string) ?? "days"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                  {idx < sortedSteps.length - 1 && (
+                    <div className="w-px h-3 bg-border/40 mx-auto my-0.5" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add step buttons */}
+            <div className="px-3 py-3 border-t">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+                Add step
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => addStepMutation.mutate("email")}
+                  disabled={addStepMutation.isPending}
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Email
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => addStepMutation.mutate("wait")}
+                  disabled={addStepMutation.isPending}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Wait
+                </Button>
+              </div>
+            </div>
+
+            {/* Status footer */}
+            <div className="px-4 py-3 border-t bg-card shrink-0">
+              {(currentStatus === "draft" || currentStatus === "paused") && (
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={() => toggleStatusMutation.mutate("active")}
+                  disabled={toggleStatusMutation.isPending}
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Activate
+                </Button>
+              )}
+              {currentStatus === "active" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => toggleStatusMutation.mutate("paused")}
+                  disabled={toggleStatusMutation.isPending}
+                >
+                  <Pause className="h-3.5 w-3.5" />
+                  Pause
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Right panel */}
+          <div className="flex-1 flex flex-col min-w-0 bg-muted/30 overflow-hidden">
+            <StepConfigPanel
+              step={selectedStep}
+              campaignId={campaign.id}
+              workspaceId={workspaceId}
+              onSaved={() => {}}
+              onDeleted={() => setSelectedStepId(null)}
+            />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Campaigns Page ───────────────────────────────────────────────────────────
+
 function CampaignsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [detailCampaign, setDetailCampaign] = useState<Campaign | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLInputElement>(null);
   const eventNameRef = useRef<HTMLInputElement>(null);
@@ -120,12 +607,11 @@ function CampaignsPage() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
-    // Optimistic update — immediately reflect the new status
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: ["campaigns", activeWorkspaceId] });
       const previous = qc.getQueryData<Campaign[]>(["campaigns", activeWorkspaceId]);
       qc.setQueryData<Campaign[]>(["campaigns", activeWorkspaceId], (old) =>
-        old?.map((c) => c.id === id ? { ...c, status } : c) ?? []
+        old?.map((c) => (c.id === id ? { ...c, status } : c)) ?? []
       );
       return { previous };
     },
@@ -221,7 +707,6 @@ function CampaignsPage() {
                   ))}
                 </div>
               </div>
-              {/* Animated field appearance */}
               <div
                 className={cn(
                   "overflow-hidden transition-all duration-200",
@@ -260,11 +745,14 @@ function CampaignsPage() {
           campaigns.map((campaign) => (
             <div
               key={campaign.id}
-              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
+              onClick={() => setDetailCampaign(campaign)}
+              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50 cursor-pointer"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="truncate font-medium text-sm">{campaign.name}</span>
+                  <span className="truncate font-medium text-sm">
+                    {campaign.name}
+                  </span>
                   <Badge variant={STATUS_BADGE[campaign.status] ?? "secondary"}>
                     {campaign.status}
                   </Badge>
@@ -277,16 +765,23 @@ function CampaignsPage() {
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                  {campaign.createdAt ? format(new Date(campaign.createdAt), "MMM d") : ""}
+                  {campaign.createdAt
+                    ? format(new Date(campaign.createdAt), "MMM d")
+                    : ""}
                 </span>
-                {(campaign.status === "draft" || campaign.status === "paused") && (
+                {(campaign.status === "draft" ||
+                  campaign.status === "paused") && (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={toggleMutation.isPending}
-                    onClick={() =>
-                      toggleMutation.mutate({ id: campaign.id, status: "active" })
-                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleMutation.mutate({
+                        id: campaign.id,
+                        status: "active",
+                      });
+                    }}
                   >
                     <Play className="h-3.5 w-3.5" />
                     Activate
@@ -297,9 +792,13 @@ function CampaignsPage() {
                     size="sm"
                     variant="outline"
                     disabled={toggleMutation.isPending}
-                    onClick={() =>
-                      toggleMutation.mutate({ id: campaign.id, status: "paused" })
-                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleMutation.mutate({
+                        id: campaign.id,
+                        status: "paused",
+                      });
+                    }}
                   >
                     <Pause className="h-3.5 w-3.5" />
                     Pause
@@ -307,7 +806,10 @@ function CampaignsPage() {
                 )}
                 {campaign.status !== "active" && (
                   <button
-                    onClick={() => setDeleteTarget(campaign)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(campaign);
+                    }}
                     className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -334,10 +836,20 @@ function CampaignsPage() {
         )}
       </div>
 
+      {/* Campaign Detail Dialog */}
+      {detailCampaign && (
+        <CampaignDetailDialog
+          key={detailCampaign.id}
+          campaign={detailCampaign}
+          onClose={() => setDetailCampaign(null)}
+          workspaceId={activeWorkspaceId!}
+        />
+      )}
+
       {/* Delete confirmation */}
       <AlertDialog
         open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        onOpenChange={(o: boolean) => !o && setDeleteTarget(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
