@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
@@ -29,9 +29,6 @@ interface Contact {
   createdAt: string;
   attributes: Record<string, unknown>;
 }
-
-// DialogTrigger removed — we use open/setOpen state instead
-import { DialogTrigger } from "@/components/ui/dialog";
 
 const PAGE_SIZE = 50;
 

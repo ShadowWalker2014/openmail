@@ -398,8 +398,7 @@ function SegmentsPage() {
           <DialogHeader>
             <DialogTitle>{editTarget ? "Edit Segment" : "New Segment"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateSubmit} className="space-y-5">
-          <div>
+          <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Name *</Label>
               <Input
@@ -480,8 +479,7 @@ function SegmentsPage() {
               </button>
             </div>
 
-          </div>
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-popover pt-2">
               <Button
                 type="button"
                 variant="outline"

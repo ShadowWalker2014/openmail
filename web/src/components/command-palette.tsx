@@ -8,15 +8,9 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput,
   CommandItem, CommandList, CommandSeparator, CommandShortcut,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceStore } from "@/store/workspace";
-
-interface CommandGroup {
-  heading: string;
-  items: CommandItemDef[];
-}
 
 interface CommandItemDef {
   id: string;
@@ -200,16 +194,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         </div>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes paletteIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.96); }
-          to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-        }
-      `}</style>
     </>
   );
 }

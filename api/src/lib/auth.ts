@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { eq } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
 import * as schema from "@openmail/shared/schema";
 import { getResend } from "./resend";
@@ -87,7 +88,6 @@ async function ensureUniqueSlug(
   tx: ReturnType<typeof getDb>,
   base: string,
 ): Promise<string> {
-  const { eq } = await import("drizzle-orm");
   let candidate = base;
   let attempts = 0;
   while (attempts < 10) {

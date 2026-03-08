@@ -198,10 +198,9 @@ function BroadcastsPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: (id: string) => {
-      setSendingId(id);
-      return sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST" });
-    },
+    mutationFn: (id: string) =>
+      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST" }),
+    onMutate: (id) => setSendingId(id),
     onSettled: () => setSendingId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
@@ -318,10 +317,10 @@ function BroadcastsPage() {
                   ref={htmlRef}
                   required
                   placeholder="<h1>Hello {{firstName}}!</h1>"
-                  className="w-full min-h-[110px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="w-full min-h-[110px] resize-y rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
-              <DialogFooter className="sticky bottom-0 bg-background pt-2">
+              <DialogFooter className="sticky bottom-0 bg-popover pt-2">
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating…" : "Create Broadcast"}
                 </Button>
