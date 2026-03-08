@@ -95,4 +95,23 @@ app.patch(
   }
 );
 
+app.delete("/:id", async (c) => {
+  const userId = c.get("userId") as string;
+  const workspaceId = c.req.param("id");
+  const db = getDb();
+
+  const [member] = await db
+    .select()
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
+    .limit(1);
+
+  if (!member || member.role !== "owner") {
+    return c.json({ error: "Forbidden: only owner can delete workspace" }, 403);
+  }
+
+  await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+  return c.json({ success: true });
+});
+
 export default app;

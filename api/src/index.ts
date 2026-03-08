@@ -13,6 +13,12 @@ import segmentsRouter from "./routes/segments.js";
 import apiKeysRouter from "./routes/api-keys.js";
 import analyticsRouter from "./routes/analytics.js";
 import shapesRouter from "./routes/shapes.js";
+import membersRouter from "./routes/members.js";
+import invitesRouter from "./routes/invites.js";
+import inviteAcceptRouter from "./routes/invite-accept.js";
+import { getDb } from "@openmail/shared/db";
+import { workspaceMembers } from "@openmail/shared/schema";
+import { eq, and } from "drizzle-orm";
 import { logger } from "./lib/logger.js";
 import type { ApiVariables } from "./types.js";
 
@@ -44,7 +50,17 @@ sessionApi.use("*", sessionAuth);
 sessionApi.route("/workspaces", workspacesRouter);
 
 sessionApi.use("/ws/:workspaceId/*", async (c, next) => {
-  c.set("workspaceId", c.req.param("workspaceId"));
+  const workspaceId = c.req.param("workspaceId");
+  const userId = c.get("userId") as string;
+  const db = getDb();
+  const [member] = await db
+    .select()
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
+    .limit(1);
+  if (!member) return c.json({ error: "Forbidden" }, 403);
+  c.set("workspaceId", workspaceId);
+  c.set("workspaceMember", member);
   await next();
 });
 sessionApi.route("/ws/:workspaceId/contacts", contactsRouter);
@@ -56,6 +72,9 @@ sessionApi.route("/ws/:workspaceId/segments", segmentsRouter);
 sessionApi.route("/ws/:workspaceId/api-keys", apiKeysRouter);
 sessionApi.route("/ws/:workspaceId/analytics", analyticsRouter);
 sessionApi.route("/ws/:workspaceId/shapes", shapesRouter);
+sessionApi.route("/ws/:workspaceId/members", membersRouter);
+sessionApi.route("/ws/:workspaceId/invites", invitesRouter);
+sessionApi.route("/invites", inviteAcceptRouter);
 
 app.route("/api/session", sessionApi);
 
