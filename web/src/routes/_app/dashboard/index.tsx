@@ -8,7 +8,7 @@ import {
   Activity, AlertCircle, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/dashboard/")({
@@ -109,6 +109,17 @@ function DashboardPage() {
   const { data: liveEvents = [], isLoading: eventsLoading } =
     useWorkspaceShape<EmailEvent>("email_events", { columns: EMAIL_EVENT_COLUMNS });
 
+  // If Electric is unreachable, isLoading stays true forever.
+  // After 3s, stop showing skeletons and fall through to the empty state.
+  const [shapeTimedOut, setShapeTimedOut] = useState(false);
+  useEffect(() => {
+    if (!eventsLoading) { setShapeTimedOut(false); return; }
+    const t = setTimeout(() => setShapeTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, [eventsLoading]);
+
+  const showEventsLoading = eventsLoading && !shapeTimedOut;
+
   const recentEvents = useMemo(
     () =>
       [...liveEvents]
@@ -150,52 +161,43 @@ function DashboardPage() {
 
       {/* ── Live activity ── */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        {/* Header row */}
-        <div
-          className="flex items-center justify-between px-4 py-2.5"
-          style={{ borderBottom: "1px solid hsl(var(--border))" }}
-        >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="flex items-center gap-2">
             <Activity className="h-3 w-3 text-muted-foreground/40" />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-              Live Activity
+              Activity
             </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">
-            <LiveDot />
-            Real-time
-          </div>
+          {recentEvents.length > 0 && <LiveDot />}
         </div>
 
-        {/* Loading */}
-        {eventsLoading && (
+        {/* Loading skeletons — shown only briefly before timeout */}
+        {showEventsLoading && (
           <div>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 px-4 py-2.5 border-b border-border/30 last:border-0"
-              >
-                <div className="h-1.5 w-1.5 rounded-full shimmer flex-shrink-0" />
-                <div className="h-2.5 w-32 rounded shimmer" />
-                <div className="ml-auto h-2.5 w-16 rounded shimmer" />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border/20 last:border-0">
+                <div className="h-1.5 w-1.5 rounded-full shimmer shrink-0" />
+                <div className="h-2.5 rounded shimmer" style={{ width: `${80 + (i * 23) % 80}px` }} />
+                <div className="ml-auto h-2 w-10 rounded shimmer opacity-50" />
               </div>
             ))}
           </div>
         )}
 
-        {/* Empty */}
-        {!eventsLoading && recentEvents.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-14 text-center">
-            <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg border border-border">
-              <Activity className="h-3.5 w-3.5 text-muted-foreground/40" />
+        {/* Empty state */}
+        {!showEventsLoading && recentEvents.length === 0 && (
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-muted/30">
+              <Activity className="h-4 w-4 text-muted-foreground/30" />
             </div>
-            <p className="text-[12px] font-medium text-foreground/50">No activity yet</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground/40">
-              Events appear here in real-time as they happen
+            <p className="text-[13px] font-medium text-foreground/60">No activity yet</p>
+            <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-muted-foreground/40">
+              Opens, clicks, and unsubscribes from your campaigns will appear here.
             </p>
             <Link
               to="/broadcasts"
-              className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-foreground/70 transition-colors cursor-pointer"
+              className="mt-4 flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[12px] text-muted-foreground/60 transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground/70 cursor-pointer"
             >
               Send your first broadcast
               <ArrowRight className="h-3 w-3" />
@@ -203,7 +205,7 @@ function DashboardPage() {
           </div>
         )}
 
-        {/* Events — full row click */}
+        {/* Event rows */}
         {recentEvents.length > 0 && (
           <div>
             {recentEvents.map((event, idx) => {
@@ -213,20 +215,14 @@ function DashboardPage() {
                 <div
                   key={event.id}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-2 transition-colors duration-75 hover:bg-accent/40 cursor-default",
-                    idx < recentEvents.length - 1 && "border-b border-border/25"
+                    "flex items-center gap-3 px-4 py-2 transition-colors duration-75 hover:bg-accent/40",
+                    idx < recentEvents.length - 1 && "border-b border-border/20"
                   )}
                 >
                   <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
-                  <span className="flex-1 text-[12px] text-foreground/75 leading-none">
-                    {meta.label}
-                  </span>
-                  <span className="tabular-nums shrink-0 text-[10px] text-muted-foreground/50 font-mono">
-                    {time.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
+                  <span className="flex-1 text-[12px] text-foreground/70 leading-none">{meta.label}</span>
+                  <span className="tabular-nums shrink-0 font-mono text-[10px] text-muted-foreground/40">
+                    {time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </span>
                 </div>
               );
