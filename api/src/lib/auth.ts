@@ -68,6 +68,20 @@ export function getAuth() {
       secret: process.env.BETTER_AUTH_SECRET!,
       baseURL: process.env.BETTER_AUTH_URL!,
       trustedOrigins: [process.env.WEB_URL ?? "http://localhost:5173"],
+
+      advanced: {
+        // Web and API are on different up.railway.app subdomains (public suffix list),
+        // so cross-subdomain cookies don't work. SameSite=None allows the browser to
+        // send cookies on cross-origin credentialed fetch requests (get-session, etc.).
+        // Only applies in production (HTTPS); in dev cookies stay SameSite=Lax.
+        ...(process.env.NODE_ENV === "production" && {
+          defaultCookieAttributes: {
+            sameSite: "none" as const,
+            secure: true,
+            partitioned: true,
+          },
+        }),
+      },
     });
   }
   return _auth as ReturnType<typeof betterAuth>;
