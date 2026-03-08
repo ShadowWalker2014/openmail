@@ -6,26 +6,12 @@ import { getDb } from "@openmail/shared/db";
 import { emailSends, emailTemplates, broadcasts, campaignSteps, workspaces } from "@openmail/shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { injectTracking } from "../lib/email-utils.js";
 
 export interface SendEmailJobData {
   sendId: string;
   /** Passed from send-broadcast so we can update sentCount without an extra query */
   broadcastId?: string;
-}
-
-function injectTracking(html: string, sendId: string, trackerUrl: string): string {
-  const pixel = `<img src="${trackerUrl}/t/open/${sendId}" width="1" height="1" style="display:none" alt="" />`;
-  const unsubLink = `<div style="text-align:center;padding:16px;font-size:12px;color:#888">
-    <a href="${trackerUrl}/t/unsub/${sendId}" style="color:#888">Unsubscribe</a>
-  </div>`;
-
-  const withTrackedLinks = html.replace(
-    /href="(https?:\/\/[^"]+)"/g,
-    (_, url) => `href="${trackerUrl}/t/click/${sendId}?url=${encodeURIComponent(url)}"`
-  );
-
-  const injected = withTrackedLinks.replace(/<\/body>/i, `${pixel}${unsubLink}</body>`);
-  return injected !== withTrackedLinks ? injected : withTrackedLinks + pixel + unsubLink;
 }
 
 export function createSendEmailWorker() {
