@@ -102,7 +102,7 @@ function AppLayout() {
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={handleSidebarOpenChange}>
       <AppSidebar />
-      <SidebarInset className="overflow-y-auto h-dvh animate-in fade-in duration-150">
+      <SidebarInset className="overflow-y-auto h-dvh">
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
