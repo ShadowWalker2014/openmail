@@ -1,0 +1,62 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Check the [roadmap](https://github.com/ShadowWalker2014/openmail#roadmap)
+        and existing issues before submitting.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the problem or limitation you're facing.
+      placeholder: I'm trying to do X but currently can't because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you've thought about?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - API / backend
+        - MCP server
+        - Email sending / providers
+        - Dashboard UI
+        - Campaign automation
+        - Broadcasts
+        - Contacts / segments
+        - Analytics
+        - Auth / workspaces
+        - Deployment / DevOps
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I am willing to help implement this feature
+          required: false

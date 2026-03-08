@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question / Idea Discussion
+    url: https://github.com/ShadowWalker2014/openmail/discussions
+    about: Use GitHub Discussions for questions and ideas
+  - name: Enterprise License
+    url: mailto:kai@1flow.ai
+    about: Commercial usage, managed hosting, enterprise SSO

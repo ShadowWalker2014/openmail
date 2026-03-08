@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check api/
+        run: cd api && bun x tsc --noEmit
+
+      - name: Check worker/
+        run: cd worker && bun x tsc --noEmit
+
+      - name: Check mcp/
+        run: cd mcp && bun x tsc --noEmit
+
+      - name: Check tracker/
+        run: cd tracker && bun x tsc --noEmit
+
+      - name: Check web/
+        run: cd web && bun x tsc --noEmit
