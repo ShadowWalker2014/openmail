@@ -23,7 +23,10 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Plus, Filter, Trash2, X, Edit2 } from "lucide-react";
+import { Plus, Filter, Trash2, X, Edit2, Users } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -125,62 +128,64 @@ function ConditionRow({
   }
 
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-center gap-2">
       <div className="grid flex-1 grid-cols-[1fr_auto_1fr] gap-2 items-center">
-        <select
-          value={condition.field}
-          onChange={(e) => handleFieldChange(e.target.value)}
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-        >
-          {FIELD_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+        <Select value={condition.field} onValueChange={handleFieldChange}>
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FIELD_OPTIONS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <select
+        <Select
           value={condition.operator}
-          onChange={(e) =>
+          onValueChange={(val) =>
             onChange({
               ...condition,
-              operator: e.target.value,
-              value: NO_VALUE_OPERATORS.includes(e.target.value)
-                ? undefined
-                : condition.value ?? "",
+              operator: val,
+              value: NO_VALUE_OPERATORS.includes(val) ? undefined : condition.value ?? "",
             })
           }
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
-          {operators.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-8 w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operators.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {showValue ? (
           valueOptions ? (
-            <select
+            <Select
               value={condition.value ?? ""}
-              onChange={(e) => onChange({ ...condition, value: e.target.value })}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+              onValueChange={(val) => onChange({ ...condition, value: val })}
             >
-              {valueOptions.map((v) => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {valueOptions.map((v) => (
+                  <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <Input
               value={condition.value ?? ""}
               onChange={(e) => onChange({ ...condition, value: e.target.value })}
               placeholder="Value"
+              className="h-8"
             />
           )
         ) : (
-          <div className="h-9" />
+          <div className="h-8" />
         )}
       </div>
 
@@ -188,9 +193,9 @@ function ConditionRow({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-0.5 rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+          className="shrink-0 rounded p-1.5 text-muted-foreground/50 transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive cursor-pointer"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -299,17 +304,17 @@ function SegmentsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
-      <div className="mb-7 flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Segments</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-[15px] font-semibold tracking-tight">Segments</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             Dynamic contact groups for targeting broadcasts and campaigns
           </p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           New Segment
         </Button>
       </div>
@@ -318,7 +323,7 @@ function SegmentsPage() {
       <div className="space-y-2">
         {isLoading &&
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-lg border bg-background p-4">
+            <div key={i} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-2 flex-1">
                   <div className="h-4 w-36 rounded shimmer" />
@@ -333,16 +338,16 @@ function SegmentsPage() {
           segments.map((segment) => (
             <div
               key={segment.id}
-              className="group flex items-center gap-4 rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm">{segment.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="text-[13px] font-medium">{segment.name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {conditionSummary(segment.conditions, segment.conditionLogic)}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 mr-1">
+                <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 mr-1">
                   {segment.createdAt ? format(new Date(segment.createdAt), "MMM d") : ""}
                 </span>
                 <button
@@ -363,15 +368,15 @@ function SegmentsPage() {
 
         {!isLoading && segments.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Filter className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="font-medium text-sm">No segments yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-[13px] font-medium">No segments yet</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Create segments to target specific groups in broadcasts
             </p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               New Segment
             </Button>
           </div>
@@ -393,7 +398,7 @@ function SegmentsPage() {
           <DialogHeader>
             <DialogTitle>{editTarget ? "Edit Segment" : "New Segment"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateSubmit} className="space-y-5">
+          <form onSubmit={handleCreateSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Name *</Label>
               <Input
@@ -474,7 +479,7 @@ function SegmentsPage() {
               </button>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-popover pt-2">
               <Button
                 type="button"
                 variant="outline"

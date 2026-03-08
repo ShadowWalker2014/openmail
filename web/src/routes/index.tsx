@@ -50,17 +50,29 @@ function FeatureCard({
 }) {
   return (
     <div
-      className={cn(
-        "group relative rounded-xl border p-5 transition-colors duration-150",
-        accent
-          ? "border-violet-500/25 bg-violet-500/5 hover:border-violet-500/40 hover:bg-violet-500/8"
-          : "border-white/8 bg-white/5 hover:border-white/14 hover:bg-white/5"
-      )}
+      style={{
+        borderColor: accent ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.08)",
+        backgroundColor: accent ? "rgba(139,92,246,0.05)" : "rgba(255,255,255,0.04)",
+      }}
+      className="group relative rounded-xl border p-5 transition-all duration-150"
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.borderColor = accent
+          ? "rgba(139,92,246,0.45)"
+          : "rgba(255,255,255,0.14)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.borderColor = accent
+          ? "rgba(139,92,246,0.25)"
+          : "rgba(255,255,255,0.08)";
+      }}
     >
       <div
+        style={{
+          backgroundColor: accent ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.08)",
+        }}
         className={cn(
           "mb-3.5 inline-flex rounded-lg p-2",
-          accent ? "bg-violet-500/15 text-violet-400" : "bg-white/8 text-white/50"
+          accent ? "text-violet-400" : "text-white/50"
         )}
       >
         <Icon className="h-4 w-4" />
@@ -75,9 +87,9 @@ function DashboardMockup() {
   return (
     <div className="relative mx-auto mt-16 max-w-4xl">
       <div className="absolute inset-x-0 -bottom-10 h-32 bg-gradient-to-t from-violet-600/10 to-transparent blur-xl" />
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0e0e11] shadow-2xl shadow-black/50">
+        <div style={{ borderColor: "rgba(255,255,255,0.1)" }} className="relative overflow-hidden rounded-xl border bg-card shadow-2xl shadow-black/50">
         {/* Window chrome */}
-        <div className="flex h-9 items-center gap-1.5 border-b border-white/8 bg-white/5 px-4">
+        <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="flex h-9 items-center gap-1.5 border-b px-4">
           <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
           <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60" />
           <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
@@ -90,12 +102,12 @@ function DashboardMockup() {
         {/* App layout */}
         <div className="flex" style={{ height: 340 }}>
           {/* Sidebar */}
-          <div className="w-44 shrink-0 border-r border-white/8 bg-white/5 p-3">
+          <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="w-44 shrink-0 border-r p-3">
             <div className="mb-3 flex items-center gap-2 px-1">
               <div className="h-5 w-5 rounded bg-white/90" />
               <div className="h-3 w-16 rounded bg-white/60" />
             </div>
-            <div className="mb-3 h-7 w-full rounded bg-white/5 border border-white/8" />
+            <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="mb-3 h-7 w-full rounded border" />
             {["Dashboard", "Contacts", "Broadcasts", "Campaigns", "Templates"].map(
               (item, i) => (
                 <div
@@ -125,14 +137,14 @@ function DashboardMockup() {
                 { v: "8.3%", label: "Clicks" },
                 { v: "24", label: "Unsubs" },
               ].map(({ v, label }) => (
-                <div key={label} className="rounded-lg border border-white/8 bg-white/5 p-2.5">
+                <div key={label} style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="rounded-lg border p-2.5">
                   <div className="mb-1 text-[11px] text-white/35">{label}</div>
                   <div className="text-sm font-semibold text-white/80">{v}</div>
                 </div>
               ))}
             </div>
-            <div className="rounded-lg border border-white/8 bg-white/5">
-              <div className="flex items-center justify-between border-b border-white/8 px-3 py-2">
+            <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="rounded-lg border">
+              <div style={{ borderColor: "rgba(255,255,255,0.08)" }} className="flex items-center justify-between border-b px-3 py-2">
                 <div className="h-2.5 w-20 rounded bg-white/40" />
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -141,7 +153,7 @@ function DashboardMockup() {
               </div>
               {["Email opened", "Link clicked", "Email opened", "Unsubscribed", "Email opened"].map(
                 (ev, i) => (
-                  <div key={i} className="flex items-center gap-2.5 border-b border-white/5 px-3 py-2 last:border-0">
+                  <div key={i} style={{ borderColor: "rgba(255,255,255,0.05)" }} className="flex items-center gap-2.5 border-b px-3 py-2 last:border-0">
                     <div className={cn(
                       "h-3 w-3 rounded-full shrink-0",
                       ev === "Unsubscribed" ? "bg-red-400/40" :
@@ -164,7 +176,7 @@ function LandingPage() {
   const { data: stars } = useGitHubStars();
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-white antialiased selection:bg-violet-500/25">
+    <div className="min-h-screen text-white antialiased selection:bg-violet-500/25" style={{ background: "hsl(var(--background))" }}>
       {/* Ambient glows */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/4 rounded-full bg-violet-600/8 blur-[100px]" />
@@ -172,13 +184,13 @@ function LandingPage() {
       </div>
 
       {/* ── Nav ── */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#08080a]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+      <header style={{ borderColor: "rgba(255,255,255,0.06)", background: "hsl(var(--background) / 0.85)" }} className="sticky top-0 z-50 border-b backdrop-blur-xl">
+        <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
               <Mail className="h-4 w-4 text-black" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">OpenMail</span>
+            <span className="text-[13px] font-semibold tracking-tight">OpenMail</span>
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -193,7 +205,7 @@ function LandingPage() {
                 href={href}
                 target={href.startsWith("http") ? "_blank" : undefined}
                 rel={href.startsWith("http") ? "noreferrer" : undefined}
-                className="rounded-md px-3 py-1.5 text-sm text-white/50 transition-colors hover:text-white/90"
+                className="rounded-md px-3 py-1.5 text-[13px] text-white/50 transition-colors hover:text-white/90"
               >
                 {label}
               </a>
@@ -205,7 +217,8 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex tabular-nums"
+              style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }}
+            className="hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex tabular-nums"
             >
               <Star className="h-3 w-3" />
               {stars != null ? stars.toLocaleString() : "Star"}
@@ -222,7 +235,7 @@ function LandingPage() {
 
       {/* ── Hero ── */}
       <section className="relative mx-auto max-w-6xl px-6 pt-20 pb-4 text-center">
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+        <div style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }} className="mb-6 inline-flex items-center gap-2 rounded-full border px-3 py-1">
           <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
           <span className="text-xs font-medium text-white/60">
             Open source · Free to self-host
@@ -254,7 +267,8 @@ function LandingPage() {
             href={GITHUB_REPO}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }}
+            className="flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           >
             <Github className="h-4 w-4" />
             View on GitHub
@@ -277,8 +291,14 @@ function LandingPage() {
             Everything Customer.io has. At a fraction of the cost.
           </h2>
 
-          <div className="overflow-hidden rounded-xl border border-white/8 bg-white/5">
-            <div className="grid grid-cols-3 border-b border-white/8 bg-white/5 px-5 py-2.5">
+          <div
+            style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }}
+            className="overflow-hidden rounded-xl border"
+          >
+            <div
+              style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }}
+              className="grid grid-cols-3 border-b px-5 py-2.5"
+            >
               <span className="text-xs font-medium text-white/35">Feature</span>
               <span className="text-center text-xs font-semibold text-white">OpenMail</span>
               <span className="text-center text-xs font-medium text-white/35">Customer.io</span>
@@ -294,7 +314,8 @@ function LandingPage() {
             ].map(({ feature, us, them }) => (
               <div
                 key={feature}
-                className="grid grid-cols-3 border-b border-white/5 px-5 py-3 last:border-0"
+                style={{ borderColor: "rgba(255,255,255,0.05)" }}
+                className="grid grid-cols-3 border-b px-5 py-3 last:border-0"
               >
                 <span className="text-sm text-white/55">{feature}</span>
                 <div className="flex justify-center">
@@ -385,10 +406,10 @@ function LandingPage() {
 
       {/* ── AI section ── */}
       <section id="ai" className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="overflow-hidden rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-8 md:p-12">
+        <div style={{ borderColor: "rgba(139,92,246,0.2)" }} className="overflow-hidden rounded-xl border bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-8 md:p-12">
           <div className="grid gap-10 md:grid-cols-2 md:items-center">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/25 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-400">
+              <div style={{ borderColor: "rgba(139,92,246,0.25)", backgroundColor: "rgba(139,92,246,0.1)" }} className="mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium text-violet-400">
                 <Bot className="h-3.5 w-3.5" />
                 AI-Native
               </div>
@@ -420,7 +441,7 @@ function LandingPage() {
                 <Terminal className="h-3.5 w-3.5" />
                 <span>Connect in 30 seconds</span>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-white/8 bg-[#0c0c0f] p-5 shadow-inner">
+              <div style={{ borderColor: "rgba(255,255,255,0.08)" }} className="overflow-x-auto rounded-xl border bg-card p-5 shadow-inner">
                 <pre className="text-xs leading-relaxed">
                   <span className="text-cyan-400">{"{"}</span>
                   {"\n  "}
@@ -473,7 +494,7 @@ function LandingPage() {
 
         <div className="mx-auto grid max-w-2xl gap-4 md:grid-cols-2">
           {/* Self-hosted */}
-          <div className="flex flex-col rounded-xl border border-white/8 bg-white/5 p-7">
+          <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }} className="flex flex-col rounded-xl border p-7">
             <p className="mb-1 text-xs font-medium uppercase tracking-wider text-white/40">
               Self-hosted
             </p>
@@ -497,7 +518,8 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
+              style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              className="flex items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
             >
               <Github className="h-4 w-4" />
               Clone on GitHub
@@ -505,7 +527,7 @@ function LandingPage() {
           </div>
 
           {/* Cloud / Enterprise */}
-          <div className="flex flex-col rounded-xl border border-violet-500/25 bg-gradient-to-br from-violet-500/8 to-violet-500/5 p-7">
+          <div style={{ borderColor: "rgba(139,92,246,0.25)" }} className="flex flex-col rounded-xl border bg-gradient-to-br from-violet-500/8 to-violet-500/5 p-7">
             <p className="mb-1 text-xs font-medium uppercase tracking-wider text-violet-400">
               Enterprise
             </p>
@@ -538,7 +560,7 @@ function LandingPage() {
 
       {/* ── CTA ── */}
       <section className="mx-auto max-w-6xl px-6 pb-28 text-center">
-        <div className="relative overflow-hidden rounded-xl border border-white/8 bg-white/5 px-8 py-16">
+        <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }} className="relative overflow-hidden rounded-xl border px-8 py-16">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-gradient-to-b from-violet-600/5 to-transparent"
@@ -560,7 +582,8 @@ function LandingPage() {
             </Link>
             <a
               href="mailto:kai@1flow.ai"
-              className="flex items-center gap-2 rounded-lg border border-white/10 px-6 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+              style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              className="flex items-center gap-2 rounded-lg border px-6 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
             >
               Talk to us
             </a>
@@ -569,7 +592,7 @@ function LandingPage() {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-white/[0.06] px-6 py-8">
+      <footer style={{ borderColor: "rgba(255,255,255,0.06)" }} className="border-t px-6 py-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white">

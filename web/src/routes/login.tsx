@@ -15,9 +15,8 @@ function getErrorMessage(error: unknown): string {
   if (!error) return "Something went wrong. Please try again.";
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
-  if (typeof error === "object" && "message" in error) {
+  if (typeof error === "object" && "message" in error)
     return String((error as { message: unknown }).message);
-  }
   return "Something went wrong. Please try again.";
 }
 
@@ -31,11 +30,8 @@ function LoginPage() {
   const passwordRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Redirect already-authenticated users to dashboard
   useEffect(() => {
-    if (!isPending && session) {
-      router.navigate({ to: "/dashboard" });
-    }
+    if (!isPending && session) router.navigate({ to: "/dashboard" });
   }, [session, isPending, router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -57,10 +53,7 @@ function LoginPage() {
         }
       } else {
         const name = nameRef.current!.value.trim();
-        if (!name) {
-          setFieldError("Name is required.");
-          return;
-        }
+        if (!name) { setFieldError("Name is required."); return; }
         const { error } = await signUp.email({ email, password, name });
         if (error) {
           const msg = getErrorMessage(error);
@@ -69,40 +62,48 @@ function LoginPage() {
           return;
         }
       }
-      // Component unmounts after navigation — no need to reset loading state
       router.navigate({ to: "/dashboard" });
     } finally {
-      // Always reset loading in case navigation fails or errors above cause early return
       setLoading(false);
     }
   }
 
-  // Show nothing while redirecting authenticated users
   if (!isPending && session) return null;
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--app-bg))] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: "hsl(var(--background))" }}
+    >
+      {/* Subtle ambient glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
+        <div className="absolute left-1/2 top-0 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-violet-600/6 blur-[90px]" />
+      </div>
+
+      <div className="relative w-full max-w-[340px]">
         {/* Back */}
-        <div className="mb-8">
+        <div className="mb-7">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-3 w-3" />
             Back to home
           </Link>
         </div>
 
         {/* Logo + heading */}
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border bg-background">
-            <Mail className="h-5 w-5" />
+        <div className="mb-6">
+          <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-[7px] border border-border bg-muted">
+            <Mail className="h-4 w-4 text-foreground/80" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-[15px] font-semibold tracking-tight text-foreground">
             {mode === "login" ? "Welcome back" : "Create account"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             {mode === "login"
               ? "Sign in to your OpenMail account"
               : "Get started with OpenMail"}
@@ -110,8 +111,8 @@ function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-lg border bg-background p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {mode === "signup" && (
               <div className="space-y-1.5">
                 <Label htmlFor="name">Name</Label>
@@ -138,7 +139,17 @@ function LoginPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === "login" && (
+                  <Link
+                    to="/forgot-password"
+                    className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <Input
                 id="password"
                 ref={passwordRef}
@@ -146,21 +157,29 @@ function LoginPage() {
                 placeholder="••••••••"
                 required
                 minLength={8}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
                 onChange={() => setFieldError(null)}
               />
               {mode === "signup" && (
-                <p className="text-xs text-muted-foreground">At least 8 characters</p>
+                <p className="text-[11px] text-muted-foreground">
+                  At least 8 characters
+                </p>
               )}
             </div>
 
             {fieldError && (
-              <div className="animate-in fade-in slide-in-from-top-1 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive duration-150">
+              <div className="animate-in fade-in slide-in-from-top-1 rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-[12px] text-destructive duration-150">
                 {fieldError}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full mt-1"
+              disabled={loading}
+            >
               {loading
                 ? mode === "login"
                   ? "Signing in…"
@@ -173,14 +192,14 @@ function LoginPage() {
         </div>
 
         {/* Toggle mode */}
-        <p className="mt-4 text-center text-sm text-muted-foreground">
+        <p className="mt-4 text-center text-[12px] text-muted-foreground">
           {mode === "login" ? (
             <>
               Don&apos;t have an account?{" "}
               <button
                 type="button"
                 onClick={() => { setMode("signup"); setFieldError(null); }}
-                className="font-medium text-foreground hover:underline cursor-pointer"
+                className="text-foreground/80 hover:text-foreground cursor-pointer transition-colors"
               >
                 Sign up
               </button>
@@ -191,7 +210,7 @@ function LoginPage() {
               <button
                 type="button"
                 onClick={() => { setMode("login"); setFieldError(null); }}
-                className="font-medium text-foreground hover:underline cursor-pointer"
+                className="text-foreground/80 hover:text-foreground cursor-pointer transition-colors"
               >
                 Sign in
               </button>
