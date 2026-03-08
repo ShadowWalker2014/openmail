@@ -86,6 +86,13 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
 - Hard delete only
 - No fallbacks — let it fail
 
+## GitHub / Open Source
+- Repo: https://github.com/ShadowWalker2014/openmail (public)
+- License: Elastic License 2.0 (ELv2) — free to self-host, no SaaS reselling
+- Enterprise sales: kai@1flow.ai
+- Topics: email-marketing, customer-io-alternative, mcp, ai-agents, self-hosted, typescript, hono, drizzle-orm, bullmq, resend, saas, plg
+- CI: .github/workflows/ci.yml — tsc --noEmit on all 5 services
+
 ## Feature Flags / Notes
 - Self-hosted (single tenant) + hosted SaaS (multi-tenant) both supported
 - Template builder: visual drag-and-drop + raw HTML/code mode
