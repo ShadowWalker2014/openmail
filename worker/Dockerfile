@@ -3,7 +3,7 @@ RUN npm install -g bun
 WORKDIR /app
 COPY worker/package.json ./package.json
 COPY packages/shared/package.json ./packages/shared/package.json
-COPY bun.lockb* ./
+COPY bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY packages/shared ./packages/shared
 COPY worker/src ./src
