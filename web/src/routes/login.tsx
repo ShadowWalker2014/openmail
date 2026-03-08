@@ -69,30 +69,36 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm">
-        {/* back to home */}
-        <div className="mb-6">
+    <div className="min-h-screen bg-[hsl(var(--app-bg))] flex items-center justify-center px-4">
+      <div className="w-full max-w-[360px]">
+        {/* Back */}
+        <div className="mb-8">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="h-3.5 w-3.5" />
             Back to home
           </Link>
         </div>
 
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-10 h-10 bg-black rounded-xl mb-4">
-            <Mail className="w-5 h-5 text-white" />
+        {/* Logo + heading */}
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl border bg-background shadow-sm">
+            <Mail className="h-5 w-5" />
           </div>
-          <h1 className="text-2xl font-semibold">OpenMail</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {mode === "login" ? "Sign in to your account" : "Create your account"}
+          <h1 className="text-xl font-semibold tracking-tight">
+            {mode === "login" ? "Welcome back" : "Create account"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {mode === "login"
+              ? "Sign in to your OpenMail account"
+              : "Get started with OpenMail"}
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border shadow-sm p-6">
+        {/* Card */}
+        <div className="rounded-xl border bg-background p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <div className="space-y-1.5">
@@ -115,7 +121,7 @@ function LoginPage() {
                 type="email"
                 placeholder="you@company.com"
                 required
-                autoComplete={mode === "login" ? "email" : "email"}
+                autoComplete="email"
                 onChange={() => setFieldError(null)}
               />
             </div>
@@ -136,46 +142,56 @@ function LoginPage() {
               )}
             </div>
 
-            {/* inline error banner */}
             {fieldError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
                 {fieldError}
               </div>
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading
-                ? mode === "login" ? "Signing in…" : "Creating account…"
-                : mode === "login" ? "Sign in" : "Create account"}
+                ? mode === "login"
+                  ? "Signing in…"
+                  : "Creating account…"
+                : mode === "login"
+                  ? "Sign in"
+                  : "Create account"}
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>
-                Don&apos;t have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("signup"); setFieldError(null); }}
-                  className="text-foreground font-medium hover:underline cursor-pointer"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("login"); setFieldError(null); }}
-                  className="text-foreground font-medium hover:underline cursor-pointer"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
         </div>
+
+        {/* Toggle mode */}
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {mode === "login" ? (
+            <>
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setFieldError(null);
+                }}
+                className="font-medium text-foreground hover:underline cursor-pointer"
+              >
+                Sign up
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setFieldError(null);
+                }}
+                className="font-medium text-foreground hover:underline cursor-pointer"
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </div>
   );

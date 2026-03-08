@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Zap, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   component: CampaignsPage,
@@ -32,7 +34,10 @@ interface Campaign {
   createdAt: string;
 }
 
-const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "secondary"> = {
+const STATUS_BADGE: Record<
+  string,
+  "default" | "success" | "warning" | "secondary"
+> = {
   draft: "secondary",
   active: "success",
   paused: "warning",
@@ -82,16 +87,19 @@ function CampaignsPage() {
   });
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-5xl px-8 py-8">
+      {/* Header */}
+      <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Campaigns</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Automated email sequences</p>
+          <h1 className="text-lg font-semibold tracking-tight">Campaigns</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Automated email sequences
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
-              <Plus className="w-4 h-4" />
+              <Plus className="h-4 w-4" />
               New Campaign
             </Button>
           </DialogTrigger>
@@ -116,11 +124,11 @@ function CampaignsPage() {
             >
               <div className="space-y-1.5">
                 <Label>Name *</Label>
-                <Input ref={nameRef} required />
+                <Input ref={nameRef} required placeholder="Welcome sequence" />
               </div>
               <div className="space-y-1.5">
                 <Label>Description</Label>
-                <Input ref={descRef} />
+                <Input ref={descRef} placeholder="Optional description" />
               </div>
               <div className="space-y-1.5">
                 <Label>Trigger</Label>
@@ -130,11 +138,12 @@ function CampaignsPage() {
                       key={t}
                       type="button"
                       onClick={() => setTriggerType(t)}
-                      className={`px-3 py-1.5 rounded-md border text-sm cursor-pointer transition-colors ${
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm transition-colors cursor-pointer",
                         triggerType === t
-                          ? "bg-black text-white border-black"
-                          : "hover:bg-accent"
-                      }`}
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border hover:bg-accent"
+                      )}
                     >
                       {t === "event" ? "On Event" : "Manual"}
                     </button>
@@ -144,12 +153,16 @@ function CampaignsPage() {
               {triggerType === "event" && (
                 <div className="space-y-1.5">
                   <Label>Event Name *</Label>
-                  <Input ref={eventNameRef} placeholder="user_signed_up" required />
+                  <Input
+                    ref={eventNameRef}
+                    placeholder="user_signed_up"
+                    required
+                  />
                 </div>
               )}
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? "Creating..." : "Create Campaign"}
+                  {createMutation.isPending ? "Creating…" : "Create Campaign"}
                 </Button>
               </DialogFooter>
             </form>
@@ -157,34 +170,39 @@ function CampaignsPage() {
         </Dialog>
       </div>
 
-      <div className="space-y-3">
+      {/* List */}
+      <div className="space-y-2">
         {campaigns.map((campaign) => (
           <div
             key={campaign.id}
-            className="bg-white rounded-xl border p-4 flex items-center justify-between"
+            className="flex items-center gap-4 rounded-lg border bg-background p-4 transition-shadow hover:shadow-sm"
           >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium">{campaign.name}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{campaign.name}</span>
                 <Badge variant={STATUS_BADGE[campaign.status] ?? "secondary"}>
                   {campaign.status}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Trigger:{" "}
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 {campaign.triggerType === "event"
-                  ? `Event "${(campaign.triggerConfig as { eventName?: string }).eventName}"`
-                  : campaign.triggerType}
+                  ? `Trigger: "${(campaign.triggerConfig as { eventName?: string }).eventName}"`
+                  : `Trigger: ${campaign.triggerType}`}
               </p>
             </div>
-            <div className="flex items-center gap-2 ml-4">
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {format(new Date(campaign.createdAt), "MMM d")}
+              </span>
               {(campaign.status === "draft" || campaign.status === "paused") && (
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => toggleMutation.mutate({ id: campaign.id, status: "active" })}
+                  onClick={() =>
+                    toggleMutation.mutate({ id: campaign.id, status: "active" })
+                  }
                 >
-                  <Play className="w-3.5 h-3.5" />
+                  <Play className="h-3.5 w-3.5" />
                   Activate
                 </Button>
               )}
@@ -192,20 +210,27 @@ function CampaignsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => toggleMutation.mutate({ id: campaign.id, status: "paused" })}
+                  onClick={() =>
+                    toggleMutation.mutate({ id: campaign.id, status: "paused" })
+                  }
                 >
-                  <Pause className="w-3.5 h-3.5" />
+                  <Pause className="h-3.5 w-3.5" />
                   Pause
                 </Button>
               )}
             </div>
           </div>
         ))}
+
         {campaigns.length === 0 && (
-          <div className="text-center py-20 text-muted-foreground">
-            <Zap className="w-8 h-8 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No campaigns yet</p>
-            <p className="text-sm mt-1">Create an automated campaign triggered by events</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border bg-background">
+              <Zap className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-sm">No campaigns yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create an automated campaign triggered by events
+            </p>
           </div>
         )}
       </div>
