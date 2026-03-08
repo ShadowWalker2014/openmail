@@ -31,6 +31,19 @@ export function registerBroadcastTools(server: McpServer, getClient: () => Retur
   );
 
   server.tool(
+    "schedule_broadcast",
+    "Schedule a broadcast to be sent at a future date/time.",
+    {
+      broadcastId: z.string().describe("Broadcast ID (brd_xxx)"),
+      scheduledAt: z.string().datetime().describe("ISO 8601 datetime for when to send (e.g. 2024-12-25T09:00:00Z)"),
+    },
+    async ({ broadcastId, scheduledAt }) => {
+      const data = await getClient().patch(`/broadcasts/${broadcastId}`, { scheduledAt });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
     "send_broadcast",
     "Immediately send a broadcast (must be in draft status).",
     { broadcastId: z.string().describe("Broadcast ID (brd_xxx)") },

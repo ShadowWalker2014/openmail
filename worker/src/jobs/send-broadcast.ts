@@ -1,21 +1,27 @@
 import { Worker, Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis.js";
+import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
 import { broadcasts, contacts, emailSends } from "@openmail/shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "@openmail/shared/ids";
 import { getSegmentContactIds } from "../lib/segment-evaluator.js";
+import { chunkArray } from "../lib/email-utils.js";
 import { logger } from "../lib/logger.js";
+import type { SendBatchJobData } from "./send-batch.js";
 
 export interface SendBroadcastJobData {
   broadcastId: string;
   workspaceId: string;
 }
 
-let _sendEmailQueue: Queue | null = null;
-function getSendEmailQueue() {
-  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getRedisConnection() });
-  return _sendEmailQueue;
+/** Max emails per Resend batch API call (hard limit: 100). */
+const BATCH_SIZE = 100;
+
+let _sendBatchQueue: Queue | null = null;
+function getSendBatchQueue() {
+  if (!_sendBatchQueue)
+    _sendBatchQueue = new Queue("send-batch", { connection: getQueueRedisConnection() });
+  return _sendBatchQueue;
 }
 
 export function createSendBroadcastWorker() {
@@ -32,12 +38,11 @@ export function createSendBroadcastWorker() {
         .limit(1);
       if (!broadcast) throw new Error(`Broadcast ${broadcastId} not found`);
 
-      // Ensure broadcast has sendable content before burning through contacts
       if (!broadcast.htmlContent && !broadcast.templateId) {
-        await db.update(broadcasts).set({
-          status: "failed",
-          updatedAt: new Date(),
-        }).where(eq(broadcasts.id, broadcastId));
+        await db
+          .update(broadcasts)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(eq(broadcasts.id, broadcastId));
         throw new Error(`Broadcast ${broadcastId} has no HTML content or template`);
       }
 
@@ -45,13 +50,10 @@ export function createSendBroadcastWorker() {
       const eligibleContactIds = await getSegmentContactIds(workspaceId, segmentIds);
 
       if (eligibleContactIds.length === 0) {
-        await db.update(broadcasts).set({
-          status: "sent",
-          sentCount: 0,
-          recipientCount: 0,
-          sentAt: new Date(),
-          updatedAt: new Date(),
-        }).where(eq(broadcasts.id, broadcastId));
+        await db
+          .update(broadcasts)
+          .set({ status: "sent", sentCount: 0, recipientCount: 0, sentAt: new Date(), updatedAt: new Date() })
+          .where(eq(broadcasts.id, broadcastId));
         logger.info({ broadcastId }, "No eligible contacts for broadcast");
         return;
       }
@@ -59,42 +61,61 @@ export function createSendBroadcastWorker() {
       const eligibleContacts = await db
         .select({ id: contacts.id, email: contacts.email })
         .from(contacts)
-        .where(and(
-          eq(contacts.workspaceId, workspaceId),
-          eq(contacts.unsubscribed, false),
-          inArray(contacts.id, eligibleContactIds)
-        ));
+        .where(
+          and(
+            eq(contacts.workspaceId, workspaceId),
+            eq(contacts.unsubscribed, false),
+            inArray(contacts.id, eligibleContactIds)
+          )
+        );
 
-      // Set recipientCount and status to "sending" upfront so the live
-      // progress bar is accurate from the start. sentCount starts at 0
-      // and is incremented atomically by each send-email job.
-      await db.update(broadcasts).set({
-        status: "sending",
-        sentCount: 0,
-        recipientCount: eligibleContacts.length,
-        updatedAt: new Date(),
-      }).where(eq(broadcasts.id, broadcastId));
+      // Set recipientCount upfront so the live progress bar is accurate.
+      await db
+        .update(broadcasts)
+        .set({
+          status: "sending",
+          sentCount: 0,
+          recipientCount: eligibleContacts.length,
+          updatedAt: new Date(),
+        })
+        .where(eq(broadcasts.id, broadcastId));
 
-      const sendQueue = getSendEmailQueue();
+      // ── Chunk into batches of 100 and queue one send-batch job per chunk ──
+      // This is what makes bulk sending feasible at scale:
+      //   - Old: 1 BullMQ job + 1 Resend API call per email (rate-limited at 2–3/s)
+      //   - New: 1 BullMQ job + 1 Resend batch call per 100 emails (100× more efficient)
+      const chunks = chunkArray(eligibleContacts, BATCH_SIZE);
+      const sendBatchQueue = getSendBatchQueue();
 
-      for (const contact of eligibleContacts) {
-        const sendId = generateId("snd");
-        await db.insert(emailSends).values({
-          id: sendId,
+      for (const chunk of chunks) {
+        // Pre-assign sendIds so the IDs are known before the batch job runs.
+        // This lets send-batch look up the rows by ID in one inArray query.
+        const chunkSends = chunk.map((contact) => ({
+          id: generateId("snd"),
           workspaceId,
           contactId: contact.id,
           contactEmail: contact.email,
           broadcastId,
           subject: broadcast.subject,
-          status: "queued",
-        });
-        await sendQueue.add("send-email", { sendId, broadcastId }, { removeOnComplete: 100 });
+          status: "queued" as const,
+        }));
+
+        // Bulk-insert all emailSends rows for this chunk in one DB round-trip.
+        await db.insert(emailSends).values(chunkSends);
+
+        const jobData: SendBatchJobData = {
+          sendIds: chunkSends.map((s) => s.id),
+          broadcastId,
+          workspaceId,
+        };
+        await sendBatchQueue.add("send-batch", jobData, { removeOnComplete: 100 });
       }
 
-      logger.info({ broadcastId, count: eligibleContacts.length }, "Broadcast queued for sending");
-      // Status transitions to "sent" are handled by send-email jobs
-      // (each one increments sentCount; the last one flips status to "sent")
+      logger.info(
+        { broadcastId, recipients: eligibleContacts.length, batches: chunks.length },
+        "Broadcast queued for batch sending"
+      );
     },
-    { connection: getRedisConnection(), concurrency: 2 }
+    { connection: getWorkerRedisConnection(), concurrency: 2 }
   );
 }

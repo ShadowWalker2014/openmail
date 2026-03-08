@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 
 export const workspaces = pgTable("workspaces", {
   id: text("id").primaryKey(),
@@ -7,10 +7,25 @@ export const workspaces = pgTable("workspaces", {
   resendApiKey: text("resend_api_key"),
   resendFromEmail: text("resend_from_email"),
   resendFromName: text("resend_from_name"),
+  // Sending domain — linked via Resend Domains API
+  resendDomainId: text("resend_domain_id"),
+  resendDomainName: text("resend_domain_name"),
+  resendDomainStatus: text("resend_domain_status"),
+  resendDomainRecords: jsonb("resend_domain_records").$type<DomainRecord[]>(),
   plan: text("plan").notNull().default("free"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export interface DomainRecord {
+  record: string;
+  name: string;
+  type: string;
+  ttl: string;
+  status: string;
+  value: string;
+  priority?: number;
+}
 
 export const workspaceMembers = pgTable("workspace_members", {
   id: text("id").primaryKey(),

@@ -6,12 +6,12 @@ import { broadcasts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and } from "drizzle-orm";
 import { Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis.js";
+import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
 
 let _broadcastQueue: Queue | null = null;
 function getBroadcastQueue() {
-  if (!_broadcastQueue) _broadcastQueue = new Queue("broadcasts", { connection: getRedisConnection() });
+  if (!_broadcastQueue) _broadcastQueue = new Queue("broadcasts", { connection: getQueueRedisConnection() });
   return _broadcastQueue;
 }
 

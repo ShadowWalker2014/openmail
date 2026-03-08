@@ -55,6 +55,9 @@ app.get("/mcp", async (c) => {
   return c.json({ error: "Use POST /mcp for MCP requests" }, 405);
 });
 
+// Exported for integration / unit tests
+export { app };
+
 const port = Number(process.env.PORT ?? 3002);
 logger.info({ port }, "MCP server starting");
 

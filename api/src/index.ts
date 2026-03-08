@@ -13,6 +13,7 @@ import segmentsRouter from "./routes/segments.js";
 import apiKeysRouter from "./routes/api-keys.js";
 import analyticsRouter from "./routes/analytics.js";
 import shapesRouter from "./routes/shapes.js";
+import domainsRouter from "./routes/domains.js";
 import membersRouter from "./routes/members.js";
 import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
@@ -68,6 +69,8 @@ const sessionApi = new Hono<{ Variables: ApiVariables }>();
 sessionApi.use("*", sessionAuth);
 sessionApi.route("/workspaces", workspacesRouter);
 
+// Workspace membership guard — every /ws/:workspaceId/* route requires the
+// authenticated user to be a member of that workspace.
 sessionApi.use("/ws/:workspaceId/*", async (c, next) => {
   const workspaceId = c.req.param("workspaceId");
   const userId = c.get("userId") as string;
@@ -91,6 +94,7 @@ sessionApi.route("/ws/:workspaceId/segments", segmentsRouter);
 sessionApi.route("/ws/:workspaceId/api-keys", apiKeysRouter);
 sessionApi.route("/ws/:workspaceId/analytics", analyticsRouter);
 sessionApi.route("/ws/:workspaceId/shapes", shapesRouter);
+sessionApi.route("/ws/:workspaceId/domains", domainsRouter);
 sessionApi.route("/ws/:workspaceId/members", membersRouter);
 sessionApi.route("/ws/:workspaceId/invites", invitesRouter);
 sessionApi.route("/invites", inviteAcceptRouter);
@@ -114,6 +118,9 @@ apiKeyApi.route("/segments", segmentsRouter);
 apiKeyApi.route("/analytics", analyticsRouter);
 
 app.route("/api/v1", apiKeyApi);
+
+// Exported for integration tests — same app instance used in production
+export { app };
 
 const port = Number(process.env.PORT ?? 3001);
 logger.info({ port }, "API server starting");

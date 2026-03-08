@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "build": "bun build src/index.ts --target bun --outdir dist"
+    "build": "bun build src/index.ts --target bun --outdir dist",
+    "test": "bun test src/routes/domains.test.ts",
+    "test:verbose": "bun test --verbose src/routes/domains.test.ts",
+    "test:integration": "bun test src/integration/domains.integration.test.ts",
+    "test:all": "bun test src/routes/domains.test.ts && bun test src/integration/domains.integration.test.ts"
   },
   "dependencies": {
     "@openmail/shared": "workspace:*",
@@ -22,6 +26,7 @@
     "pino": "^9.6.0"
   },
   "devDependencies": {
+    "pino-pretty": "^13.0.0",
     "typescript": "^5.7.3",
     "@types/bun": "latest"
   }

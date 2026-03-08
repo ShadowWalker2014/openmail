@@ -42,33 +42,38 @@ function LoginPage() {
     const email = emailRef.current!.value.trim();
     const password = passwordRef.current!.value;
 
-    try {
-      if (mode === "login") {
-        const { error } = await signIn.email({ email, password });
-        if (error) {
-          const msg = getErrorMessage(error);
-          setFieldError(msg);
-          toast.error(msg);
-          return;
-        }
-      } else {
-        const name = nameRef.current!.value.trim();
-        if (!name) { setFieldError("Name is required."); return; }
-        const { error } = await signUp.email({ email, password, name });
-        if (error) {
-          const msg = getErrorMessage(error);
-          setFieldError(msg);
-          toast.error(msg);
-          return;
-        }
+    if (mode === "login") {
+      const { error } = await signIn.email({ email, password });
+      if (error) {
+        const msg = getErrorMessage(error);
+        setFieldError(msg);
+        toast.error(msg);
+        setLoading(false);
+        return;
       }
-      router.navigate({ to: "/dashboard" });
-    } finally {
-      setLoading(false);
+      // session update from signIn propagates to useSession → the useEffect
+      // above handles the redirect once isPending settles with a valid session
+    } else {
+      const name = nameRef.current!.value.trim();
+      if (!name) {
+        setFieldError("Name is required.");
+        setLoading(false);
+        return;
+      }
+      const { error } = await signUp.email({ email, password, name });
+      if (error) {
+        const msg = getErrorMessage(error);
+        setFieldError(msg);
+        toast.error(msg);
+        setLoading(false);
+        return;
+      }
+      // same — let session watcher handle navigation
     }
   }
 
   if (!isPending && session) return null;
+  // Keep showing the form while loading (covers the "signed in, awaiting session" gap)
 
   return (
     <div

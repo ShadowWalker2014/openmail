@@ -6,14 +6,14 @@ import { events, contacts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and } from "drizzle-orm";
 import { Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis.js";
+import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
 let _eventQueue: Queue | null = null;
 function getEventQueue() {
-  if (!_eventQueue) _eventQueue = new Queue("events", { connection: getRedisConnection() });
+  if (!_eventQueue) _eventQueue = new Queue("events", { connection: getQueueRedisConnection() });
   return _eventQueue;
 }
 

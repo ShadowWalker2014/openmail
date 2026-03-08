@@ -3,6 +3,16 @@ import { apiFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useEffect } from "react";
 
+export interface DomainRecord {
+  record: string;
+  name: string;
+  type: string;
+  ttl: string;
+  status: string;
+  value: string;
+  priority?: number;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -10,6 +20,9 @@ export interface Workspace {
   plan: string;
   resendFromEmail: string | null;
   resendFromName: string | null;
+  resendDomainName: string | null;
+  resendDomainStatus: string | null;
+  resendDomainRecords: DomainRecord[] | null;
 }
 
 interface UseWorkspacesOptions {

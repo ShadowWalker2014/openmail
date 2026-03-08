@@ -1,5 +1,5 @@
 import { Worker, Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis.js";
+import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
 import { events, campaigns, campaignEnrollments, campaignSteps, contacts, emailSends } from "@openmail/shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -13,7 +13,7 @@ export interface ProcessEventJobData {
 
 let _sendEmailQueue: Queue | null = null;
 function getSendEmailQueue() {
-  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getRedisConnection() });
+  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getQueueRedisConnection() });
   return _sendEmailQueue;
 }
 
@@ -102,6 +102,6 @@ export function createProcessEventWorker() {
         logger.info({ campaignId: campaign.id, contactId: event.contactId, enrollmentId }, "Contact enrolled in campaign");
       }
     },
-    { connection: getRedisConnection(), concurrency: 20 }
+    { connection: getWorkerRedisConnection(), concurrency: 20 }
   );
 }
