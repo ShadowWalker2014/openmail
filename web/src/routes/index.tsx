@@ -41,44 +41,20 @@ function FeatureCard({
   icon: Icon,
   title,
   desc,
-  accent = false,
 }: {
   icon: React.ElementType;
   title: string;
   desc: string;
-  accent?: boolean;
 }) {
   return (
-    <div
-      style={{
-        borderColor: accent ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.08)",
-        backgroundColor: accent ? "rgba(139,92,246,0.05)" : "rgba(255,255,255,0.04)",
-      }}
-      className="group relative rounded-xl border p-5 transition-all duration-150"
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = accent
-          ? "rgba(139,92,246,0.45)"
-          : "rgba(255,255,255,0.14)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = accent
-          ? "rgba(139,92,246,0.25)"
-          : "rgba(255,255,255,0.08)";
-      }}
-    >
-      <div
-        style={{
-          backgroundColor: accent ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.08)",
-        }}
-        className={cn(
-          "mb-3.5 inline-flex rounded-lg p-2",
-          accent ? "text-violet-400" : "text-white/50"
-        )}
-      >
-        <Icon className="h-4 w-4" />
+    <div className="group relative overflow-hidden rounded-xl border border-white/[0.07] bg-[#111115] p-5 transition-all duration-200 hover:border-white/[0.13] hover:bg-[#131319]">
+      {/* top edge glow line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="mb-4 inline-flex rounded-lg bg-violet-500/10 p-2 text-violet-400">
+        <Icon className="h-[15px] w-[15px]" />
       </div>
-      <h3 className="mb-1 text-sm font-medium text-white/90">{title}</h3>
-      <p className="text-sm leading-relaxed text-white/45">{desc}</p>
+      <h3 className="mb-1.5 text-[13px] font-semibold leading-snug text-white/90" style={{ letterSpacing: "-0.018em" }}>{title}</h3>
+      <p className="text-[12px] leading-relaxed text-white/40">{desc}</p>
     </div>
   );
 }
@@ -184,16 +160,16 @@ function LandingPage() {
       </div>
 
       {/* ── Nav ── */}
-      <header style={{ borderColor: "rgba(255,255,255,0.06)", background: "hsl(var(--background) / 0.85)" }} className="sticky top-0 z-50 border-b backdrop-blur-xl">
+      <header style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(14,14,18,0.88)" }} className="sticky top-0 z-50 border-b backdrop-blur-xl">
         <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
               <Mail className="h-4 w-4 text-black" />
             </div>
-            <span className="text-[13px] font-semibold tracking-tight">OpenMail</span>
+            <span className="text-[13px] font-semibold tracking-[-0.02em]">OpenMail</span>
           </div>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-0.5 md:flex">
             {[
               { label: "Features", href: "#features" },
               { label: "AI Agents", href: "#ai" },
@@ -205,7 +181,7 @@ function LandingPage() {
                 href={href}
                 target={href.startsWith("http") ? "_blank" : undefined}
                 rel={href.startsWith("http") ? "noreferrer" : undefined}
-                className="rounded-md px-3 py-1.5 text-[13px] text-white/50 transition-colors hover:text-white/90"
+                className="rounded-md px-3 py-1.5 text-[13px] text-white/45 transition-colors hover:text-white/85"
               >
                 {label}
               </a>
@@ -217,15 +193,15 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }}
-            className="hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex tabular-nums"
+              style={{ borderColor: "rgba(255,255,255,0.09)", backgroundColor: "rgba(255,255,255,0.04)" }}
+              className="hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/55 transition-colors hover:bg-white/8 hover:text-white/80 sm:flex tabular-nums"
             >
               <Star className="h-3 w-3" />
               {stars != null ? stars.toLocaleString() : "Star"}
             </a>
             <Link
               to="/login"
-              className="rounded-lg bg-white px-4 py-1.5 text-sm font-medium text-black transition-opacity hover:opacity-85 cursor-pointer"
+              className="rounded-lg bg-white px-4 py-1.5 text-[13px] font-semibold text-black transition-opacity hover:opacity-85 cursor-pointer"
             >
               Sign in
             </Link>
@@ -234,31 +210,50 @@ function LandingPage() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative mx-auto max-w-6xl px-6 pt-20 pb-4 text-center">
-        <div style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }} className="mb-6 inline-flex items-center gap-2 rounded-full border px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-          <span className="text-xs font-medium text-white/60">
+      <section className="relative mx-auto max-w-6xl px-6 pt-24 pb-4 text-center">
+        {/* Dot grid texture */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+        <div style={{ borderColor: "rgba(139,92,246,0.25)", backgroundColor: "rgba(139,92,246,0.08)" }} className="relative mb-7 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+          <span className="text-[11.5px] font-medium text-violet-300/80">
             Open source · Free to self-host
           </span>
         </div>
 
-        <h1 className="mx-auto max-w-3xl text-5xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl">
+        <h1
+          className="relative mx-auto max-w-3xl text-5xl font-bold leading-[1.08] md:text-6xl lg:text-[72px]"
+          style={{ letterSpacing: "-0.035em" }}
+        >
           The open&#8209;source{" "}
-          <span className="bg-gradient-to-br from-violet-300 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
+          <span
+            style={{
+              background: "linear-gradient(135deg, #c4b5fd 0%, #a78bfa 40%, #67e8f9 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
             Customer.io
           </span>{" "}
           alternative
         </h1>
 
-        <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/50 md:text-lg">
+        <p className="relative mx-auto mt-6 max-w-[420px] text-[15px] leading-relaxed text-white/45 md:text-base">
           Lifecycle email marketing built for product teams. Automate onboarding,
           retention, and re-engagement — without the enterprise price tag.
         </p>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
+        <div className="relative mt-9 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
           <Link
             to="/login"
-            className="flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-85 cursor-pointer"
+            className="flex items-center gap-2 rounded-xl bg-white px-6 py-2.5 text-[13px] font-semibold text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:opacity-90 hover:shadow-[0_0_28px_rgba(255,255,255,0.22)] cursor-pointer"
           >
             Get started free
             <ArrowRight className="h-4 w-4" />
@@ -267,8 +262,8 @@ function LandingPage() {
             href={GITHUB_REPO}
             target="_blank"
             rel="noreferrer"
-            style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)" }}
-            className="flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            style={{ borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" }}
+            className="flex items-center gap-2 rounded-xl border px-6 py-2.5 text-[13px] font-semibold text-white/60 transition-colors hover:bg-white/8 hover:text-white/85"
           >
             <Github className="h-4 w-4" />
             View on GitHub
@@ -282,26 +277,20 @@ function LandingPage() {
       </section>
 
       {/* ── Comparison ── */}
-      <section id="features" className="mx-auto max-w-6xl px-6 pt-24 pb-20">
+      <section id="features" className="mx-auto max-w-6xl px-6 pt-28 pb-20">
         <div className="mx-auto max-w-xl">
-          <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
+          <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/25">
             Why OpenMail
           </p>
-          <h2 className="mb-8 text-center text-2xl font-semibold tracking-tight">
+          <h2 className="mb-8 text-center text-[22px] font-semibold text-white/90" style={{ letterSpacing: "-0.025em" }}>
             Everything Customer.io has. At a fraction of the cost.
           </h2>
 
-          <div
-            style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }}
-            className="overflow-hidden rounded-xl border"
-          >
-            <div
-              style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }}
-              className="grid grid-cols-3 border-b px-5 py-2.5"
-            >
-              <span className="text-xs font-medium text-white/35">Feature</span>
-              <span className="text-center text-xs font-semibold text-white">OpenMail</span>
-              <span className="text-center text-xs font-medium text-white/35">Customer.io</span>
+          <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#111115]">
+            <div className="grid grid-cols-3 border-b border-white/[0.07] bg-white/[0.03] px-5 py-2.5">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-white/30">Feature</span>
+              <span className="text-center text-[11px] font-semibold uppercase tracking-wider text-white/80">OpenMail</span>
+              <span className="text-center text-[11px] font-medium uppercase tracking-wider text-white/25">Customer.io</span>
             </div>
             {[
               { feature: "Self-hosted option",     us: true,        them: false              },
@@ -314,17 +303,16 @@ function LandingPage() {
             ].map(({ feature, us, them }) => (
               <div
                 key={feature}
-                style={{ borderColor: "rgba(255,255,255,0.05)" }}
-                className="grid grid-cols-3 border-b px-5 py-3 last:border-0"
+                className="grid grid-cols-3 border-b border-white/[0.05] px-5 py-3 last:border-0 hover:bg-white/[0.02] transition-colors"
               >
-                <span className="text-sm text-white/55">{feature}</span>
+                <span className="text-[12.5px] text-white/50">{feature}</span>
                 <div className="flex justify-center">
                   {typeof us === "boolean" ? (
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
                       <Check className="h-3 w-3 text-emerald-400" />
                     </div>
                   ) : (
-                    <span className="text-xs font-medium text-emerald-400">{us}</span>
+                    <span className="text-xs font-semibold text-emerald-400">{us}</span>
                   )}
                 </div>
                 <div className="flex justify-center">
@@ -335,7 +323,7 @@ function LandingPage() {
                       <span className="text-white/15">—</span>
                     )
                   ) : (
-                    <span className="text-xs text-white/35">{them}</span>
+                    <span className="text-[11.5px] text-white/30">{them}</span>
                   )}
                 </div>
               </div>
@@ -345,14 +333,16 @@ function LandingPage() {
       </section>
 
       {/* ── Feature grid ── */}
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
+      <section className="relative mx-auto max-w-6xl px-6 pb-24">
+        {/* subtle section glow */}
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-64 w-96 -translate-x-1/2 rounded-full bg-violet-600/6 blur-[80px]" />
+        <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/30">
           Platform
         </p>
-        <h2 className="mb-10 text-center text-2xl font-semibold tracking-tight">
+        <h2 className="mb-10 text-center text-[22px] font-semibold text-white/90" style={{ letterSpacing: "-0.025em" }}>
           Everything you need to run email at scale
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           <FeatureCard
             icon={Mail}
             title="Broadcasts"
@@ -387,33 +377,30 @@ function LandingPage() {
             icon={Bot}
             title="AI Agent Ready"
             desc="Connect Claude, GPT, or any AI agent to create campaigns, enroll contacts, and pull analytics — all through natural language."
-            accent
           />
           <FeatureCard
             icon={Activity}
             title="Real-Time Everything"
             desc="Live send progress bars, instant activity feeds, and dashboards that update as events happen. No page refreshes needed."
-            accent
           />
           <FeatureCard
             icon={Lock}
             title="Teams & Workspaces"
             desc="Invite your team, set roles, and manage multiple projects in separate workspaces. Everyone sees what they need, nothing they don't."
-            accent
           />
         </div>
       </section>
 
       {/* ── AI section ── */}
       <section id="ai" className="mx-auto max-w-6xl px-6 pb-20">
-        <div style={{ borderColor: "rgba(139,92,246,0.2)" }} className="overflow-hidden rounded-xl border bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-8 md:p-12">
+        <div style={{ borderColor: "rgba(139,92,246,0.18)" }} className="overflow-hidden rounded-xl border bg-gradient-to-br from-violet-500/[0.09] via-violet-500/[0.04] to-transparent p-8 md:p-12">
           <div className="grid gap-10 md:grid-cols-2 md:items-center">
             <div>
               <div style={{ borderColor: "rgba(139,92,246,0.25)", backgroundColor: "rgba(139,92,246,0.1)" }} className="mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium text-violet-400">
                 <Bot className="h-3.5 w-3.5" />
                 AI-Native
               </div>
-              <h2 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">
+              <h2 className="mb-3 text-[22px] font-bold md:text-[26px]" style={{ letterSpacing: "-0.025em" }}>
                 Let your AI agents run email
               </h2>
               <p className="mb-6 text-sm leading-relaxed text-white/50">
@@ -482,24 +469,24 @@ function LandingPage() {
 
       {/* ── Pricing ── */}
       <section id="pricing" className="mx-auto max-w-6xl px-6 pb-20">
-        <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
+        <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/25">
           Pricing
         </p>
-        <h2 className="mb-3 text-center text-2xl font-semibold tracking-tight">
+        <h2 className="mb-3 text-center text-[22px] font-semibold text-white/90" style={{ letterSpacing: "-0.025em" }}>
           Simple. Honest. No surprises.
         </h2>
-        <p className="mb-10 text-center text-sm text-white/40">
+        <p className="mb-10 text-center text-[12.5px] text-white/35">
           No per-seat fees. No contact limits on self-hosted. No lock-in.
         </p>
 
-        <div className="mx-auto grid max-w-2xl gap-4 md:grid-cols-2">
+        <div className="mx-auto grid max-w-2xl gap-3 md:grid-cols-2">
           {/* Self-hosted */}
-          <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }} className="flex flex-col rounded-xl border p-7">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-white/40">
+          <div className="flex flex-col rounded-xl border border-white/[0.08] bg-[#111115] p-7">
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/35">
               Self-hosted
             </p>
-            <p className="mb-1 text-4xl font-bold tracking-tight">Free</p>
-            <p className="mb-6 text-sm text-white/40">Forever. No credit card required.</p>
+            <p className="mb-1 text-[38px] font-bold leading-none" style={{ letterSpacing: "-0.035em" }}>Free</p>
+            <p className="mb-6 text-[12.5px] text-white/35">Forever. No credit card required.</p>
             <ul className="mb-8 flex-1 space-y-2.5">
               {[
                 "Unlimited contacts",
@@ -508,7 +495,7 @@ function LandingPage() {
                 "Your infrastructure, your data",
                 "Community support",
               ].map((f) => (
-                <li key={f} className="flex items-center gap-2.5 text-sm text-white/55">
+                <li key={f} className="flex items-center gap-2.5 text-[12.5px] text-white/50">
                   <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                   {f}
                 </li>
@@ -518,8 +505,7 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              style={{ borderColor: "rgba(255,255,255,0.1)" }}
-              className="flex items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.09] py-2.5 text-[13px] font-semibold text-white/55 transition-all hover:bg-white/[0.05] hover:text-white/80 cursor-pointer"
             >
               <Github className="h-4 w-4" />
               Clone on GitHub
@@ -527,12 +513,12 @@ function LandingPage() {
           </div>
 
           {/* Cloud / Enterprise */}
-          <div style={{ borderColor: "rgba(139,92,246,0.25)" }} className="flex flex-col rounded-xl border bg-gradient-to-br from-violet-500/8 to-violet-500/5 p-7">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-violet-400">
+          <div style={{ borderColor: "rgba(139,92,246,0.22)" }} className="flex flex-col rounded-xl border bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.03] p-7">
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-violet-400/80">
               Enterprise
             </p>
-            <p className="mb-1 text-4xl font-bold tracking-tight">Custom</p>
-            <p className="mb-6 text-sm text-white/40">Fully managed, with an SLA.</p>
+            <p className="mb-1 text-[38px] font-bold leading-none" style={{ letterSpacing: "-0.035em" }}>Custom</p>
+            <p className="mb-6 text-[12.5px] text-white/35">Fully managed, with an SLA.</p>
             <ul className="mb-8 flex-1 space-y-2.5">
               {[
                 "Managed cloud hosting",
@@ -541,7 +527,7 @@ function LandingPage() {
                 "Dedicated onboarding",
                 "Priority support",
               ].map((f) => (
-                <li key={f} className="flex items-center gap-2.5 text-sm text-white/55">
+                <li key={f} className="flex items-center gap-2.5 text-[12.5px] text-white/50">
                   <Check className="h-3.5 w-3.5 shrink-0 text-violet-400" />
                   {f}
                 </li>
@@ -549,7 +535,7 @@ function LandingPage() {
             </ul>
             <a
               href="mailto:kai@1flow.ai"
-              className="flex items-center justify-center gap-2 rounded-lg bg-violet-600 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white shadow-[0_0_20px_rgba(139,92,246,0.3)] transition-all hover:opacity-90 hover:shadow-[0_0_28px_rgba(139,92,246,0.4)] cursor-pointer"
             >
               Talk to sales
               <ArrowRight className="h-4 w-4" />
@@ -560,30 +546,29 @@ function LandingPage() {
 
       {/* ── CTA ── */}
       <section className="mx-auto max-w-6xl px-6 pb-28 text-center">
-        <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }} className="relative overflow-hidden rounded-xl border px-8 py-16">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-gradient-to-b from-violet-600/5 to-transparent"
-          />
-          <h2 className="relative mb-3 text-2xl font-bold tracking-tight md:text-3xl">
+        <div className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#111115] px-8 py-16">
+          {/* Top edge glow */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-violet-600/[0.06] to-transparent" />
+          <h2 className="relative mb-3 text-[24px] font-bold md:text-[28px]" style={{ letterSpacing: "-0.028em" }}>
             Own your email stack.
           </h2>
-          <p className="relative mx-auto mb-8 max-w-sm text-sm text-white/45">
+          <p className="relative mx-auto mb-8 max-w-sm text-[13px] leading-relaxed text-white/40">
             Get started in minutes. No credit card, no vendor lock-in,
             no per-seat fees — ever.
           </p>
           <div className="relative flex flex-col items-center justify-center gap-2.5 sm:flex-row">
             <Link
               to="/login"
-              className="flex items-center gap-2 rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-85 cursor-pointer"
+              className="flex items-center gap-2 rounded-xl bg-white px-6 py-2.5 text-[13px] font-semibold text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:opacity-90 hover:shadow-[0_0_28px_rgba(255,255,255,0.22)] cursor-pointer"
             >
               Start for free
               <ArrowRight className="h-4 w-4" />
             </Link>
             <a
               href="mailto:kai@1flow.ai"
-              style={{ borderColor: "rgba(255,255,255,0.1)" }}
-              className="flex items-center gap-2 rounded-lg border px-6 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+              style={{ borderColor: "rgba(255,255,255,0.09)" }}
+              className="flex items-center gap-2 rounded-xl border px-6 py-2.5 text-[13px] font-semibold text-white/50 transition-colors hover:bg-white/[0.05] hover:text-white/80"
             >
               Talk to us
             </a>

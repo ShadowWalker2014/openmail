@@ -79,11 +79,14 @@
     letter-spacing: -0.01em;
   }
 
-  /* Headings get tighter tracking */
+  /* Headings: tighter tracking scales with size — Inter optical sizing handles the rest */
   h1, h2, h3, h4, h5, h6 {
     letter-spacing: -0.02em;
     line-height: 1.25;
+    font-feature-settings: "cv11", "ss01";
   }
+  h1 { letter-spacing: -0.035em; line-height: 1.08; }
+  h2 { letter-spacing: -0.025em; }
 
   /* ── Scrollbars — 4px thin, barely visible ── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
