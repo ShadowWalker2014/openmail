@@ -17,10 +17,12 @@ export function registerCampaignTools(server: McpServer, getClient: () => Return
     "create_campaign",
     "Create an automation campaign triggered by an event or segment.",
     {
-      name: z.string(),
-      triggerType: z.enum(["event", "segment_enter", "segment_exit", "manual"]),
-      triggerConfig: z.record(z.unknown()).optional().describe("e.g. { eventName: 'user_signed_up' }"),
-      description: z.string().optional(),
+      name:          z.string().describe("Campaign name shown in the dashboard"),
+      triggerType:   z.enum(["event", "segment_enter", "segment_exit", "manual"]).describe(
+        "What triggers this campaign: 'event' (a tracked customer action), 'segment_enter' (contact joins a segment), 'segment_exit' (contact leaves a segment), 'manual' (triggered via API)"
+      ),
+      triggerConfig: z.record(z.unknown()).optional().describe("Trigger configuration. For 'event' trigger: { eventName: 'user_signed_up' }. For segment triggers: { segmentId: 'seg_xxx' }"),
+      description:   z.string().optional().describe("Optional campaign description"),
     },
     async (body) => {
       const data = await getClient().post("/campaigns", body);
@@ -32,10 +34,12 @@ export function registerCampaignTools(server: McpServer, getClient: () => Return
     "update_campaign",
     "Update a campaign's name, description, or status.",
     {
-      campaignId: z.string(),
-      name: z.string().optional(),
-      description: z.string().optional(),
-      status: z.enum(["draft", "active", "paused", "archived"]).optional(),
+      campaignId:  z.string().describe("Campaign ID (cmp_xxx)"),
+      name:        z.string().optional().describe("New campaign name"),
+      description: z.string().optional().describe("New campaign description"),
+      status:      z.enum(["draft", "active", "paused", "archived"]).optional().describe(
+        "Set to 'active' to start sending, 'paused' to stop without archiving, 'archived' to retire the campaign"
+      ),
     },
     async ({ campaignId, ...body }) => {
       const data = await getClient().patch(`/campaigns/${campaignId}`, body);
@@ -45,8 +49,8 @@ export function registerCampaignTools(server: McpServer, getClient: () => Return
 
   server.tool(
     "pause_campaign",
-    "Pause an active campaign.",
-    { campaignId: z.string() },
+    "Pause an active campaign. Contacts already in the campaign will not receive further emails until it is reactivated.",
+    { campaignId: z.string().describe("Campaign ID (cmp_xxx)") },
     async ({ campaignId }) => {
       const data = await getClient().patch(`/campaigns/${campaignId}`, { status: "paused" });
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };

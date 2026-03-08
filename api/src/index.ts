@@ -18,9 +18,10 @@ import membersRouter from "./routes/members.js";
 import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
 import assetsRouter from "./routes/assets.js";
-import { workspaceInvites, workspaceMembers } from "@openmail/shared/schema";
+import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
+import { getObject } from "./lib/storage.js";
 import { logger } from "./lib/logger.js";
 import type { ApiVariables } from "./types.js";
 
@@ -108,16 +109,13 @@ app.route("/api/session", sessionApi);
 app.get("/api/public/assets/:workspaceId/:assetId", async (c) => {
   const { workspaceId, assetId } = c.req.param();
   const db = getDb();
-  const { assets } = await import("@openmail/shared/schema");
-  const { eq, and } = await import("drizzle-orm");
   const [asset] = await db
-    .select({ s3Key: assets.s3Key, mimeType: assets.mimeType })
-    .from(assets)
-    .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)))
+    .select({ s3Key: assetsSchema.s3Key, mimeType: assetsSchema.mimeType })
+    .from(assetsSchema)
+    .where(and(eq(assetsSchema.id, assetId), eq(assetsSchema.workspaceId, workspaceId)))
     .limit(1);
   if (!asset) return c.json({ error: "Not found" }, 404);
 
-  const { getObject } = await import("./lib/storage.js");
   const obj = await getObject(asset.s3Key);
   if (!obj) return c.json({ error: "File not found in storage" }, 404);
 
@@ -145,6 +143,7 @@ apiKeyApi.route("/templates", templatesRouter);
 apiKeyApi.route("/campaigns", campaignsRouter);
 apiKeyApi.route("/segments", segmentsRouter);
 apiKeyApi.route("/analytics", analyticsRouter);
+apiKeyApi.route("/assets", assetsRouter);
 
 app.route("/api/v1", apiKeyApi);
 

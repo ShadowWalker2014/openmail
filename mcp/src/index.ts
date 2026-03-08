@@ -7,6 +7,7 @@ import { registerCampaignTools } from "./tools/campaigns.js";
 import { registerTemplateTools } from "./tools/templates.js";
 import { registerSegmentTools } from "./tools/segments.js";
 import { registerAnalyticsTools } from "./tools/analytics.js";
+import { registerAssetTools } from "./tools/assets.js";
 import { getApiClient } from "./lib/api-client.js";
 import pino from "pino";
 
@@ -36,6 +37,7 @@ app.post("/mcp", async (c) => {
   registerTemplateTools(server, () => client);
   registerSegmentTools(server, () => client);
   registerAnalyticsTools(server, () => client);
+  registerAssetTools(server, () => client);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless — no session persistence

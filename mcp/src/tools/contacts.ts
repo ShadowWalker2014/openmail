@@ -25,10 +25,10 @@ export function registerContactTools(server: McpServer, getClient: () => ReturnT
     "create_contact",
     "Create or update a contact by email (upsert).",
     {
-      email: z.string().email().describe("Contact email address"),
-      firstName: z.string().optional(),
-      lastName: z.string().optional(),
-      attributes: z.record(z.unknown()).optional().describe("Custom attributes (plan, company, etc.)"),
+      email:      z.string().email().describe("Contact email address"),
+      firstName:  z.string().optional().describe("Contact first name"),
+      lastName:   z.string().optional().describe("Contact last name"),
+      attributes: z.record(z.unknown()).optional().describe("Custom attributes (e.g. { plan: 'pro', company: 'Acme' })"),
     },
     async (body) => {
       const data = await getClient().post("/contacts", body);
@@ -40,10 +40,10 @@ export function registerContactTools(server: McpServer, getClient: () => ReturnT
     "update_contact",
     "Update contact attributes by contact ID.",
     {
-      contactId: z.string().describe("Contact ID (con_xxx)"),
-      firstName: z.string().optional(),
-      lastName: z.string().optional(),
-      attributes: z.record(z.unknown()).optional(),
+      contactId:  z.string().describe("Contact ID (con_xxx)"),
+      firstName:  z.string().optional().describe("Updated first name"),
+      lastName:   z.string().optional().describe("Updated last name"),
+      attributes: z.record(z.unknown()).optional().describe("Attributes to merge into the contact (existing keys not listed are preserved)"),
     },
     async ({ contactId, ...body }) => {
       const data = await getClient().patch(`/contacts/${contactId}`, body);

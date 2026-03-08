@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 let _s3: S3Client | null = null;
@@ -42,18 +42,47 @@ export async function generateUploadUrl(key: string, contentType: string): Promi
   );
 }
 
-/** Proxy-stream an object from S3 to a Response */
+/** Upload a Buffer directly to S3 (server-side upload — for URL fetch and base64 flows) */
+export async function putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+  await getS3().send(new PutObjectCommand({
+    Bucket: getBucket(),
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  }));
+}
+
+/** Proxy-stream an object from S3. Returns null if the key does not exist. */
 export async function getObject(key: string): Promise<{ body: ReadableStream; contentType: string; contentLength: number } | null> {
-  const res = await getS3().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }));
-  if (!res.Body) return null;
-  return {
-    body: res.Body.transformToWebStream(),
-    contentType: res.ContentType ?? "application/octet-stream",
-    contentLength: res.ContentLength ?? 0,
-  };
+  try {
+    const res = await getS3().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }));
+    if (!res.Body) return null;
+    return {
+      body: res.Body.transformToWebStream(),
+      contentType: res.ContentType ?? "application/octet-stream",
+      contentLength: res.ContentLength ?? 0,
+    };
+  } catch (err: unknown) {
+    // S3 throws NoSuchKey (or 404) when the object doesn't exist
+    const code = (err as { Code?: string; name?: string })?.Code ?? (err as { name?: string })?.name;
+    if (code === "NoSuchKey" || code === "NotFound") return null;
+    throw err;
+  }
 }
 
 /** Hard-delete an object from S3 */
 export async function deleteObject(key: string): Promise<void> {
   await getS3().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
+}
+
+/** Check if an object exists in S3. Only returns false for true 404; throws on other errors. */
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await getS3().send(new HeadObjectCommand({ Bucket: getBucket(), Key: key }));
+    return true;
+  } catch (err: unknown) {
+    const code = (err as { Code?: string; name?: string })?.Code ?? (err as { name?: string })?.name;
+    if (code === "NotFound" || code === "NoSuchKey") return false;
+    throw err; // credentials failure, network error, etc. should propagate
+  }
 }
