@@ -5,8 +5,9 @@ import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import {
   Mail, Users, TrendingUp, MousePointerClick, UserMinus,
-  Activity, AlertCircle, ArrowRight,
+  Activity, AlertCircle, ArrowRight, Filter, Zap,
 } from "lucide-react";
+import { format, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
@@ -137,7 +138,7 @@ function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-0.5 text-[11px] text-muted-foreground/70 leading-none">
-            Last 30 days
+            Last 30 days · {format(new Date(), "MMM yyyy")}
           </p>
         </div>
       </div>
@@ -157,6 +158,26 @@ function DashboardPage() {
         <StatCard label="Open Rate"    value={analytics ? `${analytics.openRate}%` : "—"}    icon={TrendingUp}       loading={analyticsLoading} />
         <StatCard label="Click Rate"   value={analytics ? `${analytics.clickRate}%` : "—"}   icon={MousePointerClick} loading={analyticsLoading} />
         <StatCard label="Unsubscribes" value={(analytics?.unsubscribes ?? 0).toLocaleString()} icon={UserMinus}       loading={analyticsLoading} />
+      </div>
+
+      {/* ── Quick actions ── */}
+      <div className="mb-5 flex items-center gap-2 flex-wrap">
+        <Link to="/broadcasts" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer">
+          <Mail className="h-3.5 w-3.5" />
+          New Broadcast
+        </Link>
+        <Link to="/contacts" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer">
+          <Users className="h-3.5 w-3.5" />
+          Add Contact
+        </Link>
+        <Link to="/segments" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer">
+          <Filter className="h-3.5 w-3.5" />
+          New Segment
+        </Link>
+        <Link to="/campaigns" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer">
+          <Zap className="h-3.5 w-3.5" />
+          New Campaign
+        </Link>
       </div>
 
       {/* ── Live activity ── */}
@@ -219,10 +240,12 @@ function DashboardPage() {
                     idx < recentEvents.length - 1 && "border-b border-border/20"
                   )}
                 >
-                  <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
+                  <div className={cn("h-2 w-2 shrink-0 rounded-full", meta.dot)} />
                   <span className="flex-1 text-[12px] text-foreground/70 leading-none">{meta.label}</span>
-                  <span className="tabular-nums shrink-0 font-mono text-[10px] text-muted-foreground/40">
-                    {time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  <span className="tabular-nums shrink-0 text-[10px] text-muted-foreground/50">
+                    {isToday(time)
+                      ? format(time, "h:mm a")
+                      : format(time, "MMM d, h:mm a")}
                   </span>
                 </div>
               );

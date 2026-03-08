@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
@@ -101,7 +101,17 @@ function DeliveriesPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === "deliveries" ? "Deliveries" : "Drafts"}
+            {tab === "deliveries" && data && (
+              <span className="ml-1.5 text-[10px] text-muted-foreground tabular-nums">
+                {data.total.toLocaleString()}
+              </span>
+            )}
+            {tab === "drafts" && drafts.length > 0 && (
+              <span className="ml-1.5 text-[10px] text-muted-foreground tabular-nums">
+                {drafts.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -237,6 +247,9 @@ function DeliveriesPage() {
             Failed to load drafts.
           </div>
         )}
+        <p className="mb-3 text-[12px] text-muted-foreground">
+          Draft broadcasts. <Link to="/broadcasts" className="font-medium text-foreground hover:underline">Go to Broadcasts</Link> to edit or send them.
+        </p>
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-[13px]">
             <thead>
