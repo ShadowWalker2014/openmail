@@ -75,6 +75,17 @@ app.get("/:table", async (c) => {
   }
   responseHeaders.set("access-control-expose-headers", "electric-handle, electric-offset, electric-schema, electric-cursor");
 
+  // Explicitly set CORS headers — Hono's cors() middleware may not apply to streaming
+  // responses returned via `new Response(stream)`. Adding them manually ensures the
+  // browser can read the response even when Electric returns a non-2xx status.
+  const origin = c.req.header("Origin") ?? "";
+  const webUrl = process.env.WEB_URL ?? "https://openmail.win";
+  if (origin && (origin === webUrl || origin.startsWith("http://localhost"))) {
+    responseHeaders.set("access-control-allow-origin", origin);
+    responseHeaders.set("access-control-allow-credentials", "true");
+    responseHeaders.set("vary", "Origin");
+  }
+
   return new Response(upstreamRes.body, {
     status: upstreamRes.status,
     headers: responseHeaders,
