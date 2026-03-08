@@ -2,7 +2,7 @@ import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   LayoutDashboard, Users, Mail, Zap, FileText, Settings,
-  Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown,
+  Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown, Plus,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useSession, signOut } from "@/lib/auth-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
+import { apiFetch } from "@/lib/api";
 import {
   Sidebar,
   SidebarContent,
@@ -111,14 +112,38 @@ function WorkspaceSwitcher() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const newNameRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+
   const activeWs = workspaces?.find((w) => w.id === activeWorkspaceId);
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "workspace";
+      return apiFetch<{ id: string; name: string; slug: string }>("/api/session/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name, slug: `${slug}-${Math.random().toString(36).slice(2, 6)}` }),
+      });
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      setActiveWorkspaceId(data.id);
+      setCreating(false);
+      setNewName("");
+      setOpen(false);
+      toast.success(`Workspace "${data.name}" created`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (!workspaces?.length) return null;
 
   const initial = (activeWs?.name ?? "W")[0].toUpperCase();
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setCreating(false); setNewName(""); } }}>
       <Popover.Trigger asChild>
         <SidebarMenuButton
           size="lg"
@@ -152,7 +177,8 @@ function WorkspaceSwitcher() {
           sideOffset={4}
           className="z-50 w-60 rounded-lg border border-border bg-popover p-1 shadow-xl shadow-black/40 animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
         >
-          <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          {/* Workspace list */}
+          <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
             Workspaces
           </p>
           {workspaces.map((ws) => (
@@ -168,6 +194,62 @@ function WorkspaceSwitcher() {
               {ws.id === activeWorkspaceId && <Check className="h-3.5 w-3.5 shrink-0 text-foreground/50" />}
             </button>
           ))}
+
+          {/* Separator + actions */}
+          <div className="my-1 h-px bg-border/60" />
+
+          {/* Workspace settings */}
+          <Link
+            to="/settings"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+          >
+            <Settings className="h-3.5 w-3.5 shrink-0" />
+            Workspace settings
+          </Link>
+
+          {/* Create workspace — inline form */}
+          {!creating ? (
+            <button
+              onClick={() => { setCreating(true); setTimeout(() => newNameRef.current?.focus(), 50); }}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              New workspace
+            </button>
+          ) : (
+            <form
+              className="mt-1 px-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newName.trim()) createMutation.mutate(newName.trim());
+              }}
+            >
+              <input
+                ref={newNameRef}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Workspace name"
+                className="mb-1.5 w-full rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[12.5px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-ring focus:ring-1 focus:ring-ring/30"
+              />
+              <div className="flex gap-1.5">
+                <button
+                  type="submit"
+                  disabled={!newName.trim() || createMutation.isPending}
+                  className="flex-1 rounded-md bg-foreground px-2 py-1.5 text-[12px] font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-40 cursor-pointer"
+                >
+                  {createMutation.isPending ? "Creating…" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setCreating(false); setNewName(""); }}
+                  className="rounded-md border border-border px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

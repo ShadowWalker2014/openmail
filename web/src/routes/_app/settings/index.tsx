@@ -437,14 +437,28 @@ function SendingDomainPanel({
 
 // ── Settings side nav sections ────────────────────────────────────────────────
 
-const SETTINGS_SECTIONS = [
-  { id: "workspace",  label: "Workspace",      icon: Building2 },
-  { id: "team",       label: "Team Members",   icon: Users },
-  { id: "email",      label: "Email Sending",  icon: Mail },
-  { id: "domain",     label: "Sending Domain", icon: Globe },
-  { id: "account",    label: "Account",        icon: User },
-  { id: "api-keys",   label: "API Keys",       icon: Code2 },
+const SETTINGS_GROUPS = [
+  {
+    label: "Workspace",
+    sections: [
+      { id: "workspace",  label: "General",        icon: Building2 },
+      { id: "team",       label: "Team Members",   icon: Users },
+      { id: "email",      label: "Email Sending",  icon: Mail },
+      { id: "domain",     label: "Sending Domain", icon: Globe },
+      { id: "api-keys",   label: "API Keys",       icon: Code2 },
+    ],
+  },
+  {
+    label: "Account",
+    sections: [
+      { id: "account",    label: "Account",        icon: User },
+    ],
+  },
 ] as const;
+
+// Flat list for IntersectionObserver
+type SettingsSection = { id: string; label: string; icon: React.ElementType };
+const SETTINGS_SECTIONS: SettingsSection[] = SETTINGS_GROUPS.flatMap((g) => [...g.sections]);
 
 function SettingsSideNav({ active }: { active: string }) {
   const scrollTo = (id: string) => {
@@ -453,30 +467,34 @@ function SettingsSideNav({ active }: { active: string }) {
 
   return (
     <nav className="w-44 shrink-0">
-      <div className="sticky top-6">
-        <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">
-          Settings
-        </p>
-        <ul className="space-y-px">
-          {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => {
-            const isActive = active === id;
-            return (
-              <li key={id}>
-                <button
-                  onClick={() => scrollTo(id)}
-                  className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors duration-100 cursor-pointer text-left ${
-                    isActive
-                      ? "bg-accent text-foreground font-medium"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                  }`}
-                >
-                  <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/60"}`} />
-                  {label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      <div className="sticky top-6 space-y-5">
+        {SETTINGS_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/40">
+              {group.label}
+            </p>
+            <ul className="space-y-px">
+              {group.sections.map(({ id, label, icon: Icon }) => {
+                const isActive = active === id;
+                return (
+                  <li key={id}>
+                    <button
+                      onClick={() => scrollTo(id)}
+                      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors duration-100 cursor-pointer text-left ${
+                        isActive
+                          ? "bg-accent text-foreground font-medium"
+                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/50"}`} />
+                      {label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </div>
     </nav>
   );
@@ -661,7 +679,7 @@ function SettingsPage() {
     <div className="px-8 py-7 w-full">
       <div className="mb-7">
         <h1 className="text-[15px] font-semibold tracking-tight text-foreground">Settings</h1>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">Workspace configuration</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">Workspace &amp; account configuration</p>
       </div>
 
       <div className="flex gap-10">
@@ -670,7 +688,7 @@ function SettingsPage() {
         <div className="flex-1 min-w-0 max-w-2xl space-y-3.5">
         {/* ── Workspace ── */}
         <div id="workspace" className="rounded-lg border border-border bg-card overflow-hidden">
-          <SectionHeader icon={Building2} title="Workspace" description="Manage your workspace settings" />
+          <SectionHeader icon={Building2} title="General" description="Workspace name and basic settings" />
           <div className="px-5 py-4">
             <div className="space-y-1.5">
               <Label>Workspace Name</Label>
