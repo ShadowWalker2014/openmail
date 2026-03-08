@@ -186,10 +186,7 @@ function ContactsPage() {
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-[13px]">
             <thead>
-              <tr
-                className="border-b border-border"
-                style={{ background: "hsl(240 4% 10%)" }}
-              >
+              <tr className="border-b border-border bg-muted/50">
                 <th className="px-4 py-2 text-left text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase">
                   Email
                 </th>
