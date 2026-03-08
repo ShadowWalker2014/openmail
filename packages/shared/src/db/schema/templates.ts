@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
-import { workspaces } from "./workspaces.js";
+import { workspaces } from "./workspaces";
 
 export const emailTemplates = pgTable("email_templates", {
   id: text("id").primaryKey(),

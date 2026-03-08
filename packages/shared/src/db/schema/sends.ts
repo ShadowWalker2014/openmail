@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
-import { workspaces } from "./workspaces.js";
-import { contacts } from "./contacts.js";
+import { workspaces } from "./workspaces";
+import { contacts } from "./contacts";
 
 export const emailSends = pgTable("email_sends", {
   id: text("id").primaryKey(),

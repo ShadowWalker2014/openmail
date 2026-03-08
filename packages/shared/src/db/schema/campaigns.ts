@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, jsonb, integer, uniqueIndex } from "drizzle-orm/pg-core";
-import { workspaces } from "./workspaces.js";
+import { workspaces } from "./workspaces";
 
 export const campaigns = pgTable("campaigns", {
   id: text("id").primaryKey(),
