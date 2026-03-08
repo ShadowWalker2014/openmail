@@ -1,5 +1,6 @@
 import { useShape } from "@electric-sql/react";
 import { useWorkspaceStore } from "@/store/workspace";
+import { useMemo } from "react";
 
 interface ShapeOptions {
   columns?: string[];
@@ -19,10 +20,15 @@ export function useWorkspaceShape<T extends Record<string, unknown>>(
     ? `${apiUrl}/api/session/ws/${activeWorkspaceId}/shapes/${table}`
     : `${apiUrl}/api/session/ws/_disabled_/shapes/${table}`;
 
-  const params: Record<string, string> = {};
-  if (options?.columns?.length) {
-    params.columns = options.columns.join(",");
-  }
+  // Memoize params so useShape gets a stable object reference on every render.
+  // Without this, a new object every render could trigger infinite re-subscriptions
+  // if ElectricSQL's useShape uses reference equality for its dependency check.
+  const columnsKey = options?.columns?.join(",") ?? "";
+  const params = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (columnsKey) p.columns = columnsKey;
+    return p;
+  }, [columnsKey]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = useShape<T>({ url, params } as any);

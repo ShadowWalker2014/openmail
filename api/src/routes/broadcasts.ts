@@ -103,24 +103,42 @@ app.post("/:id/send", async (c) => {
     .limit(1);
 
   if (!broadcast) return c.json({ error: "Not found" }, 404);
-  if (broadcast.status !== "draft") return c.json({ error: "Broadcast already sent or in progress" }, 400);
 
+  // Atomic check-and-set: only update if still in draft status.
+  // Adding eq(broadcasts.status, "draft") to the WHERE clause prevents
+  // two concurrent requests from both enqueuing the same broadcast.
   const [updated] = await db
     .update(broadcasts)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(and(eq(broadcasts.id, broadcast.id), eq(broadcasts.workspaceId, workspaceId)))
+    .where(
+      and(
+        eq(broadcasts.id, broadcast.id),
+        eq(broadcasts.workspaceId, workspaceId),
+        eq(broadcasts.status, "draft")
+      )
+    )
     .returning();
 
-  // If Redis is unavailable, reset to draft so the user can retry
-  await getBroadcastQueue()
+  // If nothing was updated, the broadcast was already sent/sending
+  if (!updated) {
+    return c.json({ error: "Broadcast already sent or in progress" }, 400);
+  }
+
+  // Enqueue the job. If Redis is unavailable, roll back to draft and return
+  // the corrected state so the client doesn't show a stale "sending" status.
+  const finalBroadcast = await getBroadcastQueue()
     .add("send-broadcast", { broadcastId: broadcast.id, workspaceId }, { removeOnComplete: 100 })
+    .then(() => updated)
     .catch(async () => {
-      await getDb()
+      const [rolled] = await getDb()
         .update(broadcasts)
         .set({ status: "draft", updatedAt: new Date() })
-        .where(and(eq(broadcasts.id, broadcast.id), eq(broadcasts.workspaceId, workspaceId)));
+        .where(and(eq(broadcasts.id, broadcast.id), eq(broadcasts.workspaceId, workspaceId)))
+        .returning();
+      return rolled ?? updated;
     });
-  return c.json(updated);
+
+  return c.json(finalBroadcast);
 });
 
 app.delete("/:id", async (c) => {

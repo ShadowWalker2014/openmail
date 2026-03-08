@@ -5,6 +5,7 @@ import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import { Mail, Users, TrendingUp, MousePointerClick, UserMinus, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 
 export const Route = createFileRoute("/_app/dashboard/")({
   component: DashboardPage,
@@ -35,6 +36,10 @@ const EVENT_CONFIG: Record<string, { label: string; dotClass: string }> = {
   bounce:      { label: "Bounced",       dotClass: "bg-orange-400" },
   complaint:   { label: "Complaint",     dotClass: "bg-red-500"    },
 };
+
+// Stable constant — avoids creating a new array ref on every render
+// which would cause useShape to re-subscribe on every render cycle.
+const EMAIL_EVENT_COLUMNS = ["id", "event_type", "occurred_at", "send_id", "workspace_id"];
 
 function StatCard({
   label,
@@ -92,15 +97,20 @@ function DashboardPage() {
 
   const { data: liveEvents = [], isLoading: eventsLoading } =
     useWorkspaceShape<EmailEvent>("email_events", {
-      columns: ["id", "event_type", "occurred_at", "send_id", "workspace_id"],
+      columns: EMAIL_EVENT_COLUMNS,
     });
 
-  const recentEvents = [...liveEvents]
-    .sort(
-      (a, b) =>
-        new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
-    )
-    .slice(0, 20);
+  // Memoize sort+slice so it doesn't recompute on every unrelated render
+  const recentEvents = useMemo(
+    () =>
+      [...liveEvents]
+        .sort(
+          (a, b) =>
+            new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
+        )
+        .slice(0, 20),
+    [liveEvents]
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
@@ -188,7 +198,7 @@ function DashboardPage() {
             return (
               <div
                 key={event.id}
-                className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/50"
+                className="flex items-center gap-3 px-4 py-2.5"
               >
                 <div
                   className={cn(

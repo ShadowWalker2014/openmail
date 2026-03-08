@@ -32,21 +32,28 @@ export const Route = createFileRoute("/_app/segments/")({
   component: SegmentsPage,
 });
 
+// Conditions as returned from the API — the internal `id` field used for
+// React reconciliation is stripped before saving, so it's not in the stored data.
+interface ApiCondition {
+  field: string;
+  operator: string;
+  value?: string;
+}
+
 interface Segment {
   id: string;
   name: string;
   description: string | null;
-  conditions: Condition[];
+  conditions: ApiCondition[];
   conditionLogic: "and" | "or";
   createdAt: string;
   updatedAt: string;
 }
 
-interface Condition {
-  id: string; // stable key for React reconciliation
-  field: string;
-  operator: string;
-  value?: string;
+// Local-only condition shape — adds a stable `id` for React keys and the
+// onChange/onRemove handlers in ConditionRow. Never sent to the API.
+interface Condition extends ApiCondition {
+  id: string;
 }
 
 const FIELD_OPTIONS = [
@@ -190,7 +197,7 @@ function ConditionRow({
   );
 }
 
-function conditionSummary(conditions: Condition[], logic: "and" | "or"): string {
+function conditionSummary(conditions: ApiCondition[], logic: "and" | "or"): string {
   if (!conditions?.length) return "No conditions";
   const parts = conditions.map((c) => {
     const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;

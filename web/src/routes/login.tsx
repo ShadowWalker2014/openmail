@@ -64,8 +64,8 @@ function LoginPage() {
       }
     }
 
-    await router.navigate({ to: "/dashboard" });
-    setLoading(false);
+    // Component unmounts after navigation — no need to reset loading state
+    router.navigate({ to: "/dashboard" });
   }
 
   return (

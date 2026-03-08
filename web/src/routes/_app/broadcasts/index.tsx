@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +30,6 @@ import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/broadcasts/")({
   component: BroadcastsPage,
@@ -135,7 +134,7 @@ function BroadcastsPage() {
   const htmlRef = useRef<HTMLTextAreaElement>(null);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
 
-  // Always load from REST for reliable initial data
+  // REST is always the source of truth for the list (invalidated after every mutation)
   const { data: restBroadcasts = [], isLoading } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
     queryFn: () =>
@@ -145,15 +144,32 @@ function BroadcastsPage() {
     enabled: !!activeWorkspaceId,
   });
 
-  // Also subscribe to Electric for real-time progress updates
+  // Electric provides live progress updates (sent_count, recipient_count, status changes)
+  // but must NOT replace the REST list — it doesn't include newly created items
+  // until Electric sync catches up, so we only overlay, never replace.
   const { data: rawElectricBroadcasts } =
     useWorkspaceShape<Record<string, unknown>>("broadcasts");
-  const electricBroadcasts = rawElectricBroadcasts?.map(normalizeBroadcast);
 
-  // Prefer Electric data (real-time) when available, fall back to REST
-  const broadcasts = (electricBroadcasts?.length ? electricBroadcasts : restBroadcasts)
-    .slice()
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const broadcasts = useMemo(() => {
+    // Build a map of Electric's live data keyed by broadcast ID
+    const electricById = new Map(
+      (rawElectricBroadcasts ?? []).map((b) => {
+        const normalized = normalizeBroadcast(b);
+        return [normalized.id, normalized];
+      })
+    );
+    // Use REST list (complete) but overlay Electric's live fields for any matching row
+    return restBroadcasts
+      .map((b) => {
+        const live = electricById.get(b.id);
+        // Only overlay the fields Electric keeps live (counts + status)
+        return live
+          ? { ...b, status: live.status, sent_count: live.sent_count, recipient_count: live.recipient_count, open_count: live.open_count, click_count: live.click_count }
+          : b;
+      })
+      .slice()
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [restBroadcasts, rawElectricBroadcasts]);
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],

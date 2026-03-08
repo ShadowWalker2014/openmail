@@ -33,10 +33,18 @@ app.post(
     const id = generateId("ws");
     const memberId = generateId("wm");
 
-    await db.transaction(async (tx) => {
-      await tx.insert(workspaces).values({ id, name, slug });
-      await tx.insert(workspaceMembers).values({ id: memberId, workspaceId: id, userId, role: "owner" });
-    });
+    try {
+      await db.transaction(async (tx) => {
+        await tx.insert(workspaces).values({ id, name, slug });
+        await tx.insert(workspaceMembers).values({ id: memberId, workspaceId: id, userId, role: "owner" });
+      });
+    } catch (err: unknown) {
+      // PostgreSQL unique_violation on the slug column
+      if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "23505") {
+        return c.json({ error: "A workspace with that slug already exists. Please choose a different slug." }, 409);
+      }
+      throw err;
+    }
 
     return c.json({ id, name, slug }, 201);
   }
