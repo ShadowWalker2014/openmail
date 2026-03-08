@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   LayoutDashboard, Users, Mail, Zap, FileText, Settings,
   Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown, Plus,
+  Sun, Moon, Monitor,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,6 +15,7 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { apiFetch } from "@/lib/api";
+import { useTheme, type Theme } from "@/hooks/use-theme";
 import {
   Sidebar,
   SidebarContent,
@@ -326,13 +328,17 @@ function UserRow() {
   const { setActiveWorkspaceId } = useWorkspaceStore();
   const queryClient = useQueryClient();
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
+  const [open, setOpen] = useState(false);
 
   if (!session?.user) return null;
 
   const name = session.user.name ?? session.user.email;
+  const email = session.user.email;
   const initial = name[0].toUpperCase();
 
-  const handleSignOut = () =>
+  const handleSignOut = () => {
+    setOpen(false);
     signOut()
       .then(() => {
         queryClient.clear();
@@ -340,48 +346,111 @@ function UserRow() {
         router.navigate({ to: "/login" });
       })
       .catch(() => toast.error("Sign out failed"));
+  };
+
+  const THEMES: { value: Theme; icon: React.ElementType; label: string }[] = [
+    { value: "system",  icon: Monitor, label: "System" },
+    { value: "light",   icon: Sun,     label: "Light"  },
+    { value: "dark",    icon: Moon,    label: "Dark"   },
+  ];
+
+  const trigger = (
+    <button
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer",
+        "transition-colors hover:bg-sidebar-accent",
+        collapsed && "justify-center px-0"
+      )}
+    >
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80 uppercase select-none">
+        {initial}
+      </div>
+      {!collapsed && (
+        <div className="min-w-0 flex-1 text-left">
+          <p className="truncate text-[12px] font-medium leading-none text-sidebar-foreground">{name}</p>
+          {session.user.name && (
+            <p className="mt-0.5 truncate text-[10px] leading-none text-sidebar-foreground/50">{email}</p>
+          )}
+        </div>
+      )}
+    </button>
+  );
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          tooltip={name}
-          className={cn(collapsed && "flex items-center justify-center")}
-        >
-          <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80 uppercase select-none">
-              {initial}
-            </div>
-            {!collapsed && (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] font-medium leading-none">{name}</p>
-                  {session.user.name && (
-                    <p className="mt-0.5 truncate text-[10px] leading-none text-sidebar-foreground/50">
-                      {session.user.email}
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-          </Link>
-        </SidebarMenuButton>
-        {!collapsed && (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        {collapsed ? (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleSignOut}
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-sidebar-foreground/30 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/70 cursor-pointer opacity-0 group-hover/menu-item:opacity-100 focus-visible:opacity-100"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Sign out</TooltipContent>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent side="right">{name}</TooltipContent>
           </Tooltip>
-        )}
-      </SidebarMenuItem>
-    </SidebarMenu>
+        ) : trigger}
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={6}
+          className="z-50 w-60 rounded-lg border border-border bg-popover p-1 shadow-xl shadow-black/40 animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+        >
+          {/* User info header */}
+          <div className="px-2 py-2 mb-1">
+            <p className="text-[13px] font-medium text-foreground truncate">{name}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{email}</p>
+          </div>
+
+          <div className="my-1 h-px bg-border/60" />
+
+          {/* Settings */}
+          <Link
+            to="/settings"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+          >
+            <Settings className="h-3.5 w-3.5 shrink-0" />
+            Settings
+          </Link>
+
+          <div className="my-1 h-px bg-border/60" />
+
+          {/* Theme toggle */}
+          <div className="px-2 py-1.5 flex items-center justify-between">
+            <span className="text-[12px] text-muted-foreground">Theme</span>
+            <div className="flex items-center gap-0.5 rounded-md border border-border/60 bg-muted/40 p-0.5">
+              {THEMES.map(({ value, icon: Icon, label }) => (
+                <Tooltip key={value}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setTheme(value)}
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded transition-colors cursor-pointer",
+                        theme === value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{label}</TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </div>
+
+          <div className="my-1 h-px bg-border/60" />
+
+          {/* Sign out */}
+          <button
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+          >
+            <LogOut className="h-3.5 w-3.5 shrink-0" />
+            Sign out
+          </button>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
