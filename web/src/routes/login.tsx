@@ -1,10 +1,10 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Mail, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn, signUp } from "@/lib/auth-client";
+import { signIn, signUp, useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
@@ -23,12 +23,20 @@ function getErrorMessage(error: unknown): string {
 
 function LoginPage() {
   const router = useRouter();
+  const { data: session, isPending } = useSession();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [loading, setLoading] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // Redirect already-authenticated users to dashboard
+  useEffect(() => {
+    if (!isPending && session) {
+      router.navigate({ to: "/dashboard" });
+    }
+  }, [session, isPending, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,35 +46,39 @@ function LoginPage() {
     const email = emailRef.current!.value.trim();
     const password = passwordRef.current!.value;
 
-    if (mode === "login") {
-      const { error } = await signIn.email({ email, password });
-      if (error) {
-        const msg = getErrorMessage(error);
-        setFieldError(msg);
-        toast.error(msg);
-        setLoading(false);
-        return;
+    try {
+      if (mode === "login") {
+        const { error } = await signIn.email({ email, password });
+        if (error) {
+          const msg = getErrorMessage(error);
+          setFieldError(msg);
+          toast.error(msg);
+          return;
+        }
+      } else {
+        const name = nameRef.current!.value.trim();
+        if (!name) {
+          setFieldError("Name is required.");
+          return;
+        }
+        const { error } = await signUp.email({ email, password, name });
+        if (error) {
+          const msg = getErrorMessage(error);
+          setFieldError(msg);
+          toast.error(msg);
+          return;
+        }
       }
-    } else {
-      const name = nameRef.current!.value.trim();
-      if (!name) {
-        setFieldError("Name is required.");
-        setLoading(false);
-        return;
-      }
-      const { error } = await signUp.email({ email, password, name });
-      if (error) {
-        const msg = getErrorMessage(error);
-        setFieldError(msg);
-        toast.error(msg);
-        setLoading(false);
-        return;
-      }
+      // Component unmounts after navigation — no need to reset loading state
+      router.navigate({ to: "/dashboard" });
+    } finally {
+      // Always reset loading in case navigation fails or errors above cause early return
+      setLoading(false);
     }
-
-    // Component unmounts after navigation — no need to reset loading state
-    router.navigate({ to: "/dashboard" });
   }
+
+  // Show nothing while redirecting authenticated users
+  if (!isPending && session) return null;
 
   return (
     <div className="min-h-screen bg-[hsl(var(--app-bg))] flex items-center justify-center px-4">
@@ -167,10 +179,7 @@ function LoginPage() {
               Don&apos;t have an account?{" "}
               <button
                 type="button"
-                onClick={() => {
-                  setMode("signup");
-                  setFieldError(null);
-                }}
+                onClick={() => { setMode("signup"); setFieldError(null); }}
                 className="font-medium text-foreground hover:underline cursor-pointer"
               >
                 Sign up
@@ -181,10 +190,7 @@ function LoginPage() {
               Already have an account?{" "}
               <button
                 type="button"
-                onClick={() => {
-                  setMode("login");
-                  setFieldError(null);
-                }}
+                onClick={() => { setMode("login"); setFieldError(null); }}
                 className="font-medium text-foreground hover:underline cursor-pointer"
               >
                 Sign in

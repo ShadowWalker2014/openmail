@@ -9,11 +9,23 @@ import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
+// Safe subset of workspace columns to return — never expose resendApiKey
+const SAFE_WORKSPACE_COLUMNS = {
+  id: workspaces.id,
+  name: workspaces.name,
+  slug: workspaces.slug,
+  plan: workspaces.plan,
+  resendFromEmail: workspaces.resendFromEmail,
+  resendFromName: workspaces.resendFromName,
+  createdAt: workspaces.createdAt,
+  updatedAt: workspaces.updatedAt,
+} as const;
+
 app.get("/", async (c) => {
   const userId = c.get("userId") as string;
   const db = getDb();
   const members = await db
-    .select({ workspace: workspaces })
+    .select({ workspace: SAFE_WORKSPACE_COLUMNS })
     .from(workspaceMembers)
     .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
     .where(eq(workspaceMembers.userId, userId));
@@ -55,8 +67,8 @@ app.patch(
   zValidator("json", z.object({
     name: z.string().optional(),
     resendApiKey: z.string().optional(),
-    resendFromEmail: z.string().email().optional(),
-    resendFromName: z.string().optional(),
+    resendFromEmail: z.string().email().optional().nullable(),
+    resendFromName: z.string().optional().nullable(),
   })),
   async (c) => {
     const userId = c.get("userId") as string;
@@ -77,7 +89,7 @@ app.patch(
       .update(workspaces)
       .set({ ...c.req.valid("json"), updatedAt: new Date() })
       .where(eq(workspaces.id, workspaceId))
-      .returning();
+      .returning(SAFE_WORKSPACE_COLUMNS);
 
     return c.json(workspace);
   }

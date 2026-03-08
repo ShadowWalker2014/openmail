@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
-import { Mail, Users, TrendingUp, MousePointerClick, UserMinus, Activity } from "lucide-react";
+import { Mail, Users, TrendingUp, MousePointerClick, UserMinus, Activity, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 
@@ -88,7 +88,7 @@ function LiveDot() {
 function DashboardPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
 
-  const { data: analytics, isLoading: analyticsLoading } = useQuery<Analytics>({
+  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useQuery<Analytics>({
     queryKey: ["analytics", "overview", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/analytics/overview"),
     enabled: !!activeWorkspaceId,
@@ -119,6 +119,14 @@ function DashboardPage() {
         <h1 className="text-lg font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">Last 30 days</p>
       </div>
+
+      {/* Analytics error state */}
+      {analyticsError && (
+        <div className="mb-7 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Failed to load analytics. The data below may be unavailable.
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="mb-7 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
@@ -191,7 +199,7 @@ function DashboardPage() {
           </div>
         )}
 
-        <div className="divide-y">
+        {recentEvents.length > 0 && <div className="divide-y">
           {recentEvents.map((event) => {
             const meta = EVENT_CONFIG[event.event_type] ?? EVENT_CONFIG.open;
             const time = new Date(event.occurred_at);
@@ -217,7 +225,7 @@ function DashboardPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
     </div>
   );

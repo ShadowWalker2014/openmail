@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 
 const NAV_ITEMS = [
@@ -109,6 +110,7 @@ export function AppSidebar() {
   const router = useRouter();
   const { data: session } = useSession();
   const { setActiveWorkspaceId } = useWorkspaceStore();
+  const queryClient = useQueryClient();
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -208,6 +210,8 @@ export function AppSidebar() {
                     onClick={() =>
                       signOut()
                         .then(() => {
+                          // Clear ALL cached data to prevent cross-user data leakage
+                          queryClient.clear();
                           setActiveWorkspaceId(null);
                           router.navigate({ to: "/login" });
                         })

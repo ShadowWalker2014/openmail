@@ -128,6 +128,7 @@ function BroadcastsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Broadcast | null>(null);
+  const [sendTarget, setSendTarget] = useState<Broadcast | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -377,18 +378,16 @@ function BroadcastsPage() {
                   {broadcast.created_at ? format(new Date(broadcast.created_at), "MMM d") : ""}
                 </span>
                   {broadcast.status === "draft" && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => sendMutation.mutate(broadcast.id)}
-                        disabled={sendingId === broadcast.id}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        {sendingId === broadcast.id ? "Sending…" : "Send"}
-                      </Button>
-                    </>
+                    <Button
+                      size="sm"
+                      onClick={() => setSendTarget(broadcast)}
+                      disabled={sendingId === broadcast.id}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      {sendingId === broadcast.id ? "Sending…" : "Send"}
+                    </Button>
                   )}
-                  {(broadcast.status === "draft" || broadcast.status === "failed") && (
+                  {(broadcast.status === "draft" || broadcast.status === "failed" || broadcast.status === "sent") && (
                     <button
                       onClick={() => setDeleteTarget(broadcast)}
                       className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
@@ -417,6 +416,33 @@ function BroadcastsPage() {
           </div>
         )}
       </div>
+
+      {/* Send confirmation */}
+      <AlertDialog open={!!sendTarget} onOpenChange={(o) => !o && setSendTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send broadcast?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">{sendTarget?.name}</strong>{" "}
+              will be sent to all contacts in the selected segments. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={sendMutation.isPending}
+              onClick={() => {
+                if (sendTarget) {
+                  sendMutation.mutate(sendTarget.id);
+                  setSendTarget(null);
+                }
+              }}
+            >
+              Send now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation */}
       <AlertDialog

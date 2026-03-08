@@ -36,6 +36,7 @@ app.get("/", async (c) => {
 });
 
 app.post("/", zValidator("json", segmentSchema), async (c) => {
+
   const workspaceId = c.get("workspaceId") as string;
   const body = c.req.valid("json");
   const db = getDb();
@@ -45,6 +46,38 @@ app.post("/", zValidator("json", segmentSchema), async (c) => {
     .returning();
   return c.json(segment, 201);
 });
+
+app.patch(
+  "/:id",
+  zValidator("json", z.object({
+    name: z.string().min(1).optional(),
+    description: z.string().optional().nullable(),
+    conditions: z.array(z.object({
+      field: z.string().min(1),
+      operator: conditionOperatorEnum,
+      value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    })).min(1).optional(),
+    conditionLogic: z.enum(["and", "or"]).optional(),
+  })),
+  async (c) => {
+    const workspaceId = c.get("workspaceId") as string;
+    const db = getDb();
+    const [existing] = await db
+      .select()
+      .from(segments)
+      .where(and(eq(segments.id, c.req.param("id")), eq(segments.workspaceId, workspaceId)))
+      .limit(1);
+    if (!existing) return c.json({ error: "Not found" }, 404);
+
+    const body = c.req.valid("json");
+    const [updated] = await db
+      .update(segments)
+      .set({ ...body, updatedAt: new Date() })
+      .where(and(eq(segments.id, c.req.param("id")), eq(segments.workspaceId, workspaceId)))
+      .returning();
+    return c.json(updated);
+  }
+);
 
 app.delete("/:id", async (c) => {
   const workspaceId = c.get("workspaceId") as string;

@@ -11,28 +11,36 @@ export const Route = createFileRoute("/_app")({
 function AppLayout() {
   const { data: session, isPending: sessionPending } = useSession();
   const router = useRouter();
-  const { workspaces, isLoading: workspacesLoading } = useWorkspaces();
 
-  // Redirect unauthenticated users — in useEffect to avoid render-time side effects
+  // Only fetch workspaces once the session is confirmed — avoids a guaranteed
+  // 401 on every page load while Better Auth is still hydrating the session.
+  const { workspaces, isLoading: workspacesLoading, isError: workspacesError } = useWorkspaces({
+    enabled: !sessionPending && !!session,
+  });
+
+  // Redirect unauthenticated users — must be in useEffect to avoid render-time side effects
   useEffect(() => {
     if (!sessionPending && !session) {
       router.navigate({ to: "/login" });
     }
   }, [session, sessionPending, router]);
 
-  // Redirect to onboarding if authenticated but has no workspaces
+  // Redirect to onboarding if authenticated but has no workspaces.
+  // Guard against location to prevent spamming history when already there.
   useEffect(() => {
     if (
       session &&
       !workspacesLoading &&
       workspaces !== undefined &&
-      workspaces.length === 0
+      workspaces.length === 0 &&
+      !router.state.location.pathname.startsWith("/onboarding")
     ) {
       router.navigate({ to: "/onboarding" });
     }
   }, [session, workspaces, workspacesLoading, router]);
 
-  if (sessionPending) {
+  // Show skeleton while the session or workspace list is loading
+  if (sessionPending || (!workspacesError && workspacesLoading && workspaces === undefined)) {
     return (
       <div className="flex h-screen">
         <div className="flex h-screen w-[220px] shrink-0 flex-col border-r bg-[hsl(var(--sidebar-bg))]">
@@ -55,6 +63,26 @@ function AppLayout() {
   }
 
   if (!session) return null;
+
+  // Workspace fetch failed — show a minimal error so the user can refresh
+  if (workspacesError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[hsl(var(--app-bg))]">
+        <div className="text-center">
+          <p className="text-sm font-medium">Failed to load workspaces</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Check your connection and{" "}
+            <button
+              onClick={() => window.location.reload()}
+              className="underline hover:no-underline cursor-pointer"
+            >
+              refresh
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[hsl(var(--app-bg))]">

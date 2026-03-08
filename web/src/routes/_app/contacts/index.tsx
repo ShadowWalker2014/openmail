@@ -8,24 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, Users } from "lucide-react";
+import { Plus, Search, Trash2, Users, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -43,47 +32,50 @@ interface Contact {
   attributes: Record<string, unknown>;
 }
 
+const PAGE_SIZE = 50;
+
 function ContactsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const firstNameRef = useRef<HTMLInputElement>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
 
-  // Debounce search input — prevents a request on every keystroke
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // reset to first page on new search
+    }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useQuery<{ data: Contact[]; total: number }>({
-    queryKey: ["contacts", activeWorkspaceId, debouncedSearch],
+  const { data, isLoading, isError } = useQuery<{ data: Contact[]; total: number; pageSize: number }>({
+    queryKey: ["contacts", activeWorkspaceId, debouncedSearch, page],
     queryFn: () =>
       sessionFetch(
         activeWorkspaceId!,
-        `/contacts?search=${encodeURIComponent(debouncedSearch)}`
+        `/contacts?search=${encodeURIComponent(debouncedSearch)}&page=${page}&pageSize=${PAGE_SIZE}`
       ),
     enabled: !!activeWorkspaceId,
   });
 
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
+
   const createMutation = useMutation({
     mutationFn: (body: { email: string; firstName?: string; lastName?: string }) =>
-      sessionFetch(activeWorkspaceId!, "/contacts", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+      sessionFetch(activeWorkspaceId!, "/contacts", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["contacts", activeWorkspaceId] });
       setOpen(false);
-      // Reset form fields
       if (emailRef.current) emailRef.current.value = "";
       if (firstNameRef.current) firstNameRef.current.value = "";
       if (lastNameRef.current) lastNameRef.current.value = "";
-      toast.success("Contact added");
+      toast.success("Contact saved");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -101,25 +93,19 @@ function ContactsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
-      {/* Header */}
       <div className="mb-7 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Contacts</h1>
           <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
-            {data?.total ?? 0} total
+            {isError ? "Failed to load" : `${data?.total ?? 0} total`}
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              Add Contact
-            </Button>
+            <Button size="sm"><Plus className="h-4 w-4" />Add Contact</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Contact</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Add Contact</DialogTitle></DialogHeader>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -133,12 +119,7 @@ function ContactsPage() {
             >
               <div className="space-y-1.5">
                 <Label>Email *</Label>
-                <Input
-                  ref={emailRef}
-                  type="email"
-                  required
-                  placeholder="name@company.com"
-                />
+                <Input ref={emailRef} type="email" required placeholder="name@company.com" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -152,7 +133,7 @@ function ContactsPage() {
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? "Adding…" : "Add Contact"}
+                  {createMutation.isPending ? "Saving…" : "Add Contact"}
                 </Button>
               </DialogFooter>
             </form>
@@ -160,7 +141,6 @@ function ContactsPage() {
         </Dialog>
       </div>
 
-      {/* Search */}
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -171,67 +151,50 @@ function ContactsPage() {
         />
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border bg-background">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                Email
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                Name
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                Status
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                Added
-              </th>
-              <th className="w-10 px-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading &&
-              Array.from({ length: 5 }).map((_, i) => (
+      {/* Error state */}
+      {isError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Failed to load contacts. Check your connection and try refreshing.
+        </div>
+      )}
+
+      {!isError && (
+        <div className="overflow-hidden rounded-lg border bg-background">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/40">
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Email</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Name</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Added</th>
+                <th className="w-10 px-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="h-3.5 w-40 rounded shimmer" />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="h-3.5 w-24 rounded shimmer" />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="h-5 w-20 rounded-full shimmer" />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="h-3.5 w-16 rounded shimmer" />
-                  </td>
+                  <td className="px-4 py-3"><div className="h-3.5 w-40 rounded shimmer" /></td>
+                  <td className="px-4 py-3"><div className="h-3.5 w-24 rounded shimmer" /></td>
+                  <td className="px-4 py-3"><div className="h-5 w-20 rounded-full shimmer" /></td>
+                  <td className="px-4 py-3"><div className="h-3.5 w-16 rounded shimmer" /></td>
                   <td className="px-2 py-3" />
                 </tr>
               ))}
 
-            {!isLoading &&
-              data?.data.map((contact) => (
-                <tr
-                  key={contact.id}
-                  className="group border-b last:border-0 transition-colors duration-150 hover:bg-accent/30"
-                >
+              {!isLoading && data?.data.map((contact) => (
+                <tr key={contact.id} className="group border-b last:border-0 transition-colors duration-150 hover:bg-accent/30">
                   <td className="px-4 py-3 font-medium">{contact.email}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {[contact.firstName, contact.lastName]
-                      .filter(Boolean)
-                      .join(" ") || "—"}
+                    {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
                   </td>
                   <td className="px-4 py-3">
-                    {contact.unsubscribed ? (
-                      <Badge variant="destructive">Unsubscribed</Badge>
-                    ) : (
-                      <Badge variant="success">Subscribed</Badge>
-                    )}
+                    {contact.unsubscribed
+                      ? <Badge variant="destructive">Unsubscribed</Badge>
+                      : <Badge variant="success">Subscribed</Badge>}
                   </td>
                   <td className="tabular-nums px-4 py-3 text-muted-foreground">
-                    {contact.createdAt ? format(new Date(contact.createdAt), "MMM d, yyyy") : "—"}
+                    {format(new Date(contact.createdAt), "MMM d, yyyy")}
                   </td>
                   <td className="px-2 py-3">
                     <button
@@ -244,41 +207,64 @@ function ContactsPage() {
                 </tr>
               ))}
 
-            {!isLoading && !data?.data.length && (
-              <tr>
-                <td colSpan={5} className="py-16 text-center">
-                  <div className="flex flex-col items-center">
-                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border">
-                      <Users className="h-5 w-5 text-muted-foreground" />
+              {!isLoading && !data?.data.length && (
+                <tr>
+                  <td colSpan={5} className="py-16 text-center">
+                    <div className="flex flex-col items-center">
+                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border">
+                        <Users className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium">
+                        {debouncedSearch ? "No contacts found" : "No contacts yet"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {debouncedSearch
+                          ? `No results for "${debouncedSearch}"`
+                          : "Add contacts manually or via the REST API"}
+                      </p>
                     </div>
-                    <p className="text-sm font-medium">
-                      {debouncedSearch ? "No contacts found" : "No contacts yet"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {debouncedSearch
-                        ? `No results for "${debouncedSearch}"`
-                        : "Add contacts manually or via the REST API"}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
 
-      {/* Delete confirmation */}
-      <AlertDialog
-        open={!!deleteContact}
-        onOpenChange={(o) => !o && setDeleteContact(null)}
-      >
+          {/* Pagination */}
+          {data && data.total > PAGE_SIZE && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <span className="tabular-nums text-xs text-muted-foreground">
+                {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, data.total)} of {data.total.toLocaleString()}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="tabular-nums px-1 text-xs text-muted-foreground">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AlertDialog open={!!deleteContact} onOpenChange={(o) => !o && setDeleteContact(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete contact?</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong className="text-foreground font-medium">
-                {deleteContact?.email}
-              </strong>{" "}
+              <strong className="text-foreground font-medium">{deleteContact?.email}</strong>{" "}
               will be permanently deleted along with all their event history.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -286,9 +272,7 @@ function ContactsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleteMutation.isPending}
-              onClick={() =>
-                deleteContact && deleteMutation.mutate(deleteContact.id)
-              }
+              onClick={() => deleteContact && deleteMutation.mutate(deleteContact.id)}
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>

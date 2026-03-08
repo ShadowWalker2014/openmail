@@ -12,19 +12,40 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 
 function evaluateCondition(contact: Record<string, unknown>, condition: SegmentCondition): boolean {
   const value = getNestedValue(contact, condition.field);
+  const condValue = condition.value;
 
   switch (condition.operator) {
-    case "exists": return value !== undefined && value !== null;
-    case "not_exists": return value === undefined || value === null;
-    case "eq": return value === condition.value;
-    case "ne": return value !== condition.value;
-    case "gt": return typeof value === "number" && value > (condition.value as number);
-    case "lt": return typeof value === "number" && value < (condition.value as number);
-    case "gte": return typeof value === "number" && value >= (condition.value as number);
-    case "lte": return typeof value === "number" && value <= (condition.value as number);
-    case "contains": return typeof value === "string" && value.includes(condition.value as string);
-    case "not_contains": return typeof value === "string" && !value.includes(condition.value as string);
-    default: return false;
+    // Legacy short-form operators (stored before the UI change)
+    case "exists":
+    case "is_set":
+      return value !== undefined && value !== null && value !== "";
+    case "not_exists":
+    case "is_not_set":
+      return value === undefined || value === null || value === "";
+
+    // Equality — both legacy "eq"/"ne" and UI-friendly "equals"/"not_equals"
+    case "eq":
+    case "equals":
+      // String comparison — coerce both to string for type flexibility
+      return String(value) === String(condValue);
+    case "ne":
+    case "not_equals":
+      return String(value) !== String(condValue);
+
+    // Numeric comparisons (legacy only — UI doesn't expose these yet)
+    case "gt": return typeof value === "number" && value > (condValue as number);
+    case "lt": return typeof value === "number" && value < (condValue as number);
+    case "gte": return typeof value === "number" && value >= (condValue as number);
+    case "lte": return typeof value === "number" && value <= (condValue as number);
+
+    // String contains
+    case "contains":
+      return typeof value === "string" && value.toLowerCase().includes(String(condValue).toLowerCase());
+    case "not_contains":
+      return typeof value === "string" && !value.toLowerCase().includes(String(condValue).toLowerCase());
+
+    default:
+      return false;
   }
 }
 
@@ -48,12 +69,16 @@ export async function getSegmentContactIds(workspaceId: string, segmentIds: stri
   const matchingIds = new Set<string>();
 
   for (const contact of allContacts) {
-    const contactData = {
+    const contactData: Record<string, unknown> = {
       email: contact.email,
       firstName: contact.firstName,
       lastName: contact.lastName,
       phone: contact.phone,
+      // unsubscribed is always false here (filtered above) but include for completeness
+      unsubscribed: contact.unsubscribed,
+      // Nest attributes object so "attributes.plan" paths work
       attributes: contact.attributes as Record<string, unknown>,
+      // Also spread attributes flat so bare field names like "plan" also resolve
       ...(contact.attributes as Record<string, unknown>),
     };
 
@@ -87,10 +112,12 @@ export async function contactMatchesSegment(contactId: string, segmentId: string
   const [segment] = await db.select().from(segments).where(eq(segments.id, segmentId)).limit(1);
   if (!segment) return false;
 
-  const contactData = {
+  const contactData: Record<string, unknown> = {
     email: contact.email,
     firstName: contact.firstName,
     lastName: contact.lastName,
+    phone: contact.phone,
+    unsubscribed: contact.unsubscribed,
     attributes: contact.attributes as Record<string, unknown>,
     ...(contact.attributes as Record<string, unknown>),
   };

@@ -52,7 +52,11 @@ app.post(
 app.delete("/:id", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const db = getDb();
-  await db.delete(apiKeys).where(and(eq(apiKeys.id, c.req.param("id")), eq(apiKeys.workspaceId, workspaceId)));
+  const [deleted] = await db
+    .delete(apiKeys)
+    .where(and(eq(apiKeys.id, c.req.param("id")), eq(apiKeys.workspaceId, workspaceId)))
+    .returning({ id: apiKeys.id });
+  if (!deleted) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
 });
 

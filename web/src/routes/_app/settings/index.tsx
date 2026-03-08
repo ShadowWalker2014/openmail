@@ -164,24 +164,31 @@ function SettingsPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!activeWorkspaceId) return;
+              // Send null for empty strings to allow clearing configured values.
+              // undefined would be omitted by JSON.stringify and the field would
+              // not be updated — null explicitly sets the column to NULL.
               updateWorkspaceMutation.mutate({
                 resendApiKey: resendKeyRef.current!.value || undefined,
-                resendFromEmail: fromEmailRef.current!.value || undefined,
-                resendFromName: fromNameRef.current!.value || undefined,
+                resendFromEmail: fromEmailRef.current!.value || null,
+                resendFromName: fromNameRef.current!.value || null,
               });
             }}
             className="space-y-4"
           >
             <div className="space-y-1.5">
-              <Label>Resend API Key</Label>
+              <div className="flex items-center justify-between">
+                <Label>Resend API Key</Label>
+                {activeWorkspace?.resendFromEmail && (
+                  <span className="text-xs text-emerald-600 font-medium">✓ Configured</span>
+                )}
+              </div>
               <Input
                 ref={resendKeyRef}
                 type="password"
                 placeholder="re_••••••••••••••••"
               />
               <p className="text-xs text-muted-foreground">
-                Your workspace Resend API key. Leave blank to use the platform
-                default.
+                Enter a new key to update. Leave blank to use the platform default.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

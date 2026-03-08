@@ -120,11 +120,24 @@ function CampaignsPage() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] });
-      toast.success("Campaign updated");
+    // Optimistic update — immediately reflect the new status
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ["campaigns", activeWorkspaceId] });
+      const previous = qc.getQueryData<Campaign[]>(["campaigns", activeWorkspaceId]);
+      qc.setQueryData<Campaign[]>(["campaigns", activeWorkspaceId], (old) =>
+        old?.map((c) => c.id === id ? { ...c, status } : c) ?? []
+      );
+      return { previous };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["campaigns", activeWorkspaceId], context.previous);
+      }
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] });
+    },
   });
 
   const deleteMutation = useMutation({

@@ -23,7 +23,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Plus, Filter, Trash2, X } from "lucide-react";
+import { Plus, Filter, Trash2, X, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -213,9 +213,10 @@ function SegmentsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Segment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Segment | null>(null);
 
-  // Create dialog state
+  // Create/edit dialog state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [conditionLogic, setConditionLogic] = useState<"and" | "or">("and");
@@ -228,6 +229,16 @@ function SegmentsPage() {
     setConditions([makeCondition()]);
   }
 
+  function openEdit(segment: Segment) {
+    setName(segment.name);
+    setDescription(segment.description ?? "");
+    setConditionLogic(segment.conditionLogic);
+    // Hydrate conditions with local IDs for React reconciliation
+    setConditions(segment.conditions.map((c) => ({ ...c, id: crypto.randomUUID() })));
+    setEditTarget(segment);
+    setCreateOpen(true);
+  }
+
   const { data: segments = [], isLoading } = useQuery<Segment[]>({
     queryKey: ["segments", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
@@ -236,18 +247,28 @@ function SegmentsPage() {
 
   const createMutation = useMutation({
     mutationFn: () => {
-      // Strip internal `id` field before sending to API
       const apiConditions = conditions.map(({ id: _id, ...rest }) => rest);
+      const payload = { name, description: description || undefined, conditions: apiConditions, conditionLogic };
+      if (editTarget) {
+        return sessionFetch(activeWorkspaceId!, `/segments/${editTarget.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      }
       return sessionFetch(activeWorkspaceId!, "/segments", {
         method: "POST",
-        body: JSON.stringify({ name, description: description || undefined, conditions: apiConditions, conditionLogic }),
+        body: JSON.stringify(payload),
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["segments", activeWorkspaceId] });
+      // Capture before clearing — the state update is async so editTarget
+      // still holds its current value at this point in the closure.
+      const wasEditing = !!editTarget;
       setCreateOpen(false);
+      setEditTarget(null);
       resetCreateForm();
-      toast.success("Segment created");
+      toast.success(wasEditing ? "Segment updated" : "Segment created");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -320,10 +341,16 @@ function SegmentsPage() {
                   {conditionSummary(segment.conditions, segment.conditionLogic)}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 mr-1">
                   {segment.createdAt ? format(new Date(segment.createdAt), "MMM d") : ""}
                 </span>
+                <button
+                  onClick={() => openEdit(segment)}
+                  className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
                 <button
                   onClick={() => setDeleteTarget(segment)}
                   className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
@@ -356,12 +383,15 @@ function SegmentsPage() {
         open={createOpen}
         onOpenChange={(v) => {
           setCreateOpen(v);
-          if (!v) resetCreateForm();
+          if (!v) {
+            setEditTarget(null);
+            resetCreateForm();
+          }
         }}
       >
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>New Segment</DialogTitle>
+            <DialogTitle>{editTarget ? "Edit Segment" : "New Segment"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateSubmit} className="space-y-5">
             <div className="space-y-1.5">
@@ -450,6 +480,7 @@ function SegmentsPage() {
                 variant="outline"
                 onClick={() => {
                   setCreateOpen(false);
+                  setEditTarget(null);
                   resetCreateForm();
                 }}
               >
@@ -459,7 +490,9 @@ function SegmentsPage() {
                 type="submit"
                 disabled={createMutation.isPending || !name.trim()}
               >
-                {createMutation.isPending ? "Creating…" : "Create Segment"}
+                {createMutation.isPending
+                  ? (editTarget ? "Saving…" : "Creating…")
+                  : (editTarget ? "Save Segment" : "Create Segment")}
               </Button>
             </DialogFooter>
           </form>
