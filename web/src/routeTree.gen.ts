@@ -23,6 +23,7 @@ import { Route as AppDashboardIndexRouteImport } from './routes/_app/dashboard/i
 import { Route as AppContactsIndexRouteImport } from './routes/_app/contacts/index'
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns/index'
 import { Route as AppBroadcastsIndexRouteImport } from './routes/_app/broadcasts/index'
+import { Route as AppAssetsIndexRouteImport } from './routes/_app/assets/index'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -93,6 +94,11 @@ const AppBroadcastsIndexRoute = AppBroadcastsIndexRouteImport.update({
   path: '/broadcasts/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAssetsIndexRoute = AppAssetsIndexRouteImport.update({
+  id: '/assets/',
+  path: '/assets/',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/assets/': typeof AppAssetsIndexRoute
   '/broadcasts/': typeof AppBroadcastsIndexRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
   '/contacts/': typeof AppContactsIndexRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/assets': typeof AppAssetsIndexRoute
   '/broadcasts': typeof AppBroadcastsIndexRoute
   '/campaigns': typeof AppCampaignsIndexRoute
   '/contacts': typeof AppContactsIndexRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/_app/assets/': typeof AppAssetsIndexRoute
   '/_app/broadcasts/': typeof AppBroadcastsIndexRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
   '/_app/contacts/': typeof AppContactsIndexRoute
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/invite/$token'
+    | '/assets/'
     | '/broadcasts/'
     | '/campaigns/'
     | '/contacts/'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/invite/$token'
+    | '/assets'
     | '/broadcasts'
     | '/campaigns'
     | '/contacts'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/invite/$token'
+    | '/_app/assets/'
     | '/_app/broadcasts/'
     | '/_app/campaigns/'
     | '/_app/contacts/'
@@ -299,10 +311,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBroadcastsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/assets/': {
+      id: '/_app/assets/'
+      path: '/assets'
+      fullPath: '/assets/'
+      preLoaderRoute: typeof AppAssetsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAssetsIndexRoute: typeof AppAssetsIndexRoute
   AppBroadcastsIndexRoute: typeof AppBroadcastsIndexRoute
   AppCampaignsIndexRoute: typeof AppCampaignsIndexRoute
   AppContactsIndexRoute: typeof AppContactsIndexRoute
@@ -314,6 +334,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAssetsIndexRoute: AppAssetsIndexRoute,
   AppBroadcastsIndexRoute: AppBroadcastsIndexRoute,
   AppCampaignsIndexRoute: AppCampaignsIndexRoute,
   AppContactsIndexRoute: AppContactsIndexRoute,

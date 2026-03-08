@@ -6,3 +6,4 @@ export * from "./campaigns";
 export * from "./templates";
 export * from "./broadcasts";
 export * from "./sends";
+export * from "./assets";

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   LayoutDashboard, Users, Mail, Zap, FileText, Settings,
   Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown, Plus,
-  Sun, Moon, Monitor,
+  Sun, Moon, Monitor, ImagePlay,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -37,6 +37,7 @@ const NAV_ITEMS = [
   { to: "/broadcasts", icon: Mail,             label: "Broadcasts" },
   { to: "/campaigns",  icon: Zap,              label: "Campaigns" },
   { to: "/templates",  icon: FileText,         label: "Templates" },
+  { to: "/assets",     icon: ImagePlay,        label: "Assets" },
   { to: "/settings",   icon: Settings,         label: "Settings" },
 ] as const;
 

@@ -26,6 +26,7 @@ openmail/
 | Database | Postgres (Railway) + Drizzle ORM |
 | Queue | Redis (Railway) + BullMQ |
 | Email | Resend |
+| Storage | Railway Object Storage (S3-compatible) + @aws-sdk/client-s3 |
 | MCP | @modelcontextprotocol/sdk (HTTP transport) |
 | Package mgr | Bun workspaces |
 | Deploy | Railway (each subfolder = separate service) |
@@ -47,6 +48,7 @@ openmail/
 - `email_templates` (HTML + visual builder output)
 - `email_sends` (audit log) + `email_events` (opens, clicks, bounces — from tracker)
 - `api_keys` (workspace-scoped for API + MCP access)
+- `assets` (uploaded files: images/video/PDF — stored in Railway Object Storage S3)
 
 ## MCP Server Tools (exposed to AI agents)
 Auth: Bearer workspace API key
@@ -62,6 +64,16 @@ Tools: list_campaigns, create_campaign, update_campaign, pause_campaign,
 Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
           evt_ (event), cmp_ (campaign), brd_ (broadcast), tpl_ (template),
           snd_ (send), eev_ (email event), key_ (api key)
+
+## Asset Storage (Railway Object Storage)
+- S3-compatible bucket; private buckets only (no public ACL support)
+- Client uploads directly via presigned PUT URL (5min expiry) — API never proxies bytes on upload
+- Public serving: `GET /api/public/assets/:wsId/:assetId` — no auth, for embedding in emails
+- Env vars (auto-injected when bucket linked in Railway dashboard): AWS_ENDPOINT_URL, AWS_DEFAULT_REGION, AWS_S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+- api service wired with `${{Storage.AWS_*}}` Railway references
+- `api/src/lib/storage.ts` — lazy-init S3 client, generateUploadUrl, getObject, deleteObject, isStorageConfigured
+- `api/src/routes/assets.ts` — CRUD + presigned URL generation
+- `web/src/routes/_app/assets/index.tsx` — grid UI with drag-and-drop upload, copy-URL, delete
 
 ## Railway Deployment
 - Same GitHub repo, each service = subfolder root in Railway

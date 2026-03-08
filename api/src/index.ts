@@ -17,6 +17,7 @@ import domainsRouter from "./routes/domains.js";
 import membersRouter from "./routes/members.js";
 import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
+import assetsRouter from "./routes/assets.js";
 import { workspaceInvites, workspaceMembers } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -97,9 +98,37 @@ sessionApi.route("/ws/:workspaceId/shapes", shapesRouter);
 sessionApi.route("/ws/:workspaceId/domains", domainsRouter);
 sessionApi.route("/ws/:workspaceId/members", membersRouter);
 sessionApi.route("/ws/:workspaceId/invites", invitesRouter);
+sessionApi.route("/ws/:workspaceId/assets", assetsRouter);
 sessionApi.route("/invites", inviteAcceptRouter);
 
 app.route("/api/session", sessionApi);
+
+// Public asset proxy — no auth needed so email clients can load images
+// URL: /api/public/assets/:workspaceId/:assetId
+app.get("/api/public/assets/:workspaceId/:assetId", async (c) => {
+  const { workspaceId, assetId } = c.req.param();
+  const db = getDb();
+  const { assets } = await import("@openmail/shared/schema");
+  const { eq, and } = await import("drizzle-orm");
+  const [asset] = await db
+    .select({ s3Key: assets.s3Key, mimeType: assets.mimeType })
+    .from(assets)
+    .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)))
+    .limit(1);
+  if (!asset) return c.json({ error: "Not found" }, 404);
+
+  const { getObject } = await import("./lib/storage.js");
+  const obj = await getObject(asset.s3Key);
+  if (!obj) return c.json({ error: "File not found in storage" }, 404);
+
+  return new Response(obj.body as BodyInit, {
+    headers: {
+      "Content-Type": obj.contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Length": String(obj.contentLength),
+    },
+  });
+});
 
 // Global error handler — prevents internal details from leaking to clients
 app.onError((err, c) => {
