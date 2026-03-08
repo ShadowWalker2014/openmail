@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
-import { broadcasts, emailSends } from "@openmail/shared/schema";
+import { broadcasts, emailSends, segments } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and, count, desc, sql } from "drizzle-orm";
+import { eq, and, count, desc, sql, inArray } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
@@ -17,10 +17,25 @@ function getBroadcastQueue() {
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
+const VALID_SEND_STATUSES = new Set(["queued", "sent", "failed", "bounced"]);
+
+function parsePagination(pageStr?: string, pageSizeStr?: string) {
+  const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  return { page, pageSize };
+}
+
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(await db.select().from(broadcasts).where(eq(broadcasts.workspaceId, workspaceId)));
+  const data = await db
+    .select()
+    .from(broadcasts)
+    .where(eq(broadcasts.workspaceId, workspaceId))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json(data);
 });
 
 app.get("/:id", async (c) => {
@@ -46,11 +61,24 @@ app.post(
     fromName: z.string().optional(),
     segmentIds: z.array(z.string()).min(1),
     scheduledAt: z.string().datetime().optional(),
+  }).refine((b) => b.templateId || b.htmlContent, {
+    message: "At least one of templateId or htmlContent must be provided",
+    path: ["htmlContent"],
   })),
   async (c) => {
     const workspaceId = c.get("workspaceId") as string;
     const body = c.req.valid("json");
     const db = getDb();
+
+    // Validate that all segmentIds exist and belong to this workspace.
+    const found = await db
+      .select({ id: segments.id })
+      .from(segments)
+      .where(and(eq(segments.workspaceId, workspaceId), inArray(segments.id, body.segmentIds)));
+    if (found.length !== body.segmentIds.length) {
+      return c.json({ error: "One or more segmentIds are invalid or do not belong to this workspace" }, 400);
+    }
+
     const id = generateId("brd");
     const [broadcast] = await db
       .insert(broadcasts)
@@ -70,7 +98,8 @@ app.patch(
     fromEmail: z.string().email().optional(),
     fromName: z.string().optional(),
     segmentIds: z.array(z.string()).optional(),
-    scheduledAt: z.string().datetime().optional(),
+    // null explicitly clears a previously-set scheduled time.
+    scheduledAt: z.string().datetime().nullable().optional(),
   })),
   async (c) => {
     const workspaceId = c.get("workspaceId") as string;
@@ -84,9 +113,34 @@ app.patch(
     if (broadcast.status !== "draft") return c.json({ error: "Can only edit draft broadcasts" }, 400);
 
     const body = c.req.valid("json");
+
+    // Validate new segmentIds if provided.
+    if (body.segmentIds) {
+      const found = await db
+        .select({ id: segments.id })
+        .from(segments)
+        .where(and(eq(segments.workspaceId, workspaceId), inArray(segments.id, body.segmentIds)));
+      if (found.length !== body.segmentIds.length) {
+        return c.json({ error: "One or more segmentIds are invalid or do not belong to this workspace" }, 400);
+      }
+    }
+
+    // scheduledAt: undefined → don't touch; null → clear; string → set new value.
+    const { scheduledAt: rawScheduledAt, ...rest } = body;
+    const scheduledAt =
+      rawScheduledAt !== undefined
+        ? rawScheduledAt
+          ? new Date(rawScheduledAt)
+          : null
+        : undefined;
+
     const [updated] = await db
       .update(broadcasts)
-      .set({ ...body, scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined, updatedAt: new Date() })
+      .set({
+        ...rest,
+        ...(scheduledAt !== undefined ? { scheduledAt } : {}),
+        updatedAt: new Date(),
+      })
       .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
       .returning();
     return c.json(updated);
@@ -150,17 +204,26 @@ app.delete("/:id", async (c) => {
     .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
     .limit(1);
   if (!broadcast) return c.json({ error: "Not found" }, 404);
-  if (broadcast.status === "sending") return c.json({ error: "Cannot delete a broadcast that is currently sending" }, 400);
+  if (broadcast.status === "sending") {
+    return c.json({ error: "Cannot delete a broadcast that is currently sending" }, 400);
+  }
+  // Prevent deleting sent broadcasts to preserve email_sends history.
+  if (broadcast.status === "sent") {
+    return c.json({ error: "Cannot delete a sent broadcast. Its send history would be orphaned." }, 400);
+  }
   await db.delete(broadcasts).where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)));
   return c.json({ success: true });
 });
 
 app.get("/:id/sends", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
-  const page = Number(c.req.query("page") ?? 1);
-  const pageSize = Number(c.req.query("pageSize") ?? 50);
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const status = c.req.query("status");
   const db = getDb();
+
+  if (status && !VALID_SEND_STATUSES.has(status)) {
+    return c.json({ error: `Invalid status. Must be one of: ${[...VALID_SEND_STATUSES].join(", ")}` }, 400);
+  }
 
   const [broadcast] = await db.select({ id: broadcasts.id })
     .from(broadcasts)

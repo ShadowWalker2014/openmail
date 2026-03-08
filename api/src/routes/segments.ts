@@ -28,12 +28,23 @@ const segmentSchema = z.object({
   conditionLogic: z.enum(["and", "or"]).optional().default("and"),
 });
 
+function parsePagination(pageStr?: string, pageSizeStr?: string) {
+  const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  return { page, pageSize };
+}
+
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(
-    await db.select().from(segments).where(eq(segments.workspaceId, workspaceId))
-  );
+  const data = await db
+    .select()
+    .from(segments)
+    .where(eq(segments.workspaceId, workspaceId))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json(data);
 });
 
 app.post("/", zValidator("json", segmentSchema), async (c) => {
@@ -89,6 +100,37 @@ app.delete("/:id", async (c) => {
     .where(and(eq(segments.id, c.req.param("id")), eq(segments.workspaceId, workspaceId)))
     .limit(1);
   if (!existing) return c.json({ error: "Not found" }, 404);
+
+  // Guard: refuse deletion if any campaign references this segment as a trigger.
+  const [usedByCampaign] = await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(
+      and(
+        eq(campaigns.workspaceId, workspaceId),
+        sql`(${campaigns.triggerConfig}->>'segmentId') = ${existing.id}`
+      )
+    )
+    .limit(1);
+  if (usedByCampaign) {
+    return c.json({ error: "Cannot delete: segment is referenced by one or more campaigns" }, 400);
+  }
+
+  // Guard: refuse deletion if any broadcast includes this segment.
+  const [usedByBroadcast] = await db
+    .select({ id: broadcasts.id })
+    .from(broadcasts)
+    .where(
+      and(
+        eq(broadcasts.workspaceId, workspaceId),
+        sql`${broadcasts.segmentIds} @> ${JSON.stringify([existing.id])}::jsonb`
+      )
+    )
+    .limit(1);
+  if (usedByBroadcast) {
+    return c.json({ error: "Cannot delete: segment is referenced by one or more broadcasts" }, 400);
+  }
+
   await db
     .delete(segments)
     .where(and(eq(segments.id, c.req.param("id")), eq(segments.workspaceId, workspaceId)));
@@ -97,8 +139,7 @@ app.delete("/:id", async (c) => {
 
 app.get("/:id/people", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
-  const page = Number(c.req.query("page") ?? 1);
-  const pageSize = Number(c.req.query("pageSize") ?? 50);
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
 
   const [segment] = await db
@@ -121,9 +162,10 @@ app.get("/:id/people", async (c) => {
     } else if (field === "lastName") {
       fieldExpr = sql`${contacts.lastName}`;
     } else if (field === "unsubscribed") {
-      fieldExpr = sql`${contacts.unsubscribed}::text`;
+      fieldExpr = sql`${contacts.unsubscribed}`;
     } else if (field.startsWith("attributes.")) {
       const attrKey = field.slice("attributes.".length);
+      if (!attrKey) return null;
       fieldExpr = sql`(${contacts.attributes}->>${attrKey})`;
     } else {
       return null;
@@ -131,22 +173,27 @@ app.get("/:id/people", async (c) => {
 
     const op = operator;
     if (op === "eq" || op === "equals") {
-      return field === "unsubscribed"
-        ? sql`${contacts.unsubscribed} = ${value === "true"}`
-        : sql`lower(${fieldExpr}) = lower(${value ?? ""})`;
+      if (field === "unsubscribed") {
+        return sql`${contacts.unsubscribed} = ${value === "true"}`;
+      }
+      return sql`lower(${fieldExpr}::text) = lower(${value ?? ""})`;
     } else if (op === "ne" || op === "not_equals") {
-      return field === "unsubscribed"
-        ? sql`${contacts.unsubscribed} != ${value === "true"}`
-        : sql`lower(${fieldExpr}) != lower(${value ?? ""})`;
+      if (field === "unsubscribed") {
+        return sql`${contacts.unsubscribed} != ${value === "true"}`;
+      }
+      return sql`lower(${fieldExpr}::text) != lower(${value ?? ""})`;
     } else if (op === "contains") {
-      return sql`lower(${fieldExpr}::text) like lower(${"%" + (value ?? "") + "%"})`;
+      // Use POSITION instead of LIKE to avoid treating % and _ as wildcards.
+      return sql`position(lower(${value ?? ""}) in lower(${fieldExpr}::text)) > 0`;
     } else if (op === "not_contains") {
-      return sql`lower(${fieldExpr}::text) not like lower(${"%" + (value ?? "") + "%"})`;
+      return sql`position(lower(${value ?? ""}) in lower(${fieldExpr}::text)) = 0`;
     } else if (op === "exists" || op === "is_set") {
       if (field.startsWith("attributes.")) {
         const attrKey = field.slice("attributes.".length);
         return sql`(${contacts.attributes}->>${attrKey}) is not null`;
       }
+      // For nullable columns (firstName, lastName) check IS NOT NULL.
+      // Note: email and unsubscribed are NOT NULL — is_set always matches for them.
       return sql`${fieldExpr} is not null`;
     } else if (op === "not_exists" || op === "is_not_set") {
       if (field.startsWith("attributes.")) {
