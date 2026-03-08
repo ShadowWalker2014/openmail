@@ -12,6 +12,7 @@ import campaignsRouter from "./routes/campaigns.js";
 import segmentsRouter from "./routes/segments.js";
 import apiKeysRouter from "./routes/api-keys.js";
 import analyticsRouter from "./routes/analytics.js";
+import shapesRouter from "./routes/shapes.js";
 import { logger } from "./lib/logger.js";
 import type { ApiVariables } from "./types.js";
 
@@ -51,6 +52,7 @@ sessionApi.route("/ws/:workspaceId/campaigns", campaignsRouter);
 sessionApi.route("/ws/:workspaceId/segments", segmentsRouter);
 sessionApi.route("/ws/:workspaceId/api-keys", apiKeysRouter);
 sessionApi.route("/ws/:workspaceId/analytics", analyticsRouter);
+sessionApi.route("/ws/:workspaceId/shapes", shapesRouter);
 
 app.route("/api/session", sessionApi);
 

@@ -7,17 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Plus, Send, Mail } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Send, Mail, Zap } from "lucide-react";
 import { toast } from "sonner";
-
+import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 export const Route = createFileRoute("/_app/broadcasts/")({
   component: BroadcastsPage,
 });
@@ -27,23 +20,43 @@ interface Broadcast {
   name: string;
   subject: string;
   status: string;
-  recipientCount: number;
-  openCount: number;
-  clickCount: number;
-  sentAt: string | null;
-  createdAt: string;
+  recipient_count: number;
+  sent_count: number;
+  open_count: number;
+  click_count: number;
+  sent_at: string | null;
+  created_at: string;
 }
 
-const STATUS_BADGE: Record<
-  string,
-  "default" | "success" | "warning" | "destructive" | "secondary" | "outline"
-> = {
+const STATUS_BADGE: Record<string, "default" | "success" | "warning" | "destructive" | "secondary" | "outline"> = {
   draft: "secondary",
   sending: "warning",
   sent: "success",
   failed: "destructive",
   scheduled: "outline",
 };
+
+function SendProgress({ sentCount, recipientCount }: { sentCount: number; recipientCount: number }) {
+  if (!recipientCount) return null;
+  const pct = Math.round((sentCount / recipientCount) * 100);
+  return (
+    <div className="mt-2">
+      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+        <span className="flex items-center gap-1">
+          <Zap className="w-3 h-3 text-yellow-500 animate-pulse" />
+          Sending live…
+        </span>
+        <span>{sentCount} / {recipientCount} ({pct}%)</span>
+      </div>
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-black rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function BroadcastsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
@@ -54,11 +67,20 @@ function BroadcastsPage() {
   const htmlRef = useRef<HTMLTextAreaElement>(null);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
 
-  const { data: broadcasts = [] } = useQuery<Broadcast[]>({
+  // Real-time broadcasts via ElectricSQL — updates live as emails send
+  const { data: liveBroadcasts, isLoading: electricLoading } = useWorkspaceShape<Broadcast>("broadcasts");
+
+  // TanStack Query as initial/fallback loader
+  const { data: apiBroadcasts = [] } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/broadcasts"),
-    enabled: !!activeWorkspaceId,
+    enabled: !!activeWorkspaceId && electricLoading,
   });
+
+  // Use Electric data once loaded, otherwise fall back to API data
+  const broadcasts = (liveBroadcasts?.length ? liveBroadcasts : apiBroadcasts)
+    .slice()
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
@@ -68,10 +90,7 @@ function BroadcastsPage() {
 
   const createMutation = useMutation({
     mutationFn: (body: object) =>
-      sessionFetch(activeWorkspaceId!, "/broadcasts", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+      sessionFetch(activeWorkspaceId!, "/broadcasts", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
       setOpen(false);
@@ -83,13 +102,10 @@ function BroadcastsPage() {
 
   const sendMutation = useMutation({
     mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, {
-        method: "POST",
-        body: "{}",
-      }),
+      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST", body: "{}" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
-      toast.success("Broadcast sending...");
+      toast.success("Broadcast sending — watching live…");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -99,26 +115,18 @@ function BroadcastsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Broadcasts</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">One-off email campaigns</p>
+          <p className="text-sm text-muted-foreground mt-0.5">One-off email campaigns · live via ElectricSQL</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="w-4 h-4" />
-              New Broadcast
-            </Button>
+            <Button size="sm"><Plus className="w-4 h-4" />New Broadcast</Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>New Broadcast</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>New Broadcast</DialogTitle></DialogHeader>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (selectedSegmentIds.length === 0) {
-                  toast.error("Select at least one segment");
-                  return;
-                }
+                if (selectedSegmentIds.length === 0) { toast.error("Select at least one segment"); return; }
                 createMutation.mutate({
                   name: nameRef.current!.value,
                   subject: subjectRef.current!.value,
@@ -128,50 +136,23 @@ function BroadcastsPage() {
               }}
               className="space-y-4"
             >
-              <div className="space-y-1.5">
-                <Label>Name *</Label>
-                <Input ref={nameRef} placeholder="August Newsletter" required />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Subject *</Label>
-                <Input ref={subjectRef} placeholder="Email subject line" required />
-              </div>
+              <div className="space-y-1.5"><Label>Name *</Label><Input ref={nameRef} placeholder="August Newsletter" required /></div>
+              <div className="space-y-1.5"><Label>Subject *</Label><Input ref={subjectRef} placeholder="Email subject line" required /></div>
               <div className="space-y-1.5">
                 <Label>Segments *</Label>
                 <div className="flex flex-wrap gap-2">
-                  {segments.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      No segments yet — create one first
-                    </p>
-                  )}
+                  {segments.length === 0 && <p className="text-sm text-muted-foreground">No segments yet — create one first</p>}
                   {segments.map((seg) => (
-                    <button
-                      key={seg.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedSegmentIds((ids) =>
-                          ids.includes(seg.id)
-                            ? ids.filter((id) => id !== seg.id)
-                            : [...ids, seg.id]
-                        )
-                      }
-                      className={`px-3 py-1 rounded-full border text-sm cursor-pointer transition-colors ${
-                        selectedSegmentIds.includes(seg.id)
-                          ? "bg-black text-white border-black"
-                          : "hover:bg-accent"
-                      }`}
-                    >
-                      {seg.name}
-                    </button>
+                    <button key={seg.id} type="button"
+                      onClick={() => setSelectedSegmentIds((ids) => ids.includes(seg.id) ? ids.filter((id) => id !== seg.id) : [...ids, seg.id])}
+                      className={`px-3 py-1 rounded-full border text-sm cursor-pointer transition-colors ${selectedSegmentIds.includes(seg.id) ? "bg-black text-white border-black" : "hover:bg-accent"}`}
+                    >{seg.name}</button>
                   ))}
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label>HTML Content *</Label>
-                <textarea
-                  ref={htmlRef}
-                  required
-                  placeholder="<h1>Hello {{firstName}}!</h1>"
+                <textarea ref={htmlRef} required placeholder="<h1>Hello {{firstName}}!</h1>"
                   className="w-full min-h-[180px] font-mono text-xs rounded-md border border-input bg-transparent px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
                 />
               </div>
@@ -187,37 +168,33 @@ function BroadcastsPage() {
 
       <div className="space-y-3">
         {broadcasts.map((broadcast) => (
-          <div
-            key={broadcast.id}
-            className="bg-white rounded-xl border p-4 flex items-center justify-between"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium truncate">{broadcast.name}</span>
-                <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>
-                  {broadcast.status}
-                </Badge>
+          <div key={broadcast.id} className="bg-white rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium truncate">{broadcast.name}</span>
+                  <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>{broadcast.status}</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground truncate">{broadcast.subject}</p>
+                {(broadcast.status === "sent" || broadcast.status === "sending") && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {broadcast.sent_count ?? 0} sent
+                    {broadcast.open_count ? ` · ${broadcast.open_count} opens` : ""}
+                    {broadcast.click_count ? ` · ${broadcast.click_count} clicks` : ""}
+                  </p>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground truncate">{broadcast.subject}</p>
-              {broadcast.status === "sent" && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {broadcast.recipientCount} sent · {broadcast.openCount} opens ·{" "}
-                  {broadcast.clickCount} clicks
-                </p>
-              )}
+              <div className="flex items-center gap-2 ml-4 shrink-0">
+                {broadcast.status === "draft" && (
+                  <Button size="sm" onClick={() => sendMutation.mutate(broadcast.id)} disabled={sendMutation.isPending}>
+                    <Send className="w-3.5 h-3.5" />Send
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 ml-4">
-              {broadcast.status === "draft" && (
-                <Button
-                  size="sm"
-                  onClick={() => sendMutation.mutate(broadcast.id)}
-                  disabled={sendMutation.isPending}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  Send
-                </Button>
-              )}
-            </div>
+            {broadcast.status === "sending" && (
+              <SendProgress sentCount={broadcast.sent_count ?? 0} recipientCount={broadcast.recipient_count ?? 0} />
+            )}
           </div>
         ))}
         {broadcasts.length === 0 && (
