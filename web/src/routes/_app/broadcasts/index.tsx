@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, MousePointerClick, Eye, Search,
+  BarChart2, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
@@ -98,6 +98,14 @@ const STATUS_BADGE: Record<
   scheduled: "outline",
 };
 
+const SEND_STATUS_BADGE: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
+  sent: "success",
+  delivered: "success",
+  bounced: "warning",
+  failed: "destructive",
+  queued: "secondary",
+};
+
 function SendProgress({
   sentCount,
   recipientCount,
@@ -147,10 +155,13 @@ function BroadcastCardSkeleton() {
 
 // ─── Detail / Edit Dialog ────────────────────────────────────────────────────
 
+type Tab = "overview" | "content" | "sent" | "recipients";
+
 function BroadcastDetailDialog({
   broadcast,
   onClose,
   segments,
+  templates,
   onSendSuccess,
   onDeleteSuccess,
   workspaceId,
@@ -158,12 +169,27 @@ function BroadcastDetailDialog({
   broadcast: Broadcast;
   onClose: () => void;
   segments: { id: string; name: string }[];
+  templates: { id: string; name: string; subject: string; htmlContent: string }[];
   onSendSuccess: () => void;
   onDeleteSuccess: () => void;
   workspaceId: string;
 }) {
   const qc = useQueryClient();
   const isDraft = broadcast.status === "draft";
+
+  const visibleTabs: Tab[] = isDraft
+    ? ["overview", "content"]
+    : ["overview", "content", "sent", "recipients"];
+
+  const TAB_LABELS: Record<Tab, string> = {
+    overview: "Overview",
+    content: "Content",
+    sent: "Sent",
+    recipients: "Recipients",
+  };
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
 
   // Editable state (only meaningful for draft)
   const [name, setName] = useState(broadcast.name);
@@ -172,9 +198,24 @@ function BroadcastDetailDialog({
   const [fromEmail, setFromEmail] = useState(broadcast.fromEmail ?? "");
   const [htmlContent, setHtmlContent] = useState(broadcast.htmlContent ?? "");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
+  const [contentMode, setContentMode] = useState<"html" | "template">(
+    broadcast.templateId ? "template" : "html"
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(broadcast.templateId);
   const [previewMobile, setPreviewMobile] = useState(false);
+
+  // Confirmation dialogs
   const [sendConfirm, setSendConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  // Sent tab state
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sendsPage, setSendsPage] = useState(1);
+
+  // Content tab test send state
+  const [testSendEmail, setTestSendEmail] = useState("");
+
+  // ── Mutations ───────────────────────────────────────────────────────────────
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -185,13 +226,15 @@ function BroadcastDetailDialog({
           subject,
           fromName: fromName || undefined,
           fromEmail: fromEmail || undefined,
-          htmlContent,
+          ...(contentMode === "template"
+            ? { templateId: selectedTemplateId! }
+            : { htmlContent }),
           segmentIds: selectedSegmentIds,
         }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", workspaceId] });
-      toast.success("Broadcast saved");
+      toast.success("Saved");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -218,7 +261,618 @@ function BroadcastDetailDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const previewHtml = htmlContent;
+  const testSendMutation = useMutation({
+    mutationFn: (email: string) =>
+      sessionFetch(workspaceId, `/broadcasts/${broadcast.id}/test-send`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    onSuccess: () => toast.success("Test email sent"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ── Queries ─────────────────────────────────────────────────────────────────
+
+  const { data: topLinks = [] } = useQuery<{ url: string; clicks: number }[]>({
+    queryKey: ["broadcast-top-links", broadcast.id],
+    queryFn: () => sessionFetch(workspaceId, `/broadcasts/${broadcast.id}/top-links`),
+    enabled: broadcast.status === "sent",
+  });
+
+  const { data: sendsData, isLoading: sendsLoading } = useQuery<{
+    data: Array<{
+      id: string;
+      contactEmail: string;
+      subject: string;
+      status: string;
+      sentAt: string | null;
+      createdAt: string;
+    }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  }>({
+    queryKey: ["broadcast-sends", broadcast.id, sendsPage, statusFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(sendsPage), pageSize: "50" });
+      if (statusFilter) params.set("status", statusFilter);
+      return sessionFetch(workspaceId, `/broadcasts/${broadcast.id}/sends?${params}`);
+    },
+    enabled: broadcast.status !== "draft",
+  });
+
+  // ── Computed metrics ────────────────────────────────────────────────────────
+
+  const sentCount = broadcast.sentCount ?? 0;
+  const openCount = broadcast.openCount ?? 0;
+  const clickCount = broadcast.clickCount ?? 0;
+  const openRate = sentCount > 0 ? ((openCount / sentCount) * 100).toFixed(1) : "0.0";
+  const clickRate = sentCount > 0 ? ((clickCount / sentCount) * 100).toFixed(1) : "0.0";
+  const ctoRate = openCount > 0 ? ((clickCount / openCount) * 100).toFixed(1) : "0.0";
+
+  // Preview HTML for Overview/Content draft panels
+  const previewHtml =
+    contentMode === "template"
+      ? (templates.find((t) => t.id === selectedTemplateId)?.htmlContent ?? "")
+      : htmlContent;
+
+  // ── Preview toggle widget ────────────────────────────────────────────────────
+
+  const PreviewToggle = () => (
+    <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+      <button
+        type="button"
+        onClick={() => setPreviewMobile(false)}
+        className={cn(
+          "rounded px-2 py-1 transition-colors cursor-pointer",
+          !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Monitor className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setPreviewMobile(true)}
+        className={cn(
+          "rounded px-2 py-1 transition-colors cursor-pointer",
+          previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Smartphone className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+
+  // ── Metric card ──────────────────────────────────────────────────────────────
+
+  const MetricCard = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
+    <div className="rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60 mb-1">{label}</p>
+      <p className="text-[22px] font-semibold tabular-nums">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+
+  // ── Tab content renderers ────────────────────────────────────────────────────
+
+  const renderOverviewTab = () => {
+    if (isDraft) {
+      return (
+        <div className="flex flex-1 min-h-0">
+          {/* Left — edit form */}
+          <div className="flex flex-col w-[400px] shrink-0 border-r border-border overflow-y-auto">
+            <div className="flex-1 space-y-4 p-5">
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Subject</Label>
+                <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>From Name</Label>
+                  <Input
+                    value={fromName}
+                    onChange={(e) => setFromName(e.target.value)}
+                    placeholder="Team Name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>From Email</Label>
+                  <Input
+                    value={fromEmail}
+                    onChange={(e) => setFromEmail(e.target.value)}
+                    placeholder="hello@you.com"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Segments</Label>
+                {segments.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">No segments yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {segments.map((seg) => (
+                      <button
+                        key={seg.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedSegmentIds((ids) =>
+                            ids.includes(seg.id)
+                              ? ids.filter((id) => id !== seg.id)
+                              : [...ids, seg.id]
+                          )
+                        }
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer",
+                          selectedSegmentIds.includes(seg.id)
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border hover:bg-accent"
+                        )}
+                      >
+                        {seg.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right — preview */}
+          <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                Preview
+              </span>
+              <PreviewToggle />
+            </div>
+            <div className="flex-1 flex items-start justify-center overflow-auto p-6">
+              {previewHtml ? (
+                <div
+                  className={cn(
+                    "h-full transition-all duration-200",
+                    previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
+                  )}
+                >
+                  <iframe
+                    srcDoc={previewHtml}
+                    sandbox="allow-same-origin"
+                    className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                    title="Email preview"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
+                  <BarChart2 className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-[12px] text-muted-foreground">
+                    Add HTML content in the Content tab to see a preview
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Sent/Sending/Failed overview
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-6">
+          {/* Sending progress bar */}
+          {broadcast.status === "sending" && (
+            <div className="mb-6">
+              <SendProgress sentCount={sentCount} recipientCount={broadcast.recipientCount} />
+            </div>
+          )}
+
+          {/* Metrics cards */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            <MetricCard label="Emails Sent" value={sentCount.toLocaleString()} />
+            <MetricCard label="Delivered" value={sentCount.toLocaleString()} sub="approx" />
+            <MetricCard
+              label="Open Rate"
+              value={`${openRate}%`}
+              sub={`${openCount.toLocaleString()} opens`}
+            />
+            <MetricCard
+              label="Click Rate"
+              value={`${clickRate}%`}
+              sub={`${clickCount.toLocaleString()} clicks`}
+            />
+          </div>
+
+          {/* Engagement bar charts */}
+          <div className="mb-6">
+            <p className="text-[13px] font-semibold mb-3">Engagement</p>
+            {[
+              { label: "Opened", pct: Number(openRate), count: openCount },
+              { label: "Clicked", pct: Number(clickRate), count: clickCount },
+              { label: "Click-to-Open", pct: Number(ctoRate), count: clickCount },
+            ].map(({ label, pct, count }) => (
+              <div key={label} className="flex items-center gap-3 mb-3">
+                <span className="w-28 text-[12px] text-muted-foreground shrink-0">{label}</span>
+                <span className="w-12 text-[13px] font-semibold tabular-nums shrink-0">{pct}%</span>
+                <div className="flex-1 h-3 bg-muted/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500/70 rounded-full transition-all"
+                    style={{ width: `${Math.min(pct, 100)}%` }}
+                  />
+                </div>
+                <span className="w-16 text-[11px] text-muted-foreground text-right tabular-nums">
+                  {count.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Top Clicked Links */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[13px] font-semibold">Top Clicked Links</p>
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Total Clicks
+              </span>
+            </div>
+            {topLinks.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground py-4 text-center">
+                No link clicks yet
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {topLinks.map((link, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0"
+                  >
+                    <span className="text-[12px] flex-1 truncate text-muted-foreground">
+                      {link.url}
+                    </span>
+                    <span className="text-[12px] tabular-nums font-medium shrink-0">
+                      {link.clicks.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderContentTab = () => {
+    if (isDraft) {
+      return (
+        <div className="flex flex-1 min-h-0">
+          {/* Left — editor */}
+          <div className="flex flex-col w-[380px] shrink-0 border-r border-border overflow-y-auto">
+            <div className="flex-1 space-y-4 p-5">
+              <div className="flex items-center justify-between">
+                <Label>Content</Label>
+                <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+                  {(["html", "template"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setContentMode(m);
+                        if (m === "html") setSelectedTemplateId(null);
+                      }}
+                      className={cn(
+                        "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+                        contentMode === m
+                          ? "bg-foreground text-background"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {m === "html" ? "Write HTML" : "Use Template"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {contentMode === "html" ? (
+                <textarea
+                  value={htmlContent}
+                  onChange={(e) => setHtmlContent(e.target.value)}
+                  placeholder="<h1>Hello {{firstName}}!</h1>"
+                  className="w-full min-h-[400px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              ) : templates.length === 0 ? (
+                <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
+                  No templates yet.{" "}
+                  <a href="/templates" className="font-medium text-foreground hover:underline">
+                    Create one first.
+                  </a>
+                </p>
+              ) : (
+                <select
+                  value={selectedTemplateId ?? ""}
+                  onChange={(e) => setSelectedTemplateId(e.target.value || null)}
+                  className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                >
+                  <option value="">Select a template…</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Right — preview */}
+          <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                Preview
+              </span>
+              <PreviewToggle />
+            </div>
+            <div className="flex-1 flex items-start justify-center overflow-auto p-6">
+              {previewHtml ? (
+                <div
+                  className={cn(
+                    "h-full transition-all duration-200",
+                    previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
+                  )}
+                >
+                  <iframe
+                    srcDoc={previewHtml}
+                    sandbox="allow-same-origin"
+                    className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                    title="Email preview"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
+                  <Monitor className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-[12px] text-muted-foreground">
+                    Start typing HTML to see a live preview
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Sent/Sending content view
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-6 py-6">
+          {/* Metadata */}
+          <div className="space-y-2 mb-6 rounded-lg border border-border bg-card px-4 py-3">
+            <div className="flex gap-3">
+              <span className="w-16 text-[11px] font-medium text-muted-foreground uppercase tracking-wide pt-0.5">
+                From
+              </span>
+              <span className="text-[13px]">
+                {broadcast.fromName || "Default"}{" "}
+                {broadcast.fromEmail ? `<${broadcast.fromEmail}>` : ""}
+              </span>
+            </div>
+            <div className="flex gap-3">
+              <span className="w-16 text-[11px] font-medium text-muted-foreground uppercase tracking-wide pt-0.5">
+                Subject
+              </span>
+              <span className="text-[13px] font-medium">{broadcast.subject}</span>
+            </div>
+          </div>
+
+          {/* Test send */}
+          <div className="flex items-center gap-2 mb-6">
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide w-16 shrink-0">
+              To
+            </span>
+            <Input
+              value={testSendEmail}
+              onChange={(e) => setTestSendEmail(e.target.value)}
+              placeholder="test@example.com"
+              className="max-w-xs h-8"
+              type="email"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!testSendEmail || testSendMutation.isPending}
+              onClick={() => testSendMutation.mutate(testSendEmail)}
+            >
+              {testSendMutation.isPending ? "Sending…" : "Send test email"}
+            </Button>
+          </div>
+
+          {/* Iframe preview */}
+          {broadcast.htmlContent ? (
+            <div className="flex justify-center">
+              <iframe
+                srcDoc={broadcast.htmlContent}
+                sandbox="allow-same-origin"
+                className="w-full max-w-[680px] min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                title="Email content"
+              />
+            </div>
+          ) : broadcast.templateId ? (
+            <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground border border-dashed rounded-lg">
+              Template-based content
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSentTab = () => (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-border shrink-0">
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setSendsPage(1);
+          }}
+          className="h-8 rounded-md border border-input bg-input px-2 text-[12px]"
+        >
+          <option value="">All statuses</option>
+          <option value="sent">Sent</option>
+          <option value="bounced">Bounced</option>
+          <option value="failed">Failed</option>
+          <option value="queued">Queued</option>
+        </select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => qc.invalidateQueries({ queryKey: ["broadcast-sends", broadcast.id] })}
+        >
+          Refresh
+        </Button>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        {sendsLoading ? (
+          <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground">
+            Loading…
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="px-5 py-2.5 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Date Sent
+                </th>
+                <th className="px-5 py-2.5 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Recipient
+                </th>
+                <th className="px-5 py-2.5 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(sendsData?.data ?? []).map((row) => (
+                <tr key={row.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+                  <td className="px-5 py-2.5 text-[12px] text-muted-foreground tabular-nums">
+                    {format(new Date(row.sentAt ?? row.createdAt), "MMM d, h:mm a")}
+                  </td>
+                  <td className="px-5 py-2.5 font-mono text-[12px]">{row.contactEmail}</td>
+                  <td className="px-5 py-2.5">
+                    <Badge variant={SEND_STATUS_BADGE[row.status] ?? "secondary"}>
+                      {row.status}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+              {(sendsData?.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-5 py-12 text-center text-[12px] text-muted-foreground">
+                    No sends yet
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {sendsData && sendsData.total > 0 && (
+        <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-[12px] text-muted-foreground shrink-0">
+          <span>
+            {Math.min((sendsPage - 1) * 50 + 1, sendsData.total)}–
+            {Math.min(sendsPage * 50, sendsData.total)} of {sendsData.total}
+          </span>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={sendsPage <= 1}
+              onClick={() => setSendsPage((p) => p - 1)}
+            >
+              ←
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={sendsPage * 50 >= sendsData.total}
+              onClick={() => setSendsPage((p) => p + 1)}
+            >
+              →
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderRecipientsTab = () => (
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
+        {/* Recipients */}
+        <div>
+          <h3 className="text-[13px] font-semibold mb-3">Recipients</h3>
+          <p className="text-[12px] text-muted-foreground mb-2">
+            Your broadcast was sent to contacts in:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(broadcast.segmentIds ?? []).map((segId) => {
+              const seg = segments.find((s) => s.id === segId);
+              return (
+                <span
+                  key={segId}
+                  className="rounded-full bg-muted border border-border px-3 py-1 text-[12px] font-medium"
+                >
+                  {seg?.name ?? segId}
+                </span>
+              );
+            })}
+            {(broadcast.segmentIds ?? []).length === 0 && (
+              <p className="text-[12px] text-muted-foreground">No segments specified</p>
+            )}
+          </div>
+        </div>
+
+        {/* Tracking */}
+        <div>
+          <h3 className="text-[13px] font-semibold mb-3">Tracking</h3>
+          <div className="space-y-1.5">
+            <p className="flex items-center gap-2 text-[12px]">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Open and click tracking are on
+            </p>
+          </div>
+        </div>
+
+        {/* Send Options */}
+        <div>
+          <h3 className="text-[13px] font-semibold mb-3">Send Options</h3>
+          <div className="space-y-1.5 text-[12px] text-muted-foreground">
+            {broadcast.sentAt && (
+              <p>
+                Sent on{" "}
+                {format(new Date(broadcast.sentAt), "MMMM d, yyyy 'at' h:mm a")}
+              </p>
+            )}
+            <p>
+              From: {broadcast.fromName || "Default"}{" "}
+              {broadcast.fromEmail ? `<${broadcast.fromEmail}>` : ""}
+            </p>
+            <p>
+              Recipients targeted:{" "}
+              {(broadcast.recipientCount ?? 0).toLocaleString()} contacts
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -235,254 +889,60 @@ function BroadcastDetailDialog({
               </Badge>
             </div>
             <div className="flex items-center gap-2 mr-8">
-              <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => setPreviewMobile(false)}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors cursor-pointer",
-                    !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Monitor className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewMobile(true)}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors cursor-pointer",
-                    previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Smartphone className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              {isDraft && (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => setSendConfirm(true)}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Send Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={saveMutation.isPending}
+                    onClick={() => saveMutation.mutate()}
+                  >
+                    {saveMutation.isPending ? "Saving…" : "Save"}
+                  </Button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(true)}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           </DialogHeader>
 
-          {/* Body */}
-          <div className="flex flex-1 min-h-0">
-            {/* Left panel — fields */}
-            <div className="flex flex-col w-[400px] shrink-0 border-r border-border overflow-y-auto">
-              <div className="flex-1 space-y-4 p-5">
-
-                {/* Stats row (sent/sending) */}
-                {(broadcast.status === "sent" || broadcast.status === "sending") && (
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { icon: Send, label: "Sent", value: broadcast.sentCount },
-                      { icon: Eye, label: "Opens", value: broadcast.openCount },
-                      { icon: MousePointerClick, label: "Clicks", value: broadcast.clickCount },
-                    ].map(({ icon: Icon, label, value }) => (
-                      <div key={label} className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
-                        <Icon className="h-3.5 w-3.5 mx-auto mb-1 text-muted-foreground" />
-                        <p className="text-[15px] font-semibold tabular-nums">{(value ?? 0).toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
-                  </div>
+          {/* Tab bar */}
+          <div className="flex border-b border-border px-5 shrink-0">
+            {visibleTabs.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActiveTab(t)}
+                className={cn(
+                  "px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer mr-1",
+                  activeTab === t
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
+              >
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
 
-                {broadcast.status === "sending" && (
-                  <SendProgress sentCount={broadcast.sentCount} recipientCount={broadcast.recipientCount} />
-                )}
-
-                <div className="space-y-1.5">
-                  <Label>Name</Label>
-                  {isDraft ? (
-                    <Input value={name} onChange={(e) => setName(e.target.value)} />
-                  ) : (
-                    <p className="text-[13px] text-muted-foreground">{broadcast.name}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Subject</Label>
-                  {isDraft ? (
-                    <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
-                  ) : (
-                    <p className="text-[13px] text-muted-foreground">{broadcast.subject}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>From Name</Label>
-                    {isDraft ? (
-                      <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Team Name" />
-                    ) : (
-                      <p className="text-[13px] text-muted-foreground">{broadcast.fromName || "—"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>From Email</Label>
-                    {isDraft ? (
-                      <Input value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="hello@you.com" />
-                    ) : (
-                      <p className="text-[13px] text-muted-foreground">{broadcast.fromEmail || "—"}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Segments</Label>
-                  {isDraft ? (
-                    segments.length === 0 ? (
-                      <p className="text-[12px] text-muted-foreground">No segments yet.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {segments.map((seg) => (
-                          <button
-                            key={seg.id}
-                            type="button"
-                            onClick={() =>
-                              setSelectedSegmentIds((ids) =>
-                                ids.includes(seg.id)
-                                  ? ids.filter((id) => id !== seg.id)
-                                  : [...ids, seg.id]
-                              )
-                            }
-                            className={cn(
-                              "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer",
-                              selectedSegmentIds.includes(seg.id)
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-border hover:bg-accent"
-                            )}
-                          >
-                            {seg.name}
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {(broadcast.segmentIds ?? []).map((id) => {
-                        const seg = segments.find((s) => s.id === id);
-                        return (
-                          <span
-                            key={id}
-                            className="rounded-full border border-border px-3 py-1 text-xs font-medium bg-muted/50"
-                          >
-                            {seg?.name ?? id}
-                          </span>
-                        );
-                      })}
-                      {(!broadcast.segmentIds || broadcast.segmentIds.length === 0) && (
-                        <p className="text-[12px] text-muted-foreground">None</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-1.5 flex flex-col flex-1">
-                  <Label>HTML Content</Label>
-                  {isDraft ? (
-                    <textarea
-                      value={htmlContent}
-                      onChange={(e) => setHtmlContent(e.target.value)}
-                      placeholder="<h1>Hello {{firstName}}!</h1>"
-                      className="flex-1 w-full min-h-[240px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    />
-                  ) : (
-                    <p className="text-[12px] text-muted-foreground font-mono truncate">
-                      {broadcast.htmlContent ? `${broadcast.htmlContent.slice(0, 80)}…` : "—"}
-                    </p>
-                  )}
-                </div>
-
-                {broadcast.sentAt && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Sent {format(new Date(broadcast.sentAt), "MMM d, yyyy 'at' h:mm a")}
-                  </p>
-                )}
-              </div>
-
-              {/* Footer actions */}
-              <div className="shrink-0 px-5 py-3 border-t border-border bg-card space-y-2">
-                {isDraft && (
-                  <>
-                    <Button
-                      className="w-full"
-                      disabled={saveMutation.isPending}
-                      onClick={() => saveMutation.mutate()}
-                    >
-                      {saveMutation.isPending ? "Saving…" : "Save Changes"}
-                    </Button>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="default"
-                        className="flex-1"
-                        onClick={() => setSendConfirm(true)}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        Send Now
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirm(true)}
-                        className="rounded-md px-3 py-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </>
-                )}
-                {broadcast.status === "sent" && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirm(true)}
-                    className="w-full flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete Broadcast
-                  </button>
-                )}
-                {broadcast.status === "failed" && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirm(true)}
-                    className="w-full flex items-center justify-center gap-2 rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete Broadcast
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Right panel — live preview */}
-            <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
-              <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
-                {previewHtml && isDraft && (
-                  <span className="text-[10px] text-muted-foreground">Live</span>
-                )}
-              </div>
-              <div className="flex-1 flex items-start justify-center overflow-auto p-6">
-                {previewHtml ? (
-                  <div
-                    className={cn(
-                      "h-full transition-all duration-200",
-                      previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
-                    )}
-                  >
-                    <iframe
-                      srcDoc={previewHtml}
-                      sandbox="allow-same-origin"
-                      className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
-                      title="Email preview"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
-                    <BarChart2 className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-[12px] text-muted-foreground">
-                      {isDraft ? "Start typing HTML to see a live preview" : "No HTML content"}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Tab content */}
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {activeTab === "overview" && renderOverviewTab()}
+            {activeTab === "content" && renderContentTab()}
+            {activeTab === "sent" && !isDraft && renderSentTab()}
+            {activeTab === "recipients" && !isDraft && renderRecipientsTab()}
           </div>
         </DialogContent>
       </Dialog>
@@ -555,7 +1015,6 @@ function BroadcastsPage() {
 
   // Detail view state
   const [detailBroadcast, setDetailBroadcast] = useState<Broadcast | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
 
   // REST source of truth
   const { data: restBroadcasts = [], isLoading } = useQuery<Broadcast[]>({
@@ -588,8 +1047,6 @@ function BroadcastsPage() {
       .slice()
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [restBroadcasts, rawElectricBroadcasts]);
-
-  const filteredBroadcasts = broadcasts.filter(b => !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
@@ -874,99 +1331,85 @@ function BroadcastsPage() {
         </Dialog>
       </div>
 
-      {/* Search */}
-      <div className="mb-4 relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by name…"
-          className="pl-9 h-9"
-        />
-      </div>
+      {/* List */}
+      <div className="space-y-2">
+        {isLoading &&
+          Array.from({ length: 3 }).map((_, i) => <BroadcastCardSkeleton key={i} />)}
 
-      {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase">Name</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-24">Status</th>
-              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Sent</th>
-              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Opens</th>
-              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Clicks</th>
-              <th className="w-12" />
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && Array.from({ length: 5 }).map((_, i) => (
-              <tr key={i} className="border-b border-border/50 last:border-0">
-                <td className="px-4 py-3"><div className="h-3.5 w-48 rounded shimmer" /><div className="mt-1.5 h-2.5 w-32 rounded shimmer opacity-60" /></td>
-                <td className="px-4 py-3"><div className="h-5 w-14 rounded-full shimmer" /></td>
-                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
-                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
-                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
-                <td />
-              </tr>
-            ))}
-            {!isLoading && filteredBroadcasts.map((broadcast) => {
-              const openRate = broadcast.sentCount > 0 ? ((broadcast.openCount / broadcast.sentCount) * 100).toFixed(1) : null;
-              const clickRate = broadcast.sentCount > 0 ? ((broadcast.clickCount / broadcast.sentCount) * 100).toFixed(1) : null;
-              return (
-                <tr
-                  key={broadcast.id}
-                  onClick={() => setDetailBroadcast(broadcast)}
-                  className="border-b border-border/50 last:border-0 hover:bg-accent/40 cursor-pointer transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-[13px] leading-tight">{broadcast.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[320px]">{broadcast.subject}</p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5 tabular-nums">
-                      {broadcast.sentAt
-                        ? `Sent ${format(new Date(broadcast.sentAt), "MMM d, yyyy")}`
-                        : `Created ${format(new Date(broadcast.createdAt), "MMM d, yyyy")}`}
+        {!isLoading &&
+          broadcasts.map((broadcast) => (
+            <div
+              key={broadcast.id}
+              onClick={() => setDetailBroadcast(broadcast)}
+              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-sm">
+                      {broadcast.name}
+                    </span>
+                    <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>
+                      {broadcast.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                    {broadcast.subject}
+                  </p>
+                  {(broadcast.status === "sent" || broadcast.status === "sending") && (
+                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                      {(broadcast.sentCount ?? 0).toLocaleString()} sent
+                      {broadcast.openCount
+                        ? ` · ${broadcast.openCount.toLocaleString()} opens`
+                        : ""}
+                      {broadcast.clickCount
+                        ? ` · ${broadcast.clickCount.toLocaleString()} clicks`
+                        : ""}
                     </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>{broadcast.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
-                    {broadcast.sentCount > 0 ? broadcast.sentCount.toLocaleString() : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
-                    {openRate !== null ? (
-                      <span>{openRate}% <span className="text-[10px] text-muted-foreground">({broadcast.openCount.toLocaleString()})</span></span>
-                    ) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
-                    {clickRate !== null ? (
-                      <span>{clickRate}% <span className="text-[10px] text-muted-foreground">({broadcast.clickCount.toLocaleString()})</span></span>
-                    ) : "—"}
-                  </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    {broadcast.status === "draft" && (
-                      <Button size="sm" variant="ghost" className="h-7 px-2"
-                        onClick={(e) => { e.stopPropagation(); setDetailBroadcast(broadcast); }}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  )}
+                  {broadcast.status === "sending" && (
+                    <SendProgress
+                      sentCount={broadcast.sentCount ?? 0}
+                      recipientCount={broadcast.recipientCount ?? 0}
+                    />
+                  )}
+                </div>
+                <div
+                  className="flex shrink-0 items-center gap-1.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                    {broadcast.createdAt ? format(new Date(broadcast.createdAt), "MMM d") : ""}
+                  </span>
+                  {broadcast.status === "draft" && (
+                    <Button
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailBroadcast(broadcast);
+                      }}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Send
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
 
-        {!isLoading && filteredBroadcasts.length === 0 && (
+        {!isLoading && broadcasts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="text-[13px] font-medium">No broadcasts yet</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Send a one-off email to any audience segment</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Send a one-off email to any audience segment
+            </p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />New Broadcast
+              <Plus className="h-3.5 w-3.5" />
+              New Broadcast
             </Button>
           </div>
         )}
@@ -978,6 +1421,7 @@ function BroadcastsPage() {
           broadcast={detailBroadcast}
           onClose={() => setDetailBroadcast(null)}
           segments={segments}
+          templates={templates}
           onSendSuccess={() => setDetailBroadcast(null)}
           onDeleteSuccess={() => setDetailBroadcast(null)}
           workspaceId={activeWorkspaceId}
