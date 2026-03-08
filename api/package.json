@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "build": "bun build src/index.ts --target bun --outdir dist"
+    "build": "bun build src/index.ts --target bun --outdir dist",
+    "test": "bun test src/routes/domains.test.ts",
+    "test:verbose": "bun test --verbose src/routes/domains.test.ts"
   },
   "dependencies": {
     "@openmail/shared": "workspace:*",
