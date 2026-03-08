@@ -2,12 +2,24 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch, apiFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Plus, Trash2, Key } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { Copy, Check, Plus, Trash2, Key, Mail, Code2, X } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/_app/settings/")({
   component: SettingsPage,
@@ -21,16 +33,71 @@ interface ApiKey {
   createdAt: string;
 }
 
+function Section({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border bg-background">
+      <div className="flex items-center gap-3 border-b px-5 py-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/60">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="text-sm font-medium">{title}</h2>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-5">{children}</div>
+    </div>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="shrink-0 rounded p-1.5 text-emerald-700 transition-colors hover:bg-emerald-100 cursor-pointer"
+      title={copied ? "Copied!" : "Copy"}
+    >
+      {copied ? (
+        <Check className="h-4 w-4" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
 function SettingsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspace } = useWorkspaces();
   const qc = useQueryClient();
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [deleteKey, setDeleteKey] = useState<ApiKey | null>(null);
   const resendKeyRef = useRef<HTMLInputElement>(null);
   const fromEmailRef = useRef<HTMLInputElement>(null);
   const fromNameRef = useRef<HTMLInputElement>(null);
 
-  const { data: apiKeys = [] } = useQuery<ApiKey[]>({
+  const { data: apiKeys = [], isLoading: keysLoading } = useQuery<ApiKey[]>({
     queryKey: ["api-keys", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/api-keys"),
     enabled: !!activeWorkspaceId,
@@ -46,7 +113,6 @@ function SettingsPage() {
       qc.invalidateQueries({ queryKey: ["api-keys", activeWorkspaceId] });
       setCreatedKey(data.key);
       setNewKeyName("");
-      toast.success("API key created");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -56,6 +122,7 @@ function SettingsPage() {
       sessionFetch(activeWorkspaceId!, `/api-keys/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["api-keys", activeWorkspaceId] });
+      setDeleteKey(null);
       toast.success("API key deleted");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -75,129 +142,215 @@ function SettingsPage() {
   });
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Workspace configuration</p>
-      </div>
-
-      {/* Email Settings */}
-      <div className="bg-white rounded-xl border p-6">
-        <h2 className="font-medium mb-4">Email Sending</h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            updateWorkspaceMutation.mutate({
-              resendApiKey: resendKeyRef.current!.value || undefined,
-              resendFromEmail: fromEmailRef.current!.value || undefined,
-              resendFromName: fromNameRef.current!.value || undefined,
-            });
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-1.5">
-            <Label>Resend API Key</Label>
-            <Input ref={resendKeyRef} type="password" placeholder="re_..." />
-            <p className="text-xs text-muted-foreground">
-              Your workspace Resend API key. Leave blank to use platform default.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>From Email</Label>
-              <Input ref={fromEmailRef} type="email" placeholder="hello@yourapp.com" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>From Name</Label>
-              <Input ref={fromNameRef} placeholder="Your App" />
-            </div>
-          </div>
-          <Button type="submit" size="sm" disabled={updateWorkspaceMutation.isPending}>
-            {updateWorkspaceMutation.isPending ? "Saving..." : "Save Settings"}
-          </Button>
-        </form>
-      </div>
-
-      {/* API Keys */}
-      <div className="bg-white rounded-xl border p-6">
-        <h2 className="font-medium mb-4">API Keys</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Use these keys to authenticate API and MCP server requests.
+    <div className="mx-auto max-w-3xl px-8 py-8">
+      {/* Header */}
+      <div className="mb-7">
+        <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Workspace configuration
         </p>
-
-        {createdKey && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm font-medium text-green-800 mb-1">
-              New key created — copy it now, it won&apos;t be shown again:
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="text-sm bg-white border rounded px-2 py-1 flex-1 truncate">
-                {createdKey}
-              </code>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(createdKey);
-                  toast.success("Copied!");
-                }}
-                className="p-1.5 hover:bg-green-100 rounded cursor-pointer"
-              >
-                <Copy className="w-4 h-4 text-green-700" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2 mb-4">
-          {apiKeys.map((key) => (
-            <div
-              key={key.id}
-              className="flex items-center justify-between py-2 border-b last:border-0"
-            >
-              <div className="flex items-center gap-3">
-                <Key className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">{key.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {key.keyPrefix}... · Created {new Date(key.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => deleteKeyMutation.mutate(key.id)}
-                className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-destructive cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-          {apiKeys.length === 0 && (
-            <p className="text-sm text-muted-foreground py-2">No API keys yet</p>
-          )}
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (newKeyName) createKeyMutation.mutate(newKeyName);
-          }}
-          className="flex gap-2"
-        >
-          <Input
-            value={newKeyName}
-            onChange={(e) => setNewKeyName(e.target.value)}
-            placeholder="Key name (e.g. Production)"
-            className="flex-1"
-          />
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!newKeyName || createKeyMutation.isPending}
-          >
-            <Plus className="w-4 h-4" />
-            Create Key
-          </Button>
-        </form>
       </div>
+
+      <div className="space-y-4">
+        {/* Email Settings */}
+        <Section
+          icon={Mail}
+          title="Email Sending"
+          description="Configure your Resend account for sending emails"
+        >
+          {/* key forces re-mount when workspace changes so defaultValues refresh */}
+          <form
+            key={activeWorkspaceId ?? "none"}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!activeWorkspaceId) return;
+              // Send null for empty strings to allow clearing configured values.
+              // undefined would be omitted by JSON.stringify and the field would
+              // not be updated — null explicitly sets the column to NULL.
+              updateWorkspaceMutation.mutate({
+                resendApiKey: resendKeyRef.current!.value || undefined,
+                resendFromEmail: fromEmailRef.current!.value || null,
+                resendFromName: fromNameRef.current!.value || null,
+              });
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Resend API Key</Label>
+                {activeWorkspace?.resendFromEmail && (
+                  <span className="text-xs text-emerald-600 font-medium">✓ Configured</span>
+                )}
+              </div>
+              <Input
+                ref={resendKeyRef}
+                type="password"
+                placeholder="re_••••••••••••••••"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter a new key to update. Leave blank to use the platform default.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>From Email</Label>
+                <Input
+                  ref={fromEmailRef}
+                  type="email"
+                  placeholder="hello@yourapp.com"
+                  defaultValue={activeWorkspace?.resendFromEmail ?? ""}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>From Name</Label>
+                <Input
+                ref={fromNameRef}
+                placeholder="Your App"
+                defaultValue={activeWorkspace?.resendFromName ?? ""}
+              />
+              </div>
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={updateWorkspaceMutation.isPending}
+            >
+              {updateWorkspaceMutation.isPending ? "Saving…" : "Save Settings"}
+            </Button>
+          </form>
+        </Section>
+
+        {/* API Keys */}
+        <Section
+          icon={Code2}
+          title="API Keys"
+          description="Authenticate API and MCP server requests with a workspace key"
+        >
+          {/* New key reveal banner */}
+          {createdKey && (
+            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-emerald-800">
+                  Copy this key now — it won&apos;t be shown again
+                </p>
+                <button
+                  onClick={() => setCreatedKey(null)}
+                  className="rounded p-0.5 text-emerald-600 transition-colors hover:bg-emerald-100 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded border bg-white px-2.5 py-1.5 font-mono text-xs">
+                  {createdKey}
+                </code>
+                <CopyButton value={createdKey} />
+              </div>
+            </div>
+          )}
+
+          {/* Key list */}
+          <div className="mb-4">
+            {keysLoading && (
+              <div className="space-y-px">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 py-3 border-b last:border-0">
+                    <div className="h-4 w-4 rounded shimmer" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-24 rounded shimmer" />
+                      <div className="h-3 w-48 rounded shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!keysLoading && apiKeys.length === 0 && (
+              <p className="py-2 text-sm text-muted-foreground">
+                No API keys yet — create one to use the API or MCP server
+              </p>
+            )}
+
+            {!keysLoading &&
+              apiKeys.map((key, i) => (
+                <div
+                  key={key.id}
+                  className={`group flex items-center gap-3 py-3 transition-colors duration-150 ${
+                    i < apiKeys.length - 1 ? "border-b" : ""
+                  }`}
+                >
+                  <Key className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{key.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {key.keyPrefix}••••••••••••{" "}
+                      <span className="font-sans">·</span>{" "}
+                      {format(new Date(key.createdAt), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDeleteKey(key)}
+                    className="shrink-0 rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+          </div>
+
+          {/* Create key form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newKeyName) createKeyMutation.mutate(newKeyName);
+            }}
+            className="flex gap-2"
+          >
+            <Input
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              placeholder="Key name (e.g. Production)"
+              className="flex-1"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!newKeyName || createKeyMutation.isPending}
+            >
+              <Plus className="h-4 w-4" />
+              {createKeyMutation.isPending ? "Creating…" : "Create"}
+            </Button>
+          </form>
+        </Section>
+      </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteKey}
+        onOpenChange={(o) => !o && setDeleteKey(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke API key?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteKey?.name}
+              </strong>{" "}
+              ({deleteKey?.keyPrefix}••••) will be permanently revoked. Any
+              services using this key will stop working immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteKeyMutation.isPending}
+              onClick={() => deleteKey && deleteKeyMutation.mutate(deleteKey.id)}
+            >
+              {deleteKeyMutation.isPending ? "Revoking…" : "Revoke key"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

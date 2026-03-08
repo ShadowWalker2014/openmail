@@ -13,8 +13,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, FileText, Trash2, Edit } from "lucide-react";
+import { Plus, FileText, Trash2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/templates/")({
   component: TemplatesPage,
@@ -34,12 +45,13 @@ function TemplatesPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
+  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLInputElement>(null);
   const htmlRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: templates = [] } = useQuery<Template[]>({
+  const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["templates", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
     enabled: !!activeWorkspaceId,
@@ -54,13 +66,21 @@ function TemplatesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
       setOpen(false);
+      // Reset form refs so re-opening shows a blank form
+      if (nameRef.current) nameRef.current.value = "";
+      if (subjectRef.current) subjectRef.current.value = "";
+      if (previewRef.current) previewRef.current.value = "";
+      if (htmlRef.current) htmlRef.current.value = "";
       toast.success("Template created");
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
+    mutationFn: ({
+      id,
+      ...body
+    }: { id: string } & Record<string, unknown>) =>
       sessionFetch(activeWorkspaceId!, `/templates/${id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
@@ -75,9 +95,12 @@ function TemplatesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/templates/${id}`, { method: "DELETE" }),
+      sessionFetch(activeWorkspaceId!, `/templates/${id}`, {
+        method: "DELETE",
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
+      setDeleteTemplate(null);
       toast.success("Template deleted");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -101,18 +124,22 @@ function TemplatesPage() {
   const dialogOpen = open || !!editTemplate;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-5xl px-8 py-8">
+      {/* Header */}
+      <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Templates</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Reusable email templates</p>
+          <h1 className="text-lg font-semibold tracking-tight">Templates</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Reusable email templates
+          </p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
           New Template
         </Button>
       </div>
 
+      {/* Dialog */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(o) => {
@@ -122,18 +149,31 @@ function TemplatesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        {/* key forces full remount when switching between templates so defaultValue re-populates */}
+        <DialogContent key={editTemplate?.id ?? "new"} className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editTemplate ? "Edit Template" : "New Template"}</DialogTitle>
+            <DialogTitle>
+              {editTemplate ? "Edit Template" : "New Template"}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label>Name *</Label>
-              <Input ref={nameRef} defaultValue={editTemplate?.name} required />
+              <Input
+                ref={nameRef}
+                defaultValue={editTemplate?.name}
+                required
+                placeholder="Welcome email"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Subject *</Label>
-              <Input ref={subjectRef} defaultValue={editTemplate?.subject} required />
+              <Input
+                ref={subjectRef}
+                defaultValue={editTemplate?.subject}
+                required
+                placeholder="Welcome to {{company}}!"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Preview Text</Label>
@@ -150,7 +190,7 @@ function TemplatesPage() {
                 required
                 defaultValue={editTemplate?.htmlContent}
                 placeholder="<html>...</html>"
-                className="w-full min-h-[240px] font-mono text-xs rounded-md border border-input bg-transparent px-3 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+                className="w-full min-h-[220px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
             <DialogFooter>
@@ -159,7 +199,7 @@ function TemplatesPage() {
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
                 {createMutation.isPending || updateMutation.isPending
-                  ? "Saving..."
+                  ? "Saving…"
                   : "Save Template"}
               </Button>
             </DialogFooter>
@@ -167,41 +207,96 @@ function TemplatesPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {templates.map((tmpl) => (
-          <div key={tmpl.id} className="bg-white rounded-xl border p-4">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{tmpl.name}</p>
-                <p className="text-sm text-muted-foreground truncate mt-0.5">{tmpl.subject}</p>
-              </div>
-              <div className="flex gap-1 ml-2 shrink-0">
-                <button
-                  onClick={() => setEditTemplate(tmpl)}
-                  className="p-1.5 hover:bg-accent rounded cursor-pointer"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => deleteMutation.mutate(tmpl.id)}
-                  className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-destructive cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+      {/* Grid */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {isLoading &&
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-lg border bg-background p-4">
+              <div className="mb-2 h-4 w-32 rounded shimmer" />
+              <div className="h-3.5 w-48 rounded shimmer" />
+              <div className="mt-4 h-3 w-20 rounded shimmer" />
             </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Updated {new Date(tmpl.updatedAt).toLocaleDateString()}
+          ))}
+
+        {!isLoading &&
+          templates.map((tmpl) => (
+            <div
+              key={tmpl.id}
+              className="group rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-sm">{tmpl.name}</p>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {tmpl.subject}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={() => setEditTemplate(tmpl)}
+                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteTemplate(tmpl)}
+                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground tabular-nums">
+                {tmpl.updatedAt
+                  ? `Updated ${format(new Date(tmpl.updatedAt), "MMM d, yyyy")}`
+                  : ""}
+              </p>
+            </div>
+          ))}
+
+        {!isLoading && templates.length === 0 && (
+          <div className="col-span-2 flex flex-col items-center justify-center py-20 text-center">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-sm">No templates yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create a reusable HTML email template
             </p>
-          </div>
-        ))}
-        {templates.length === 0 && (
-          <div className="col-span-2 text-center py-20 text-muted-foreground">
-            <FileText className="w-8 h-8 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No templates yet</p>
+            <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Template
+            </Button>
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTemplate}
+        onOpenChange={(o) => !o && setDeleteTemplate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteTemplate?.name}
+              </strong>{" "}
+              will be permanently deleted. Any broadcasts using this template will be unaffected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteTemplate && deleteMutation.mutate(deleteTemplate.id)}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

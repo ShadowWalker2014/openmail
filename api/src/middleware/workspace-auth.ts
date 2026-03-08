@@ -23,7 +23,8 @@ export async function workspaceApiKeyAuth(c: Context<{ Variables: ApiVariables }
 
   if (!apiKey) return c.json({ error: "Invalid API key" }, 401);
 
-  await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, apiKey.id));
+  // Fire-and-forget: don't block the request on this bookkeeping update
+  db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, apiKey.id)).catch(() => {});
 
   c.set("workspaceId", apiKey.workspaceId);
   await next();

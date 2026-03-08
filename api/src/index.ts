@@ -21,7 +21,7 @@ const app = new Hono<{ Variables: ApiVariables }>();
 app.use("*", cors({
   origin: (origin) => {
     const allowed = [process.env.WEB_URL ?? "http://localhost:5173"];
-    return allowed.includes(origin) ? origin : allowed[0];
+    return allowed.includes(origin) ? origin : null;
   },
   credentials: true,
   allowHeaders: ["Content-Type", "Authorization"],
@@ -58,6 +58,12 @@ sessionApi.route("/ws/:workspaceId/analytics", analyticsRouter);
 sessionApi.route("/ws/:workspaceId/shapes", shapesRouter);
 
 app.route("/api/session", sessionApi);
+
+// Global error handler — prevents internal details from leaking to clients
+app.onError((err, c) => {
+  logger.error({ err }, "Unhandled API error");
+  return c.json({ error: "Internal server error" }, 500);
+});
 
 const apiKeyApi = new Hono<{ Variables: ApiVariables }>();
 apiKeyApi.use("*", workspaceApiKeyAuth);

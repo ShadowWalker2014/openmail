@@ -43,14 +43,20 @@ app.post(
       keyPrefix,
     }).returning();
 
-    return c.json({ ...key, key: rawKey }, 201);
+    // Explicitly omit keyHash and workspaceId from the response
+    const { keyHash: _kh, workspaceId: _ws, ...safeKey } = key;
+    return c.json({ ...safeKey, key: rawKey }, 201);
   }
 );
 
 app.delete("/:id", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const db = getDb();
-  await db.delete(apiKeys).where(and(eq(apiKeys.id, c.req.param("id")), eq(apiKeys.workspaceId, workspaceId)));
+  const [deleted] = await db
+    .delete(apiKeys)
+    .where(and(eq(apiKeys.id, c.req.param("id")), eq(apiKeys.workspaceId, workspaceId)))
+    .returning({ id: apiKeys.id });
+  if (!deleted) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
 });
 

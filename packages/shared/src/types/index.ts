@@ -8,7 +8,14 @@ export type CampaignStepType = "send_email" | "wait" | "condition" | "add_tag" |
 
 export interface SegmentCondition {
   field: string;
-  operator: "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "contains" | "not_contains" | "exists" | "not_exists";
+  // Includes both the legacy short-form operators (eq/ne/exists/not_exists) and
+  // the UI-friendly long-form operators added when the segment builder was built.
+  operator:
+    | "eq" | "ne" | "gt" | "lt" | "gte" | "lte"
+    | "contains" | "not_contains"
+    | "exists" | "not_exists"
+    | "equals" | "not_equals"
+    | "is_set" | "is_not_set";
   value?: string | number | boolean;
 }
 

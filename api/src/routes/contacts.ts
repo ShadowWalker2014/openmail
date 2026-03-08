@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
 import { contacts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and, ilike, count } from "drizzle-orm";
+import { eq, and, ilike, count, desc } from "drizzle-orm";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
@@ -27,7 +27,7 @@ app.get("/", async (c) => {
     .where(and(...conditions))
     .limit(pageSize)
     .offset((page - 1) * pageSize)
-    .orderBy(contacts.createdAt);
+    .orderBy(desc(contacts.createdAt));
 
   return c.json({ data, total, page, pageSize });
 });
@@ -102,7 +102,11 @@ app.patch(
 app.delete("/:id", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const db = getDb();
-  await db.delete(contacts).where(and(eq(contacts.id, c.req.param("id")), eq(contacts.workspaceId, workspaceId)));
+  const [deleted] = await db
+    .delete(contacts)
+    .where(and(eq(contacts.id, c.req.param("id")), eq(contacts.workspaceId, workspaceId)))
+    .returning({ id: contacts.id });
+  if (!deleted) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
 });
 

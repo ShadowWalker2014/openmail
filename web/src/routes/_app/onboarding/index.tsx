@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceStore } from "@/store/workspace";
 import { toast } from "sonner";
+import { Mail } from "lucide-react";
 
 export const Route = createFileRoute("/_app/onboarding/")({
   component: OnboardingPage,
@@ -19,6 +20,7 @@ function OnboardingPage() {
   const nameRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,50 +36,72 @@ function OnboardingPage() {
       }
     ).catch((err: Error) => {
       toast.error(err.message);
-      setLoading(false);
       return null;
     });
+
+    setLoading(false);
     if (!workspace) return;
     setActiveWorkspaceId(workspace.id);
     await qc.invalidateQueries({ queryKey: ["workspaces"] });
     router.navigate({ to: "/dashboard" });
   }
 
+  function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // Only auto-generate slug if user hasn't manually edited it
+    if (!slugTouched && slugRef.current) {
+      slugRef.current.value = e.target.value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+  }
+
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
+    <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--app-bg))] px-4">
       <div className="w-full max-w-md">
-        <h1 className="text-2xl font-semibold mb-2">Create your workspace</h1>
-        <p className="text-muted-foreground mb-8">
-          A workspace contains your contacts, campaigns, and email settings.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Workspace Name *</Label>
-            <Input
-              ref={nameRef}
-              placeholder="Acme Corp"
-              required
-              onChange={(e) => {
-                if (slugRef.current) {
-                  slugRef.current.value = e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "-")
-                    .replace(/^-+|-+$/g, "");
-                }
-              }}
-            />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border bg-background">
+            <Mail className="h-5 w-5" />
           </div>
-          <div className="space-y-1.5">
-            <Label>Slug *</Label>
-            <Input ref={slugRef} placeholder="acme-corp" pattern="[a-z0-9-]+" required />
-            <p className="text-xs text-muted-foreground">
-              Lowercase letters, numbers, and hyphens only
-            </p>
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating..." : "Create Workspace"}
-          </Button>
-        </form>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Create your workspace
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            A workspace contains your contacts, campaigns, and email settings.
+          </p>
+        </div>
+
+        <div className="rounded-lg border bg-background p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="name">Workspace Name *</Label>
+              <Input
+                id="name"
+                ref={nameRef}
+                placeholder="Acme Corp"
+                required
+                onChange={handleNameChange}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="slug">Slug *</Label>
+              <Input
+                id="slug"
+                ref={slugRef}
+                placeholder="acme-corp"
+                pattern="[a-z0-9-]+"
+                required
+                onChange={() => setSlugTouched(true)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Lowercase letters, numbers, and hyphens only
+              </p>
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating…" : "Create Workspace"}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );
