@@ -38,15 +38,10 @@ const DialogContent = React.forwardRef<
         "fixed left-[50%] top-[50%] z-50 w-full max-w-lg",
         "translate-x-[-50%] translate-y-[-50%]",
         "grid gap-4 border border-border/70 bg-popover p-5 shadow-2xl shadow-black/60",
-        /* Spring entrance */
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-        "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-        "data-[state=open]:slide-in-from-top-[2%] data-[state=closed]:slide-out-to-top-[2%]",
+        "duration-150",
         "rounded-xl overflow-y-auto max-h-[90dvh]",
-        /* Spring timing for open, quick for close */
-        "data-[state=open]:duration-[200ms] data-[state=closed]:duration-150",
-        "[&[data-state=open]]:animation-timing-[cubic-bezier(0.34,1.56,0.64,1)]",
         className
       )}
       {...props}
