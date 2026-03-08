@@ -1,6 +1,12 @@
 node_modules/
 .env.local
 .env.*.local
+# Service .env files (contain secrets — never commit)
+api/.env
+worker/.env
+mcp/.env
+tracker/.env
+web/.env
 dist/
 .turbo/
 *.tsbuildinfo
