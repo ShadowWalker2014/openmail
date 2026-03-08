@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, CheckCircle2, Search, AlertCircle,
+  BarChart2, CheckCircle2, Search, AlertCircle, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
@@ -311,6 +311,29 @@ function BroadcastDetailDialog({
         body: JSON.stringify({ email }),
       }),
     onSuccess: () => toast.success("Test email sent"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(workspaceId, "/broadcasts", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `${broadcast.name} (copy)`,
+          subject: broadcast.subject,
+          fromName: broadcast.fromName || undefined,
+          fromEmail: broadcast.fromEmail || undefined,
+          ...(broadcast.templateId
+            ? { templateId: broadcast.templateId }
+            : { htmlContent: broadcast.htmlContent ?? "" }),
+          segmentIds: broadcast.segmentIds ?? [],
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["broadcasts", workspaceId] });
+      toast.success("Broadcast duplicated");
+      onClose();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -714,8 +737,13 @@ function BroadcastDetailDialog({
               />
             </div>
           ) : broadcast.templateId ? (
-            <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground border border-dashed rounded-lg">
-              Template-based content
+            <div className="flex justify-center">
+              <iframe
+                srcDoc={templates.find(t => t.id === broadcast.templateId)?.htmlContent ?? "<p style='font-family:sans-serif;color:#888;padding:40px;text-align:center'>Template preview not available</p>"}
+                sandbox="allow-same-origin"
+                className="w-full max-w-[680px] min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                title="Email content"
+              />
             </div>
           ) : null}
         </div>
@@ -929,6 +957,15 @@ function BroadcastDetailDialog({
                   </Button>
                 </>
               )}
+              {/* Duplicate broadcast */}
+              <button
+                type="button"
+                onClick={() => duplicateMutation.mutate()}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer border border-border"
+                title="Duplicate broadcast"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
               {broadcast.status !== "sent" && broadcast.status !== "sending" && (
                 <button
                   type="button"
@@ -1033,6 +1070,7 @@ function BroadcastsPage() {
   const [createPreviewText, setCreatePreviewText] = useState("");
   const [createMode, setCreateMode] = useState<"html" | "template">("html");
   const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
+  const [createScheduledAt, setCreateScheduledAt] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
 
@@ -1115,6 +1153,7 @@ function BroadcastsPage() {
       setCreatePreviewText("");
       setCreateMode("html");
       setCreateTemplateId(null);
+      setCreateScheduledAt("");
       if (nameRef.current) nameRef.current.value = "";
       if (subjectRef.current) subjectRef.current.value = "";
       toast.success("Broadcast created");
@@ -1146,6 +1185,7 @@ function BroadcastsPage() {
               setCreatePreviewText("");
               setCreateMode("html");
               setCreateTemplateId(null);
+              setCreateScheduledAt("");
             }
           }}
         >
@@ -1203,6 +1243,7 @@ function BroadcastsPage() {
                       ? { templateId: createTemplateId! }
                       : { htmlContent: createHtml }),
                     segmentIds: selectedSegmentIds,
+                    scheduledAt: createScheduledAt || undefined,
                   });
                 }}
                 className="flex flex-col w-[400px] shrink-0 border-r border-border overflow-y-auto"
@@ -1273,6 +1314,16 @@ function BroadcastsPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Schedule (optional)</Label>
+                    <Input
+                      type="datetime-local"
+                      value={createScheduledAt}
+                      onChange={(e) => setCreateScheduledAt(e.target.value)}
+                      className="text-[13px]"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Leave blank to send immediately when you click Send</p>
                   </div>
                   <div className="space-y-1.5 flex flex-col flex-1">
                     <div className="flex items-center justify-between">
@@ -1449,17 +1500,20 @@ function BroadcastsPage() {
                   className="group border-b border-border/50 last:border-0 hover:bg-accent/50 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-[13px] truncate max-w-[260px]">
-                      {broadcast.name}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">
-                      {broadcast.subject}
-                    </p>
+                    <p className="font-medium text-[13px] truncate max-w-[260px]">{broadcast.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">{broadcast.subject}</p>
+                    {broadcast.sentAt && (
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5 tabular-nums">
+                        Sent {format(new Date(broadcast.sentAt), "MMM d, yyyy")}
+                      </p>
+                    )}
+                    {!broadcast.sentAt && broadcast.createdAt && broadcast.createdAt !== "1970-01-01T00:00:00Z" && (
+                      <p className="text-[10px] text-muted-foreground/40 mt-0.5 tabular-nums">
+                        Created {format(new Date(broadcast.createdAt), "MMM d, yyyy")}
+                      </p>
+                    )}
                     {broadcast.status === "sending" && (
-                      <SendProgress
-                        sentCount={broadcast.sentCount ?? 0}
-                        recipientCount={broadcast.recipientCount ?? 0}
-                      />
+                      <SendProgress sentCount={broadcast.sentCount ?? 0} recipientCount={broadcast.recipientCount ?? 0} />
                     )}
                   </td>
                   <td className="px-4 py-3">
