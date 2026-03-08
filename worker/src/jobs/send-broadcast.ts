@@ -1,5 +1,5 @@
 import { Worker, Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis.js";
+import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
 import { broadcasts, contacts, emailSends } from "@openmail/shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
@@ -14,7 +14,7 @@ export interface SendBroadcastJobData {
 
 let _sendEmailQueue: Queue | null = null;
 function getSendEmailQueue() {
-  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getRedisConnection() });
+  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getQueueRedisConnection() });
   return _sendEmailQueue;
 }
 
@@ -95,6 +95,6 @@ export function createSendBroadcastWorker() {
       // Status transitions to "sent" are handled by send-email jobs
       // (each one increments sentCount; the last one flips status to "sent")
     },
-    { connection: getRedisConnection(), concurrency: 2 }
+    { connection: getWorkerRedisConnection(), concurrency: 2 }
   );
 }

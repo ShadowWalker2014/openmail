@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { Resend } from "resend";
-import { getRedisConnection } from "../lib/redis.js";
+import { getWorkerRedisConnection } from "../lib/redis.js";
 import { getResend } from "../lib/resend.js";
 import { getDb } from "@openmail/shared/db";
 import { emailSends, emailTemplates, broadcasts, campaignSteps, workspaces } from "@openmail/shared/schema";
@@ -138,7 +138,7 @@ export function createSendEmailWorker() {
         //  emailSends.status = 'sent' for accurate delivery counts.)
         if (effectiveBroadcastId) {
           await db.update(broadcasts).set({
-            sentCount: sql`sent_count + 1`,
+            sentCount: sql`${broadcasts.sentCount} + 1`,
             updatedAt: new Date(),
           }).where(eq(broadcasts.id, effectiveBroadcastId));
 
@@ -173,6 +173,6 @@ export function createSendEmailWorker() {
         return;
       }
     },
-    { connection: getRedisConnection(), concurrency: 10 }
+    { connection: getWorkerRedisConnection(), concurrency: 10 }
   );
 }
