@@ -153,16 +153,17 @@ OpenMail exposes a native **Model Context Protocol (MCP) HTTP server** at `POST 
 }
 ```
 
-### Available MCP Tools (17 total)
+### Available MCP Tools (27 total)
 
 | Category | Tools |
 |----------|-------|
 | **Contacts** | `list_contacts`, `create_contact`, `update_contact`, `delete_contact`, `track_event` |
-| **Broadcasts** | `list_broadcasts`, `create_broadcast`, `send_broadcast` |
+| **Broadcasts** | `list_broadcasts`, `get_broadcast`, `create_broadcast`, `update_broadcast`, `schedule_broadcast`, `send_broadcast`, `delete_broadcast` |
 | **Campaigns** | `list_campaigns`, `create_campaign`, `update_campaign`, `pause_campaign` |
 | **Segments** | `list_segments`, `create_segment` |
-| **Templates** | `list_templates`, `create_template`, `update_template` |
+| **Templates** | `list_templates`, `create_template`, `update_template`, `delete_template` |
 | **Analytics** | `get_analytics`, `get_broadcast_analytics` |
+| **Assets** | `list_assets`, `get_asset`, `upload_asset_from_url`, `upload_asset_base64`, `delete_asset` |
 
 ### Example: Ask Claude to run a campaign
 
@@ -239,23 +240,82 @@ This automatically triggers any active campaign with `triggerType: "event"` and 
 ### Required Environment Variables
 
 **`api/`**
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis connection string |
-| `BETTER_AUTH_SECRET` | 32+ char random secret |
-| `BETTER_AUTH_URL` | Public URL of the API service |
-| `RESEND_API_KEY` | Default Resend API key (platform-level) |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `REDIS_URL` | ✅ | Redis connection string |
+| `BETTER_AUTH_SECRET` | ✅ | 32+ char random secret (`openssl rand -base64 32`) |
+| `BETTER_AUTH_URL` | ✅ | Public URL of the API service |
+| `WEB_URL` | ✅ | Public URL of the web dashboard |
+| `RESEND_API_KEY` | ✅ | Resend API key — see [Email Setup](#email-setup) below |
+| `PLATFORM_FROM_EMAIL` | ✅ | Sender address for system emails (must be verified in Resend) |
+| `PLATFORM_FROM_NAME` | — | Sender display name (default: `OpenMail`) |
+| `DEFAULT_FROM_EMAIL` | — | Fallback sender for workspace campaigns without a custom key |
+| `DEFAULT_FROM_NAME` | — | Fallback sender name (default: `OpenMail`) |
+| `TRACKER_URL` | — | Public URL of tracker service (enables open/click tracking) |
 
 **`worker/`**
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | Same PostgreSQL instance |
-| `REDIS_URL` | Same Redis instance |
-| `RESEND_API_KEY` | Default Resend API key |
-| `TRACKER_URL` | Public URL of tracker service |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | Same PostgreSQL instance |
+| `REDIS_URL` | ✅ | Same Redis instance |
+| `RESEND_API_KEY` | ✅ | Same Resend API key |
+| `TRACKER_URL` | ✅ | Public URL of tracker service |
+| `DEFAULT_FROM_EMAIL` | — | Fallback sender for workspace campaign emails |
 
-Each workspace can also configure its **own Resend API key** in Settings → Email Sending.
+---
+
+## Email Setup
+
+OpenMail sends two categories of emails:
+
+| Category | Examples | Controlled by |
+|----------|----------|---------------|
+| **Platform emails** | Password resets, workspace invites | `PLATFORM_FROM_EMAIL` |
+| **Campaign emails** | Broadcasts, automation sequences | Per-workspace Resend key (Settings → Email Sending) |
+
+### 1. Create a Resend account
+
+1. Sign up at [resend.com](https://resend.com)
+2. Go to **API Keys** → **Create API Key** (full access)
+3. Set `RESEND_API_KEY` in your `api/` environment
+
+### 2. Add and verify a sending domain
+
+> ⚠️ You **cannot** send from `@gmail.com`, `@outlook.com`, or any domain you don't own.
+> You must add a domain you control.
+
+1. In the Resend dashboard → **Domains** → **Add Domain**
+2. Enter your domain (e.g. `mail.yourdomain.com` or `yourdomain.com`)
+3. Add the DNS records Resend provides (SPF, DKIM, DMARC) to your DNS registrar
+4. Click **Verify** — usually takes 1–5 minutes
+
+### 3. Configure your environment
+
+```bash
+# api/.env
+
+# Your Resend API key
+RESEND_API_KEY=re_your_key_here
+
+# Platform email sender — must be on a verified Resend domain
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+PLATFORM_FROM_NAME=YourApp        # shown in email clients as "YourApp <noreply@...>"
+
+# Fallback for workspace campaigns (workspaces can override this per-workspace)
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+DEFAULT_FROM_NAME=YourApp
+```
+
+### 4. (Optional) Per-workspace sending
+
+Each workspace can configure its **own** Resend API key and sender address in **Settings → Email Sending**. This is useful for multi-tenant deployments where different teams send from different domains.
+
+If a workspace hasn't configured its own key, it falls back to the platform's `RESEND_API_KEY` and `DEFAULT_FROM_EMAIL`.
+
+### Cloud-hosted (openmail.win)
+
+The hosted version of OpenMail uses `noreply@openmail.win` as the platform sender, fully verified with Resend. No email setup required for cloud users.
 
 ---
 
