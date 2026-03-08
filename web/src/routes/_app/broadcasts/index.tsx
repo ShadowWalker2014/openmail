@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, MousePointerClick, Eye,
+  BarChart2, MousePointerClick, Eye, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
@@ -555,6 +555,7 @@ function BroadcastsPage() {
 
   // Detail view state
   const [detailBroadcast, setDetailBroadcast] = useState<Broadcast | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // REST source of truth
   const { data: restBroadcasts = [], isLoading } = useQuery<Broadcast[]>({
@@ -587,6 +588,8 @@ function BroadcastsPage() {
       .slice()
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [restBroadcasts, rawElectricBroadcasts]);
+
+  const filteredBroadcasts = broadcasts.filter(b => !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
@@ -871,85 +874,99 @@ function BroadcastsPage() {
         </Dialog>
       </div>
 
-      {/* List */}
-      <div className="space-y-2">
-        {isLoading &&
-          Array.from({ length: 3 }).map((_, i) => <BroadcastCardSkeleton key={i} />)}
+      {/* Search */}
+      <div className="mb-4 relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by name…"
+          className="pl-9 h-9"
+        />
+      </div>
 
-        {!isLoading &&
-          broadcasts.map((broadcast) => (
-            <div
-              key={broadcast.id}
-              onClick={() => setDetailBroadcast(broadcast)}
-              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50 cursor-pointer"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-sm">
-                      {broadcast.name}
-                    </span>
-                    <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>
-                      {broadcast.status}
-                    </Badge>
-                  </div>
-                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                    {broadcast.subject}
-                  </p>
-                  {(broadcast.status === "sent" || broadcast.status === "sending") && (
-                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                      {(broadcast.sentCount ?? 0).toLocaleString()} sent
-                      {broadcast.openCount
-                        ? ` · ${broadcast.openCount.toLocaleString()} opens`
-                        : ""}
-                      {broadcast.clickCount
-                        ? ` · ${broadcast.clickCount.toLocaleString()} clicks`
-                        : ""}
-                    </p>
-                  )}
-                  {broadcast.status === "sending" && (
-                    <SendProgress
-                      sentCount={broadcast.sentCount ?? 0}
-                      recipientCount={broadcast.recipientCount ?? 0}
-                    />
-                  )}
-                </div>
-                <div
-                  className="flex shrink-0 items-center gap-1.5"
-                  onClick={(e) => e.stopPropagation()}
+      {/* Table */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border bg-muted/50">
+              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase">Name</th>
+              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-24">Status</th>
+              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Sent</th>
+              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Opens</th>
+              <th className="px-4 py-2.5 text-right text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase w-20">Clicks</th>
+              <th className="w-12" />
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && Array.from({ length: 5 }).map((_, i) => (
+              <tr key={i} className="border-b border-border/50 last:border-0">
+                <td className="px-4 py-3"><div className="h-3.5 w-48 rounded shimmer" /><div className="mt-1.5 h-2.5 w-32 rounded shimmer opacity-60" /></td>
+                <td className="px-4 py-3"><div className="h-5 w-14 rounded-full shimmer" /></td>
+                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
+                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
+                <td className="px-4 py-3 text-right"><div className="h-3 w-10 rounded shimmer ml-auto" /></td>
+                <td />
+              </tr>
+            ))}
+            {!isLoading && filteredBroadcasts.map((broadcast) => {
+              const openRate = broadcast.sentCount > 0 ? ((broadcast.openCount / broadcast.sentCount) * 100).toFixed(1) : null;
+              const clickRate = broadcast.sentCount > 0 ? ((broadcast.clickCount / broadcast.sentCount) * 100).toFixed(1) : null;
+              return (
+                <tr
+                  key={broadcast.id}
+                  onClick={() => setDetailBroadcast(broadcast)}
+                  className="border-b border-border/50 last:border-0 hover:bg-accent/40 cursor-pointer transition-colors"
                 >
-                  <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                    {broadcast.createdAt ? format(new Date(broadcast.createdAt), "MMM d") : ""}
-                  </span>
-                  {broadcast.status === "draft" && (
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailBroadcast(broadcast);
-                      }}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      Send
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-[13px] leading-tight">{broadcast.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[320px]">{broadcast.subject}</p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5 tabular-nums">
+                      {broadcast.sentAt
+                        ? `Sent ${format(new Date(broadcast.sentAt), "MMM d, yyyy")}`
+                        : `Created ${format(new Date(broadcast.createdAt), "MMM d, yyyy")}`}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>{broadcast.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
+                    {broadcast.sentCount > 0 ? broadcast.sentCount.toLocaleString() : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
+                    {openRate !== null ? (
+                      <span>{openRate}% <span className="text-[10px] text-muted-foreground">({broadcast.openCount.toLocaleString()})</span></span>
+                    ) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-[12px]">
+                    {clickRate !== null ? (
+                      <span>{clickRate}% <span className="text-[10px] text-muted-foreground">({broadcast.clickCount.toLocaleString()})</span></span>
+                    ) : "—"}
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    {broadcast.status === "draft" && (
+                      <Button size="sm" variant="ghost" className="h-7 px-2"
+                        onClick={(e) => { e.stopPropagation(); setDetailBroadcast(broadcast); }}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
 
-        {!isLoading && broadcasts.length === 0 && (
+        {!isLoading && filteredBroadcasts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="text-[13px] font-medium">No broadcasts yet</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Send a one-off email to any audience segment
-            </p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Send a one-off email to any audience segment</p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              New Broadcast
+              <Plus className="h-3.5 w-3.5" />New Broadcast
             </Button>
           </div>
         )}

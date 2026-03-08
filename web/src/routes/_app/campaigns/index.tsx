@@ -35,6 +35,8 @@ import {
   Mail,
   Clock,
   Settings,
+  Archive,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -568,6 +570,8 @@ function CampaignsPage() {
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
   const [detailCampaign, setDetailCampaign] = useState<Campaign | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const nameRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLInputElement>(null);
   const eventNameRef = useRef<HTMLInputElement>(null);
@@ -635,6 +639,14 @@ function CampaignsPage() {
       toast.success("Campaign deleted");
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filteredCampaigns = campaigns.filter(c => {
+    const matchesTab = activeTab === "archived" ? c.status === "archived" : c.status !== "archived";
+    const matchesSearch = !searchQuery ||
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+    return matchesTab && matchesSearch;
   });
 
   return (
@@ -734,6 +746,41 @@ function CampaignsPage() {
         </Dialog>
       </div>
 
+      {/* Search */}
+      <div className="mb-4 relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Filter by name or description…"
+          className="pl-9 h-9"
+        />
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 border-b border-border">
+        {(["active", "archived"] as const).map((tab) => {
+          const count = tab === "active"
+            ? campaigns.filter(c => c.status !== "archived").length
+            : campaigns.filter(c => c.status === "archived").length;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer capitalize",
+                activeTab === tab
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}{" "}
+              <span className="ml-1 text-[11px] text-muted-foreground">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* List */}
       <div className="space-y-2">
         {isLoading &&
@@ -742,7 +789,7 @@ function CampaignsPage() {
           ))}
 
         {!isLoading &&
-          campaigns.map((campaign) => (
+          filteredCampaigns.map((campaign) => (
             <div
               key={campaign.id}
               onClick={() => setDetailCampaign(campaign)}
@@ -803,6 +850,15 @@ function CampaignsPage() {
                     <Pause className="h-3.5 w-3.5" />
                     Pause
                   </Button>
+                )}
+                {campaign.status !== "active" && campaign.status !== "archived" && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleMutation.mutate({ id: campaign.id, status: "archived" }); }}
+                    className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-accent hover:text-foreground group-hover:opacity-100 cursor-pointer"
+                    title="Archive"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </button>
                 )}
                 {campaign.status !== "active" && (
                   <button
