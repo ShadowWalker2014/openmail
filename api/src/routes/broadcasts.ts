@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
 import { broadcasts, emailSends } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and, count, desc } from "drizzle-orm";
+import { eq, and, count, desc, sql } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
@@ -190,7 +190,6 @@ app.get("/:id/top-links", async (c) => {
     .limit(1);
   if (!broadcast) return c.json({ error: "Not found" }, 404);
 
-  const { sql } = await import("drizzle-orm");
   const rows = await db.execute(sql`
     SELECT (ee.metadata->>'url') as url, COUNT(*)::int as clicks
     FROM email_events ee
