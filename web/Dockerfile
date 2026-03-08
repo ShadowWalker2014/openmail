@@ -24,6 +24,7 @@ RUN bun run build
 
 FROM nginx:alpine
 COPY --from=builder /app/web/dist /usr/share/nginx/html
-COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+# Use template so nginx substitutes $PORT at container start
+COPY web/nginx.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
