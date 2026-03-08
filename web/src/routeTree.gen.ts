@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
 import { Route as AppSegmentsIndexRouteImport } from './routes/_app/segments/index'
@@ -45,6 +46,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppTemplatesIndexRoute = AppTemplatesIndexRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/broadcasts/': typeof AppBroadcastsIndexRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
   '/contacts/': typeof AppContactsIndexRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/broadcasts': typeof AppBroadcastsIndexRoute
   '/campaigns': typeof AppCampaignsIndexRoute
   '/contacts': typeof AppContactsIndexRoute
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
   '/_app/broadcasts/': typeof AppBroadcastsIndexRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
   '/_app/contacts/': typeof AppContactsIndexRoute
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/reset-password'
+    | '/invite/$token'
     | '/broadcasts/'
     | '/campaigns/'
     | '/contacts/'
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/reset-password'
+    | '/invite/$token'
     | '/broadcasts'
     | '/campaigns'
     | '/contacts'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/reset-password'
+    | '/invite/$token'
     | '/_app/broadcasts/'
     | '/_app/campaigns/'
     | '/_app/contacts/'
@@ -184,6 +196,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  InviteTokenRoute: typeof InviteTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/templates/': {
@@ -312,6 +332,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  InviteTokenRoute: InviteTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
