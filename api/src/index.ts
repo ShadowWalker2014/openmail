@@ -16,9 +16,9 @@ import shapesRouter from "./routes/shapes.js";
 import membersRouter from "./routes/members.js";
 import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
+import { workspaceInvites, workspaceMembers } from "@openmail/shared/schema";
+import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
-import { workspaceMembers } from "@openmail/shared/schema";
-import { eq, and } from "drizzle-orm";
 import { logger } from "./lib/logger.js";
 import type { ApiVariables } from "./types.js";
 
@@ -36,6 +36,25 @@ app.use("*", cors({
 app.use("*", honoLogger());
 
 app.get("/health", (c) => c.json({ status: "ok", service: "api" }));
+
+// Public: get invite info by token (no auth needed — shown on the invite acceptance page)
+app.get("/api/invites/info/:token", async (c) => {
+  const token = c.req.param("token");
+  const db = getDb();
+  const [invite] = await db
+    .select({
+      id: workspaceInvites.id,
+      email: workspaceInvites.email,
+      role: workspaceInvites.role,
+      expiresAt: workspaceInvites.expiresAt,
+      workspaceId: workspaceInvites.workspaceId,
+    })
+    .from(workspaceInvites)
+    .where(and(eq(workspaceInvites.token, token), gt(workspaceInvites.expiresAt, new Date())))
+    .limit(1);
+  if (!invite) return c.json({ error: "Invite not found or expired" }, 404);
+  return c.json(invite);
+});
 
 // Handle both /auth/* and /api/auth/* (Better Auth default base path)
 const authHandler = async (c: any) => {

@@ -85,7 +85,8 @@ function slugify(input: string): string {
 
 // If the generated slug is taken, append a short random suffix until unique
 async function ensureUniqueSlug(
-  tx: ReturnType<typeof getDb>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
   base: string,
 ): Promise<string> {
   let candidate = base;

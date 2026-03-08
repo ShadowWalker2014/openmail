@@ -47,10 +47,7 @@ function InviteAcceptPage() {
     error: inviteError,
   } = useQuery<InviteInfo>({
     queryKey: ["invite-info", token],
-    queryFn: async () => {
-      const data = await apiFetch<InviteInfo>(`/api/session/invites/info/${token}`);
-      return data;
-    },
+    queryFn: () => apiFetch<InviteInfo>(`/api/invites/info/${token}`),
     retry: false,
   });
 
