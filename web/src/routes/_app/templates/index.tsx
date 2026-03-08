@@ -11,11 +11,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, FileText, Trash2, Edit2 } from "lucide-react";
+import { Plus, FileText, Trash2, Edit2, Monitor, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -46,10 +46,11 @@ function TemplatesPage() {
   const [open, setOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+  const [htmlContent, setHtmlContent] = useState("");
+  const [previewMobile, setPreviewMobile] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLInputElement>(null);
-  const htmlRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["templates", activeWorkspaceId],
@@ -66,11 +67,10 @@ function TemplatesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
       setOpen(false);
-      // Reset form refs so re-opening shows a blank form
+      setHtmlContent("");
       if (nameRef.current) nameRef.current.value = "";
       if (subjectRef.current) subjectRef.current.value = "";
       if (previewRef.current) previewRef.current.value = "";
-      if (htmlRef.current) htmlRef.current.value = "";
       toast.success("Template created");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -88,6 +88,7 @@ function TemplatesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
       setEditTemplate(null);
+      setHtmlContent("");
       toast.success("Template saved");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -112,13 +113,23 @@ function TemplatesPage() {
       name: nameRef.current!.value,
       subject: subjectRef.current!.value,
       previewText: previewRef.current!.value || undefined,
-      htmlContent: htmlRef.current!.value,
+      htmlContent,
     };
     if (editTemplate) {
       updateMutation.mutate({ id: editTemplate.id, ...body });
     } else {
       createMutation.mutate(body);
     }
+  }
+
+  function openEdit(tmpl: Template) {
+    setHtmlContent(tmpl.htmlContent);
+    setEditTemplate(tmpl);
+  }
+
+  function openNew() {
+    setHtmlContent("");
+    setOpen(true);
   }
 
   const dialogOpen = open || !!editTemplate;
@@ -133,77 +144,149 @@ function TemplatesPage() {
             Reusable email templates
           </p>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={openNew}>
           <Plus className="h-3.5 w-3.5" />
           New Template
         </Button>
       </div>
 
-      {/* Dialog */}
+      {/* Editor dialog — full-screen two-column: editor left, live preview right */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(o) => {
           if (!o) {
             setOpen(false);
             setEditTemplate(null);
+            setHtmlContent("");
           }
         }}
       >
-        {/* key forces full remount when switching between templates so defaultValue re-populates */}
-        <DialogContent key={editTemplate?.id ?? "new"} className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent
+          key={editTemplate?.id ?? "new"}
+          className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex flex-col overflow-hidden"
+        >
+          {/* Top bar */}
+          <DialogHeader className="shrink-0 flex flex-row items-center justify-between px-5 py-3 border-b border-border">
+            <DialogTitle className="text-[14px] font-semibold">
               {editTemplate ? "Edit Template" : "New Template"}
             </DialogTitle>
+            <div className="flex items-center gap-2 mr-8">
+              {/* Viewport toggle */}
+              <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPreviewMobile(false)}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors cursor-pointer",
+                    !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMobile(true)}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors cursor-pointer",
+                    previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Name *</Label>
-              <Input
-                ref={nameRef}
-                defaultValue={editTemplate?.name}
-                required
-                placeholder="Welcome email"
-              />
+
+          {/* Body: editor | preview */}
+          <div className="flex flex-1 min-h-0">
+            {/* Left — form */}
+            <form
+              onSubmit={handleSubmit}
+              className="flex flex-col w-[400px] shrink-0 border-r border-border overflow-y-auto"
+            >
+              <div className="flex-1 space-y-4 p-5">
+                <div className="space-y-1.5">
+                  <Label>Name *</Label>
+                  <Input
+                    ref={nameRef}
+                    defaultValue={editTemplate?.name}
+                    required
+                    placeholder="Welcome email"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Subject *</Label>
+                  <Input
+                    ref={subjectRef}
+                    defaultValue={editTemplate?.subject}
+                    required
+                    placeholder="Welcome to {{company}}!"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Preview Text</Label>
+                  <Input
+                    ref={previewRef}
+                    defaultValue={editTemplate?.previewText ?? ""}
+                    placeholder="Short preview shown in inbox"
+                  />
+                </div>
+                <div className="space-y-1.5 flex flex-col flex-1">
+                  <Label>HTML Content *</Label>
+                  <textarea
+                    required
+                    value={htmlContent}
+                    onChange={(e) => setHtmlContent(e.target.value)}
+                    placeholder="<html>...</html>"
+                    className="flex-1 w-full min-h-[340px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+              </div>
+              <div className="shrink-0 px-5 py-3 border-t border-border bg-card">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving…"
+                    : "Save Template"}
+                </Button>
+              </div>
+            </form>
+
+            {/* Right — live preview */}
+            <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
+              <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
+                {htmlContent && (
+                  <span className="text-[10px] text-muted-foreground">Live</span>
+                )}
+              </div>
+              <div className="flex-1 flex items-start justify-center overflow-auto p-6">
+                {htmlContent ? (
+                  <div
+                    className={cn(
+                      "h-full transition-all duration-200",
+                      previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
+                    )}
+                  >
+                    <iframe
+                      srcDoc={htmlContent}
+                      sandbox="allow-same-origin"
+                      className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                      title="Email preview"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
+                    <Monitor className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-[12px] text-muted-foreground">Start typing HTML to see a live preview</p>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Subject *</Label>
-              <Input
-                ref={subjectRef}
-                defaultValue={editTemplate?.subject}
-                required
-                placeholder="Welcome to {{company}}!"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Preview Text</Label>
-              <Input
-                ref={previewRef}
-                defaultValue={editTemplate?.previewText ?? ""}
-                placeholder="Short preview shown in inbox"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>HTML Content *</Label>
-              <textarea
-                ref={htmlRef}
-                required
-                defaultValue={editTemplate?.htmlContent}
-                placeholder="<html>...</html>"
-                className="w-full min-h-[120px] resize-y rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
-            <DialogFooter className="sticky bottom-0 bg-popover pt-2">
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {createMutation.isPending || updateMutation.isPending
-                  ? "Saving…"
-                  : "Save Template"}
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -233,7 +316,7 @@ function TemplatesPage() {
                 </div>
                 <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
-                    onClick={() => setEditTemplate(tmpl)}
+                    onClick={() => openEdit(tmpl)}
                     className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
                   >
                     <Edit2 className="h-3.5 w-3.5" />
@@ -263,7 +346,7 @@ function TemplatesPage() {
             <p className="mt-1 text-[12px] text-muted-foreground">
               Create a reusable HTML email template
             </p>
-            <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
+            <Button size="sm" className="mt-4" onClick={openNew}>
               <Plus className="h-3.5 w-3.5" />
               New Template
             </Button>
