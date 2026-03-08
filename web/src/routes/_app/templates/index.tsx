@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, FileText, Trash2, Edit2, Monitor, Smartphone } from "lucide-react";
+import { Plus, FileText, Trash2, Edit2, Monitor, Smartphone, Search, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,7 @@ function TemplatesPage() {
   const [open, setOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [htmlContent, setHtmlContent] = useState("");
   const [previewMobile, setPreviewMobile] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -133,6 +134,22 @@ function TemplatesPage() {
   }
 
   const dialogOpen = open || !!editTemplate;
+
+  const filteredTemplates = templates.filter(
+    (t) =>
+      !searchQuery ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.subject.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  function duplicateTemplate(tmpl: Template) {
+    createMutation.mutate({
+      name: `${tmpl.name} (copy)`,
+      subject: tmpl.subject,
+      previewText: tmpl.previewText || undefined,
+      htmlContent: tmpl.htmlContent,
+    });
+  }
 
   return (
     <div className="px-8 py-7 w-full">
@@ -297,6 +314,19 @@ function TemplatesPage() {
         </div>
       )}
 
+      {/* Search */}
+      {(templates.length > 0 || isLoading) && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search templates…"
+            className="pl-8 h-9"
+          />
+        </div>
+      )}
+
       {/* Grid */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {isLoading &&
@@ -309,7 +339,7 @@ function TemplatesPage() {
           ))}
 
         {!isLoading &&
-          templates.map((tmpl) => (
+          filteredTemplates.map((tmpl) => (
             <div
               key={tmpl.id}
               className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
@@ -325,8 +355,16 @@ function TemplatesPage() {
                   <button
                     onClick={() => openEdit(tmpl)}
                     className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                    title="Edit template"
                   >
                     <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); duplicateTemplate(tmpl); }}
+                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                    title="Duplicate template"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => setDeleteTemplate(tmpl)}
@@ -343,6 +381,12 @@ function TemplatesPage() {
               </p>
             </div>
           ))}
+
+        {!isLoading && templates.length > 0 && filteredTemplates.length === 0 && (
+          <div className="col-span-full py-12 text-center text-[13px] text-muted-foreground">
+            No templates match &ldquo;{searchQuery}&rdquo;
+          </div>
+        )}
 
         {!isLoading && templates.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">

@@ -623,6 +623,15 @@ function ContactsPage() {
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
 
+  const displayedContacts = debouncedSearch
+    ? (data?.data ?? []).filter(
+        (c) =>
+          c.email.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          (c.firstName ?? "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          (c.lastName ?? "").toLowerCase().includes(debouncedSearch.toLowerCase()),
+      )
+    : (data?.data ?? []);
+
   const createMutation = useMutation({
     mutationFn: (body: { email: string; firstName?: string; lastName?: string }) =>
       sessionFetch(activeWorkspaceId!, "/contacts", { method: "POST", body: JSON.stringify(body) }),
@@ -696,7 +705,7 @@ function ContactsPage() {
       {/* Search */}
       <div className="relative mb-3.5">
         <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
-        <Input placeholder="Find by email address…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
+        <Input placeholder="Search by email or name…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
       </div>
 
       {isError && (
@@ -729,7 +738,7 @@ function ContactsPage() {
                 </tr>
               ))}
 
-              {!isLoading && data?.data.map((contact) => (
+              {!isLoading && displayedContacts.map((contact) => (
                 <tr
                   key={contact.id}
                   onClick={() => setDetailContactId(contact.id)}
@@ -760,7 +769,7 @@ function ContactsPage() {
                 </tr>
               ))}
 
-              {!isLoading && !data?.data.length && (
+              {!isLoading && displayedContacts.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-16 text-center">
                     <div className="flex flex-col items-center">
@@ -768,10 +777,10 @@ function ContactsPage() {
                         <Users className="h-4 w-4 text-muted-foreground/40" />
                       </div>
                       <p className="text-[13px] font-medium text-foreground/60">
-                        {debouncedSearch ? "No contacts found" : "No contacts yet"}
+                        {debouncedSearch ? `No results for \u201c${debouncedSearch}\u201d` : "No contacts yet"}
                       </p>
                       <p className="mt-0.5 text-[12px] text-muted-foreground/50">
-                        {debouncedSearch ? `No results for "${debouncedSearch}"` : "Add contacts manually or via the REST API"}
+                        {debouncedSearch ? "" : "Add contacts manually or via the REST API"}
                       </p>
                     </div>
                   </td>
@@ -805,9 +814,17 @@ function ContactsPage() {
       <Dialog open={!!detailContactId} onOpenChange={(o) => !o && setDetailContactId(null)}>
         <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
           <DialogHeader className="sr-only">
-            <DialogTitle>{detailContact?.email}</DialogTitle>
+            <DialogTitle>Contact details</DialogTitle>
           </DialogHeader>
-          {detailContact && (
+          {!detailContact ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <div className="h-12 w-12 rounded-full shimmer" />
+                <div className="h-4 w-32 rounded shimmer" />
+                <div className="h-3 w-48 rounded shimmer" />
+              </div>
+            </div>
+          ) : (
             <ContactDetailContent
               key={detailContact.id}
               contact={detailContact}
