@@ -154,7 +154,7 @@ function CampaignsPage() {
   return (
     <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
-      <div className="mb-7 flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-[15px] font-semibold tracking-tight">Campaigns</h1>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -170,7 +170,7 @@ function CampaignsPage() {
         >
           <DialogTrigger asChild>
             <Button size="sm">
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               New Campaign
             </Button>
           </DialogTrigger>
@@ -327,7 +327,7 @@ function CampaignsPage() {
               Automate emails triggered by user events
             </p>
             <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               New Campaign
             </Button>
           </div>

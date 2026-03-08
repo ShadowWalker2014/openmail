@@ -23,7 +23,10 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { Plus, Filter, Trash2, X, Edit2 } from "lucide-react";
+import { Plus, Filter, Trash2, X, Edit2, Users } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -125,62 +128,64 @@ function ConditionRow({
   }
 
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-center gap-2">
       <div className="grid flex-1 grid-cols-[1fr_auto_1fr] gap-2 items-center">
-        <select
-          value={condition.field}
-          onChange={(e) => handleFieldChange(e.target.value)}
-          className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-        >
-          {FIELD_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+        <Select value={condition.field} onValueChange={handleFieldChange}>
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FIELD_OPTIONS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <select
+        <Select
           value={condition.operator}
-          onChange={(e) =>
+          onValueChange={(val) =>
             onChange({
               ...condition,
-              operator: e.target.value,
-              value: NO_VALUE_OPERATORS.includes(e.target.value)
-                ? undefined
-                : condition.value ?? "",
+              operator: val,
+              value: NO_VALUE_OPERATORS.includes(val) ? undefined : condition.value ?? "",
             })
           }
-          className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
-          {operators.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-8 w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operators.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {showValue ? (
           valueOptions ? (
-            <select
+            <Select
               value={condition.value ?? ""}
-              onChange={(e) => onChange({ ...condition, value: e.target.value })}
-              className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+              onValueChange={(val) => onChange({ ...condition, value: val })}
             >
-              {valueOptions.map((v) => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {valueOptions.map((v) => (
+                  <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <Input
               value={condition.value ?? ""}
               onChange={(e) => onChange({ ...condition, value: e.target.value })}
               placeholder="Value"
+              className="h-8"
             />
           )
         ) : (
-          <div className="h-9" />
+          <div className="h-8" />
         )}
       </div>
 
@@ -188,9 +193,9 @@ function ConditionRow({
         <button
           type="button"
           onClick={onRemove}
-          className="mt-0.5 rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+          className="shrink-0 rounded p-1.5 text-muted-foreground/50 transition-colors duration-100 hover:bg-destructive/10 hover:text-destructive cursor-pointer"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -301,7 +306,7 @@ function SegmentsPage() {
   return (
     <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
-      <div className="mb-7 flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-[15px] font-semibold tracking-tight">Segments</h1>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -309,7 +314,7 @@ function SegmentsPage() {
           </p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           New Segment
         </Button>
       </div>
@@ -371,7 +376,7 @@ function SegmentsPage() {
               Create segments to target specific groups in broadcasts
             </p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               New Segment
             </Button>
           </div>

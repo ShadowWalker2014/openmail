@@ -126,7 +126,7 @@ function TemplatesPage() {
   return (
     <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
-      <div className="mb-7 flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-[15px] font-semibold tracking-tight">Templates</h1>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
@@ -134,7 +134,7 @@ function TemplatesPage() {
           </p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           New Template
         </Button>
       </div>
@@ -264,7 +264,7 @@ function TemplatesPage() {
               Create a reusable HTML email template
             </p>
             <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               New Template
             </Button>
           </div>

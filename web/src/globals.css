@@ -4,48 +4,57 @@
 
 @layer base {
   :root {
-    /* ── Linear-inspired dark design system ── */
-    --background: 240 6% 6%;           /* #0e0e12 */
-    --foreground: 240 5% 94%;          /* #ededf0 */
+    /* ── Derived color system — no hardcoded hex, all via CSS vars ── */
 
-    --muted: 240 4% 12%;               /* #1c1c21 */
-    --muted-foreground: 240 4% 56%;    /* #8d8d96 */
+    /* Foundation: near-black base */
+    --background: 240 6% 6%;            /* #0e0e12  — app base */
+    --foreground: 240 5% 93%;           /* #eaeaed  — primary text */
 
-    --border: 240 4% 16%;              /* #252529 */
-    --input: 240 4% 10%;               /* #181819 */
+    /* Surfaces — each is a subtle shade shift of base */
+    --card: 240 4% 9%;                  /* #161618  — raised surface */
+    --card-foreground: 240 5% 93%;
+    --popover: 240 5% 10%;              /* #18181c  — floating surface */
+    --popover-foreground: 240 5% 93%;
 
-    --primary: 240 5% 94%;             /* #ededf0 — near-white primary */
-    --primary-foreground: 240 6% 6%;   /* #0e0e12 */
+    /* Muted — for secondary text, disabled states */
+    --muted: 240 4% 14%;                /* #212126  — hover bg, subtle fills */
+    --muted-foreground: 240 4% 54%;     /* #878790  — secondary text */
 
-    --secondary: 240 4% 12%;           /* #1c1c21 */
-    --secondary-foreground: 240 5% 94%;
+    /* Semantic */
+    --primary: 240 5% 93%;              /* #eaeaed  — white-ish primary actions */
+    --primary-foreground: 240 6% 6%;    /* #0e0e12 */
+    --secondary: 240 4% 13%;            /* #1f1f24 */
+    --secondary-foreground: 240 5% 93%;
+    --accent: 240 4% 14%;               /* #212126  — hover bg */
+    --accent-foreground: 240 5% 93%;
 
-    --accent: 240 4% 14%;              /* #212126 */
-    --accent-foreground: 240 5% 94%;
-
-    --destructive: 3 74% 61%;          /* #ee5258 */
+    /* Status */
+    --destructive: 3 74% 61%;           /* #ee5258 */
     --destructive-foreground: 0 0% 98%;
 
-    --ring: 240 4% 40%;                /* #636369 */
+    /* Chrome */
+    --border: 240 4% 17%;               /* #272729  — borders */
+    --input: 240 4% 11%;                /* #1b1b1e  — input backgrounds */
+    --ring: 240 4% 42%;                 /* #696974  — focus rings */
     --radius: 0.375rem;
 
-    --popover: 240 5% 9%;              /* #161618 */
-    --popover-foreground: 240 5% 94%;
+    /* App shell — slightly deeper than base for depth */
+    --sidebar-bg: 240 7% 7%;            /* #111115 */
+    --sidebar-border: 240 4% 13%;       /* #1f1f23 */
+    --app-bg: 240 6% 6%;                /* #0e0e12 */
 
-    --card: 240 4% 9%;                 /* #161618 */
-    --card-foreground: 240 5% 94%;
-
-    /* App shell */
-    --sidebar-bg: 240 6% 7%;           /* #111114 */
-    --sidebar-border: 240 4% 13%;      /* #1e1e22 */
-    --app-bg: 240 6% 6%;               /* #0e0e12 */
-
-    /* Violet accent (for broadcasts sent badge, etc.) */
-    --violet: 250 89% 70%;             /* #7c6af8 */
+    /* Brand accent */
+    --violet: 250 89% 70%;              /* #7c6af8 */
     --violet-foreground: 0 0% 98%;
+
+    /* Motion easing — spring for entrances, ease-out for micro */
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  * {
+  /* ── Reset ── */
+  *, *::before, *::after {
     border-color: hsl(var(--border));
     box-sizing: border-box;
   }
@@ -54,33 +63,46 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Prevent layout shift from scrollbar appearing */
+    scrollbar-gutter: stable;
   }
 
   body {
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: "Inter", system-ui, sans-serif;
+    /* Linear uses cv11 (alternate 1), ss01 (stylistic set 1) for clean glyphs */
     font-feature-settings: "cv11", "ss01";
     font-size: 13px;
-    line-height: 1.5;
+    /* Tighter than Tailwind default 1.5 — more information-dense */
+    line-height: 1.4;
+    letter-spacing: -0.01em;
   }
 
-  /* Tighter scrollbars — Linear style */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  /* Headings get tighter tracking */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+
+  /* ── Scrollbars — 4px thin, barely visible ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
+    background: hsl(var(--border) / 0.8);
     border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
+    background: hsl(var(--muted-foreground) / 0.4);
   }
 
+  /* ── Selection ── */
   ::selection {
-    background: hsl(250 89% 70% / 0.25);
+    background: hsl(var(--violet) / 0.22);
     color: hsl(var(--foreground));
   }
 
+  /* ── Focus ring — tight, single-pixel ── */
   :focus-visible {
     outline: 1.5px solid hsl(var(--ring));
     outline-offset: 2px;
@@ -88,45 +110,80 @@
 }
 
 @layer utilities {
+  /* ── Animation utilities ── */
   .animate-in {
-    animation-duration: 120ms;
+    animation-duration: 150ms;
     animation-fill-mode: both;
     animation-name: enter;
+    animation-timing-function: var(--ease-out);
   }
   .animate-out {
-    animation-duration: 120ms;
+    animation-duration: 100ms;
     animation-fill-mode: both;
     animation-name: exit;
+    animation-timing-function: var(--ease-in-out);
   }
 
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
+  /* ── Tabular numbers — Linear uses this everywhere ── */
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  /* ── Mono for IDs, keys, technical strings ── */
+  .font-mono-xs {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 11px;
+    letter-spacing: 0;
   }
 
-  /* Dark-mode shimmer for skeletons */
+  /* ── Shimmer skeleton — dark-mode optimized ── */
   .shimmer {
     background: linear-gradient(
       90deg,
       hsl(var(--muted)) 0%,
-      hsl(var(--muted) / 0.5) 50%,
+      hsl(var(--muted) / 0.4) 50%,
       hsl(var(--muted)) 100%
     );
     background-size: 200% 100%;
-    animation: shimmer 1.4s ease-in-out infinite;
+    animation: shimmer 1.6s var(--ease-in-out) infinite;
+    border-radius: 4px;
   }
 
-  /* Glassmorphism-like surface elevation */
-  .surface-1 { background: hsl(var(--card)); }
-  .surface-2 { background: hsl(240 4% 11%); }
+  /* ── Row hover — used across all list/table rows ── */
+  .row-hover {
+    transition: background-color 100ms var(--ease-out);
+  }
+  .row-hover:hover {
+    background: hsl(var(--accent) / 0.6);
+  }
+
+  /* ── Truncate with min-w-0 parent guarantee ── */
+  .text-truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Surface levels ── */
+  .surface-base     { background: hsl(var(--background)); }
+  .surface-raised   { background: hsl(var(--card)); }
+  .surface-floating { background: hsl(var(--popover)); }
+
+  /* ── Drag handle ── */
+  .drag-handle {
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 150ms var(--ease-out);
+  }
+  .drag-handle:hover, [data-drag-group]:hover .drag-handle { opacity: 1; }
+  .drag-handle:active { cursor: grabbing; }
 }
 
+/* ── Keyframes ── */
 @keyframes enter {
   from {
     opacity: var(--tw-enter-opacity, 1);
-    transform: translate(
-        var(--tw-enter-translate-x, 0),
-        var(--tw-enter-translate-y, 0)
-      )
+    transform:
+      translate(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0))
       scale(var(--tw-enter-scale, 1));
   }
   to {
@@ -142,35 +199,64 @@
   }
   to {
     opacity: var(--tw-exit-opacity, 0);
-    transform: translate(
-        var(--tw-exit-translate-x, 0),
-        var(--tw-exit-translate-y, 0)
-      )
+    transform:
+      translate(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0))
       scale(var(--tw-exit-scale, 1));
   }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-@keyframes fade-in-enter {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Spring entrance — slight overshoot then settles */
+@keyframes spring-in {
+  from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.fade-in-up {
-  animation: fade-in-enter 0.15s ease-out forwards;
+/* Slide up for toasts/notifications */
+@keyframes slide-up-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Ping animation for live dots */
-@keyframes ping-slow {
-  75%, 100% {
-    transform: scale(2);
-    opacity: 0;
-  }
+/* Fade for overlays */
+@keyframes fade-in-overlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-.animate-ping-slow {
-  animation: ping-slow 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+/* Live pulse for status dots */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* Stagger for list items */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Dialog spring entrance ── */
+[data-radix-popper-content-wrapper] {
+  animation: spring-in 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Sonner toasts ── */
+[data-sonner-toaster] {
+  --toast-bg: hsl(var(--popover));
+  --toast-border: hsl(var(--border));
+  --toast-text: hsl(var(--foreground));
+}
+
+/* ── Remove annoying autofill yellow ── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: hsl(var(--foreground));
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--input)) inset;
+  transition: background-color 5000s ease-in-out 0s;
 }

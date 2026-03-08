@@ -185,12 +185,12 @@ function LandingPage() {
 
       {/* ── Nav ── */}
       <header style={{ borderColor: "rgba(255,255,255,0.06)", background: "hsl(var(--background) / 0.85)" }} className="sticky top-0 z-50 border-b backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+        <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
               <Mail className="h-4 w-4 text-black" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">OpenMail</span>
+            <span className="text-[13px] font-semibold tracking-tight">OpenMail</span>
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -205,7 +205,7 @@ function LandingPage() {
                 href={href}
                 target={href.startsWith("http") ? "_blank" : undefined}
                 rel={href.startsWith("http") ? "noreferrer" : undefined}
-                className="rounded-md px-3 py-1.5 text-sm text-white/50 transition-colors hover:text-white/90"
+                className="rounded-md px-3 py-1.5 text-[13px] text-white/50 transition-colors hover:text-white/90"
               >
                 {label}
               </a>
