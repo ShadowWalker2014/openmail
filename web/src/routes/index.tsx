@@ -14,7 +14,7 @@ import {
   Star,
   Globe,
   Lock,
-  Cpu,
+  Activity,
   Terminal,
 } from "lucide-react";
 
@@ -37,27 +37,6 @@ function useGitHubStars() {
   });
 }
 
-// ─── Tiny badge ──────────────────────────────────────────────────────────────
-function Chip({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium text-white/60",
-        className
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-// ─── Feature card ────────────────────────────────────────────────────────────
 function FeatureCard({
   icon: Icon,
   title,
@@ -92,13 +71,10 @@ function FeatureCard({
   );
 }
 
-// ─── Dashboard mockup ────────────────────────────────────────────────────────
 function DashboardMockup() {
   return (
     <div className="relative mx-auto mt-16 max-w-4xl">
-      {/* Glow under mockup */}
       <div className="absolute inset-x-0 -bottom-10 h-32 bg-gradient-to-t from-violet-600/10 to-transparent blur-xl" />
-
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0e0e11] shadow-2xl shadow-black/50">
         {/* Window chrome */}
         <div className="flex h-9 items-center gap-1.5 border-b border-white/8 bg-white/5 px-4">
@@ -111,7 +87,6 @@ function DashboardMockup() {
             </div>
           </div>
         </div>
-
         {/* App layout */}
         <div className="flex" style={{ height: 340 }}>
           {/* Sidebar */}
@@ -121,27 +96,27 @@ function DashboardMockup() {
               <div className="h-3 w-16 rounded bg-white/60" />
             </div>
             <div className="mb-3 h-7 w-full rounded bg-white/5 border border-white/8" />
-            {["Dashboard", "Contacts", "Broadcasts", "Campaigns", "Templates"].map((item, i) => (
-              <div
-                key={item}
-                className={cn(
-                  "mb-0.5 flex h-7 items-center gap-2 rounded px-2",
-                  i === 0 ? "bg-white/10" : ""
-                )}
-              >
-                <div className={cn("h-3.5 w-3.5 rounded-sm", i === 0 ? "bg-white/70" : "bg-white/20")} />
-                <div className={cn("h-2.5 rounded", i === 0 ? "w-16 bg-white/60" : "w-14 bg-white/20")} />
-              </div>
-            ))}
+            {["Dashboard", "Contacts", "Broadcasts", "Campaigns", "Templates"].map(
+              (item, i) => (
+                <div
+                  key={item}
+                  className={cn(
+                    "mb-0.5 flex h-7 items-center gap-2 rounded px-2",
+                    i === 0 ? "bg-white/10" : ""
+                  )}
+                >
+                  <div className={cn("h-3.5 w-3.5 rounded-sm", i === 0 ? "bg-white/70" : "bg-white/20")} />
+                  <div className={cn("h-2.5 rounded", i === 0 ? "w-16 bg-white/60" : "w-14 bg-white/20")} />
+                </div>
+              )
+            )}
           </div>
-
           {/* Main content */}
           <div className="flex-1 p-5">
             <div className="mb-4">
               <div className="h-4 w-24 rounded bg-white/60 mb-1" />
               <div className="h-2.5 w-16 rounded bg-white/20" />
             </div>
-            {/* Stat cards */}
             <div className="mb-4 grid grid-cols-5 gap-2.5">
               {[
                 { v: "12,481", label: "Contacts" },
@@ -150,16 +125,12 @@ function DashboardMockup() {
                 { v: "8.3%", label: "Clicks" },
                 { v: "24", label: "Unsubs" },
               ].map(({ v, label }) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-white/8 bg-white/5 p-2.5"
-                >
+                <div key={label} className="rounded-lg border border-white/8 bg-white/5 p-2.5">
                   <div className="mb-1 text-[11px] text-white/35">{label}</div>
                   <div className="text-sm font-semibold text-white/80">{v}</div>
                 </div>
               ))}
             </div>
-            {/* Activity feed */}
             <div className="rounded-lg border border-white/8 bg-white/5">
               <div className="flex items-center justify-between border-b border-white/8 px-3 py-2">
                 <div className="h-2.5 w-20 rounded bg-white/40" />
@@ -168,17 +139,19 @@ function DashboardMockup() {
                   <div className="h-2 w-12 rounded bg-green-400/40" />
                 </div>
               </div>
-              {["Email opened", "Link clicked", "Email opened", "Unsubscribed", "Email opened"].map((ev, i) => (
-                <div key={i} className="flex items-center gap-2.5 border-b border-white/5 px-3 py-2 last:border-0">
-                  <div className={cn(
-                    "h-3 w-3 rounded-full shrink-0",
-                    ev === "Unsubscribed" ? "bg-red-400/40" :
-                    ev === "Link clicked" ? "bg-green-400/40" : "bg-blue-400/40"
-                  )} />
-                  <div className="h-2 w-20 rounded bg-white/20" />
-                  <div className="ml-auto h-2 w-10 rounded bg-white/10" />
-                </div>
-              ))}
+              {["Email opened", "Link clicked", "Email opened", "Unsubscribed", "Email opened"].map(
+                (ev, i) => (
+                  <div key={i} className="flex items-center gap-2.5 border-b border-white/5 px-3 py-2 last:border-0">
+                    <div className={cn(
+                      "h-3 w-3 rounded-full shrink-0",
+                      ev === "Unsubscribed" ? "bg-red-400/40" :
+                      ev === "Link clicked" ? "bg-green-400/40" : "bg-blue-400/40"
+                    )} />
+                    <div className="h-2 w-20 rounded bg-white/20" />
+                    <div className="ml-auto h-2 w-10 rounded bg-white/10" />
+                  </div>
+                )
+              )}
             </div>
           </div>
         </div>
@@ -187,19 +160,18 @@ function DashboardMockup() {
   );
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
 function LandingPage() {
   const { data: stars } = useGitHubStars();
 
   return (
     <div className="min-h-screen bg-[#08080a] text-white antialiased selection:bg-violet-500/25">
-      {/* Ambient background glows */}
+      {/* Ambient glows */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/4 rounded-full bg-violet-600/8 blur-[100px]" />
         <div className="absolute right-0 top-1/3 h-[300px] w-[400px] rounded-full bg-cyan-600/5 blur-[80px]" />
       </div>
 
-      {/* ── Nav ────────────────────────────────────────────────────────────── */}
+      {/* ── Nav ── */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#08080a]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
@@ -212,25 +184,20 @@ function LandingPage() {
           <nav className="hidden items-center gap-1 md:flex">
             {[
               { label: "Features", href: "#features" },
-              { label: "MCP", href: "#mcp" },
+              { label: "AI Agents", href: "#ai" },
               { label: "Pricing", href: "#pricing" },
+              { label: "Docs", href: GITHUB_REPO },
             ].map(({ label, href }) => (
               <a
                 key={label}
                 href={href}
+                target={href.startsWith("http") ? "_blank" : undefined}
+                rel={href.startsWith("http") ? "noreferrer" : undefined}
                 className="rounded-md px-3 py-1.5 text-sm text-white/50 transition-colors hover:text-white/90"
               >
                 {label}
               </a>
             ))}
-            <a
-              href={GITHUB_REPO}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md px-3 py-1.5 text-sm text-white/50 transition-colors hover:text-white/90"
-            >
-              Docs
-            </a>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -253,12 +220,12 @@ function LandingPage() {
         </div>
       </header>
 
-      {/* ── Hero ─────────────────────────────────────────────────────────────── */}
+      {/* ── Hero ── */}
       <section className="relative mx-auto max-w-6xl px-6 pt-20 pb-4 text-center">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
           <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
           <span className="text-xs font-medium text-white/60">
-            Open source · ELv2 License
+            Open source · Free to self-host
           </span>
         </div>
 
@@ -270,10 +237,9 @@ function LandingPage() {
           alternative
         </h1>
 
-        <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/45 md:text-lg">
-          Email lifecycle marketing with a full REST API, native{" "}
-          <span className="text-white/70">MCP server</span> for AI agents, and
-          zero per&#8209;seat pricing. Self&#8209;host in minutes.
+        <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/50 md:text-lg">
+          Lifecycle email marketing built for product teams. Automate onboarding,
+          retention, and re-engagement — without the enterprise price tag.
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
@@ -295,27 +261,20 @@ function LandingPage() {
           </a>
         </div>
 
-        {/* Stack badges */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-1.5">
-          {["Hono", "Drizzle ORM", "BullMQ", "ElectricSQL", "Resend", "Better Auth"].map((t) => (
-            <Chip key={t}>{t}</Chip>
-          ))}
-        </div>
-
         {/* Dashboard mockup — hidden on mobile */}
         <div className="hidden sm:block">
           <DashboardMockup />
         </div>
       </section>
 
-      {/* ── Comparison ──────────────────────────────────────────────────────── */}
+      {/* ── Comparison ── */}
       <section id="features" className="mx-auto max-w-6xl px-6 pt-24 pb-20">
         <div className="mx-auto max-w-xl">
           <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
             Why OpenMail
           </p>
           <h2 className="mb-8 text-center text-2xl font-semibold tracking-tight">
-            Everything Customer.io has. Nothing you don't need.
+            Everything Customer.io has. At a fraction of the cost.
           </h2>
 
           <div className="overflow-hidden rounded-xl border border-white/8 bg-white/5">
@@ -325,13 +284,13 @@ function LandingPage() {
               <span className="text-center text-xs font-medium text-white/35">Customer.io</span>
             </div>
             {[
-              { feature: "Self-hosted", us: true, them: false },
-              { feature: "Full REST API", us: "Complete", them: "Limited" },
-              { feature: "MCP server for AI agents", us: true, them: false },
-              { feature: "Real-time sync", us: "ElectricSQL", them: false },
-              { feature: "Per-seat pricing", us: "Never", them: "$1k–$10k+/mo" },
-              { feature: "Data ownership", us: true, them: false },
-              { feature: "Open source", us: true, them: false },
+              { feature: "Self-hosted option",     us: true,        them: false              },
+              { feature: "Full API access",         us: true,        them: "Limited"          },
+              { feature: "AI agent integration",    us: true,        them: false              },
+              { feature: "Real-time dashboards",    us: true,        them: false              },
+              { feature: "Per-seat pricing",        us: "Never",     them: "$1k–$10k+/mo"    },
+              { feature: "You own your data",       us: true,        them: false              },
+              { feature: "Open source",             us: true,        them: false              },
             ].map(({ feature, us, them }) => (
               <div
                 key={feature}
@@ -340,13 +299,9 @@ function LandingPage() {
                 <span className="text-sm text-white/55">{feature}</span>
                 <div className="flex justify-center">
                   {typeof us === "boolean" ? (
-                    us ? (
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
-                        <Check className="h-3 w-3 text-emerald-400" />
-                      </div>
-                    ) : (
-                      <span className="text-white/20">—</span>
-                    )
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15">
+                      <Check className="h-3 w-3 text-emerald-400" />
+                    </div>
                   ) : (
                     <span className="text-xs font-medium text-emerald-400">{us}</span>
                   )}
@@ -368,7 +323,7 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* ── Feature grid ───────────────────────────────────────────────────── */}
+      {/* ── Feature grid ── */}
       <section className="mx-auto max-w-6xl px-6 pb-20">
         <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
           Platform
@@ -380,57 +335,57 @@ function LandingPage() {
           <FeatureCard
             icon={Mail}
             title="Broadcasts"
-            desc="One-off email blasts to any segment with scheduling, live send progress, and open/click tracking."
+            desc="Send one-off email campaigns to any audience segment. Schedule ahead or send instantly — with live delivery progress as it happens."
           />
           <FeatureCard
             icon={Zap}
-            title="Campaigns"
-            desc="Event-triggered automation sequences. Enroll contacts when they sign up, upgrade, or churn."
+            title="Automation Campaigns"
+            desc="Trigger email sequences automatically when users sign up, upgrade, go quiet, or hit any custom event. Set it once, let it run."
           />
           <FeatureCard
             icon={Users}
             title="Contacts & Segments"
-            desc="Flexible attributes and rule-based dynamic segments. Filter by plan, activity, MRR — anything."
+            desc="Build dynamic segments from any user attribute or behavior. Filter by plan, activity, revenue, or anything you track."
           />
           <FeatureCard
             icon={Code2}
             title="Full REST API"
-            desc="Create campaigns, track events, manage contacts, send broadcasts — every feature available via API."
+            desc="Every feature is available via API. Build custom integrations, automate workflows, and manage your entire email stack programmatically."
           />
           <FeatureCard
             icon={BarChart3}
             title="Live Analytics"
-            desc="Real-time open rates, click rates, and unsubscribes powered by ElectricSQL. No polling, ever."
+            desc="Watch opens, clicks, and unsubscribes update in real time as your campaigns send. No manual refreshing, no stale data."
           />
           <FeatureCard
             icon={Globe}
-            title="Click Tracking"
-            desc="Automatic link rewriting, open pixel injection, and unsubscribe handling per CAN-SPAM requirements."
+            title="Tracking & Compliance"
+            desc="Automatic open tracking, click tracking, and one-click unsubscribe handling built in. CAN-SPAM and GDPR ready out of the box."
           />
           <FeatureCard
             icon={Bot}
-            title="MCP Server — AI Agents"
-            desc="17 tools exposed via Model Context Protocol. Claude, GPT, or any agent can run full campaigns."
+            title="AI Agent Ready"
+            desc="Connect Claude, GPT, or any AI agent to create campaigns, enroll contacts, and pull analytics — all through natural language."
             accent
           />
           <FeatureCard
-            icon={Cpu}
-            title="ElectricSQL Real-time"
-            desc="Live send progress bars, instant activity feeds, and real-time dashboard updates via Postgres logical replication."
+            icon={Activity}
+            title="Real-Time Everything"
+            desc="Live send progress bars, instant activity feeds, and dashboards that update as events happen. No page refreshes needed."
             accent
           />
           <FeatureCard
             icon={Lock}
-            title="Multi-workspace & Auth"
-            desc="Team workspaces with role-based access. Better Auth for email/password. Each workspace brings its own Resend key."
+            title="Teams & Workspaces"
+            desc="Invite your team, set roles, and manage multiple projects in separate workspaces. Everyone sees what they need, nothing they don't."
             accent
           />
         </div>
       </section>
 
-      {/* ── MCP showcase ──────────────────────────────────────────────────── */}
-      <section id="mcp" className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="overflow-hidden rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.07] via-violet-500/[0.03] to-transparent p-8 md:p-12">
+      {/* ── AI section ── */}
+      <section id="ai" className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="overflow-hidden rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-8 md:p-12">
           <div className="grid gap-10 md:grid-cols-2 md:items-center">
             <div>
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/25 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-400">
@@ -438,49 +393,32 @@ function LandingPage() {
                 AI-Native
               </div>
               <h2 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">
-                Let your AI agent run email campaigns
+                Let your AI agents run email
               </h2>
               <p className="mb-6 text-sm leading-relaxed text-white/50">
-                OpenMail ships a native{" "}
-                <a
-                  href="https://modelcontextprotocol.io"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  MCP (Model Context Protocol)
-                </a>{" "}
-                HTTP server. Connect Claude, GPT, or any agent to create
-                campaigns, track events, and analyse performance — no code, no
-                dashboard.
+                OpenMail connects directly to Claude, GPT, Cursor, and any agent
+                that supports the Model Context Protocol. Your AI can create
+                campaigns, enroll contacts, send broadcasts, and pull
+                analytics — all through a single conversation.
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="space-y-2 text-sm text-white/50">
                 {[
-                  "list_contacts",
-                  "create_broadcast",
-                  "send_broadcast",
-                  "track_event",
-                  "get_analytics",
-                  "create_segment",
-                  "pause_campaign",
-                ].map((tool) => (
-                  <code
-                    key={tool}
-                    className="rounded border border-violet-500/20 bg-violet-500/8 px-2 py-0.5 text-xs font-mono text-violet-300/80"
-                  >
-                    {tool}
-                  </code>
+                  "\"Create a re-engagement campaign for users inactive 30+ days\"",
+                  "\"Send the August newsletter to all paid customers\"",
+                  "\"What's the open rate on our onboarding sequence?\"",
+                ].map((q) => (
+                  <div key={q} className="flex items-start gap-2">
+                    <span className="mt-0.5 shrink-0 text-violet-400/60">→</span>
+                    <span className="italic text-white/40">{q}</span>
+                  </div>
                 ))}
-                <span className="rounded border border-white/8 px-2 py-0.5 text-xs text-white/30">
-                  +10 more
-                </span>
               </div>
             </div>
 
             <div>
               <div className="flex items-center gap-1.5 mb-2 text-xs text-white/30">
                 <Terminal className="h-3.5 w-3.5" />
-                <span>claude.json / cursor MCP config</span>
+                <span>Connect in 30 seconds</span>
               </div>
               <div className="overflow-x-auto rounded-xl border border-white/8 bg-[#0c0c0f] p-5 shadow-inner">
                 <pre className="text-xs leading-relaxed">
@@ -494,9 +432,7 @@ function LandingPage() {
                   {"\n      "}
                   <span className="text-white/50">"url"</span>
                   <span className="text-white/40">{": "}</span>
-                  <span className="text-emerald-400">
-                    "https://mcp.openmail.dev/mcp"
-                  </span>
+                  <span className="text-emerald-400">"https://mcp.openmail.dev/mcp"</span>
                   <span className="text-white/40">{","}</span>
                   {"\n      "}
                   <span className="text-white/50">"headers"</span>
@@ -504,9 +440,7 @@ function LandingPage() {
                   {"\n        "}
                   <span className="text-white/50">"Authorization"</span>
                   <span className="text-white/40">{": "}</span>
-                  <span className="text-emerald-400">
-                    "Bearer &lt;workspace-api-key&gt;"
-                  </span>
+                  <span className="text-emerald-400">"Bearer &lt;your-api-key&gt;"</span>
                   {"\n      "}
                   <span className="text-white/40">{"}"}</span>
                   {"\n    "}
@@ -517,19 +451,25 @@ function LandingPage() {
                   <span className="text-cyan-400">{"}"}</span>
                 </pre>
               </div>
+              <p className="mt-3 text-xs text-white/30">
+                Works with Claude Desktop, Cursor, and any MCP-compatible agent.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Pricing ─────────────────────────────────────────────────────────── */}
+      {/* ── Pricing ── */}
       <section id="pricing" className="mx-auto max-w-6xl px-6 pb-20">
         <p className="mb-2 text-center text-xs font-medium uppercase tracking-widest text-white/25">
           Pricing
         </p>
-        <h2 className="mb-10 text-center text-2xl font-semibold tracking-tight">
-          Simple. Honest. Open.
+        <h2 className="mb-3 text-center text-2xl font-semibold tracking-tight">
+          Simple. Honest. No surprises.
         </h2>
+        <p className="mb-10 text-center text-sm text-white/40">
+          No per-seat fees. No contact limits on self-hosted. No lock-in.
+        </p>
 
         <div className="mx-auto grid max-w-2xl gap-4 md:grid-cols-2">
           {/* Self-hosted */}
@@ -538,14 +478,14 @@ function LandingPage() {
               Self-hosted
             </p>
             <p className="mb-1 text-4xl font-bold tracking-tight">Free</p>
-            <p className="mb-6 text-sm text-white/40">Forever. No credit card.</p>
+            <p className="mb-6 text-sm text-white/40">Forever. No credit card required.</p>
             <ul className="mb-8 flex-1 space-y-2.5">
               {[
-                "Full source code",
                 "Unlimited contacts",
-                "Unlimited sends",
-                "All API & MCP features",
-                "Your data, your infra",
+                "Unlimited email sends",
+                "Full API & AI agent access",
+                "Your infrastructure, your data",
+                "Community support",
               ].map((f) => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-white/55">
                   <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
@@ -564,20 +504,20 @@ function LandingPage() {
             </a>
           </div>
 
-          {/* Enterprise */}
-          <div className="flex flex-col rounded-xl border border-violet-500/25 bg-gradient-to-br from-violet-500/8 to-violet-500/[0.03] p-7">
+          {/* Cloud / Enterprise */}
+          <div className="flex flex-col rounded-xl border border-violet-500/25 bg-gradient-to-br from-violet-500/8 to-violet-500/5 p-7">
             <p className="mb-1 text-xs font-medium uppercase tracking-wider text-violet-400">
               Enterprise
             </p>
             <p className="mb-1 text-4xl font-bold tracking-tight">Custom</p>
-            <p className="mb-6 text-sm text-white/40">Managed hosting + SLA.</p>
+            <p className="mb-6 text-sm text-white/40">Fully managed, with an SLA.</p>
             <ul className="mb-8 flex-1 space-y-2.5">
               {[
-                "Managed hosting + SLA",
-                "Enterprise SSO (SAML, Okta)",
-                "Priority support",
+                "Managed cloud hosting",
+                "99.9% uptime SLA",
+                "SSO (SAML, Okta)",
                 "Dedicated onboarding",
-                "Air-gapped / on-premise",
+                "Priority support",
               ].map((f) => (
                 <li key={f} className="flex items-center gap-2.5 text-sm text-white/55">
                   <Check className="h-3.5 w-3.5 shrink-0 text-violet-400" />
@@ -589,14 +529,14 @@ function LandingPage() {
               href="mailto:kai@1flow.ai"
               className="flex items-center justify-center gap-2 rounded-lg bg-violet-600 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 cursor-pointer"
             >
-              Contact sales
+              Talk to sales
               <ArrowRight className="h-4 w-4" />
             </a>
           </div>
         </div>
       </section>
 
-      {/* ── CTA ─────────────────────────────────────────────────────────────── */}
+      {/* ── CTA ── */}
       <section className="mx-auto max-w-6xl px-6 pb-28 text-center">
         <div className="relative overflow-hidden rounded-xl border border-white/8 bg-white/5 px-8 py-16">
           <div
@@ -604,11 +544,11 @@ function LandingPage() {
             className="pointer-events-none absolute inset-0 bg-gradient-to-b from-violet-600/5 to-transparent"
           />
           <h2 className="relative mb-3 text-2xl font-bold tracking-tight md:text-3xl">
-            Ready to own your email stack?
+            Own your email stack.
           </h2>
           <p className="relative mx-auto mb-8 max-w-sm text-sm text-white/45">
-            Deploy in minutes on Railway. No credit card, no lock-in, no
-            per-seat fees.
+            Get started in minutes. No credit card, no vendor lock-in,
+            no per-seat fees — ever.
           </p>
           <div className="relative flex flex-col items-center justify-center gap-2.5 sm:flex-row">
             <Link
@@ -628,7 +568,7 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
+      {/* ── Footer ── */}
       <footer className="border-t border-white/[0.06] px-6 py-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-2">
@@ -636,8 +576,6 @@ function LandingPage() {
               <Mail className="h-3.5 w-3.5 text-black" />
             </div>
             <span className="text-sm font-semibold">OpenMail</span>
-            <span className="mx-2 text-white/15">·</span>
-            <span className="text-xs text-white/30">ELv2 License</span>
           </div>
           <div className="flex items-center gap-5 text-xs text-white/30">
             <a
@@ -649,10 +587,7 @@ function LandingPage() {
               <Github className="h-3.5 w-3.5" />
               GitHub
             </a>
-            <a
-              href="mailto:kai@1flow.ai"
-              className="transition-colors hover:text-white/60"
-            >
+            <a href="mailto:kai@1flow.ai" className="transition-colors hover:text-white/60">
               kai@1flow.ai
             </a>
           </div>
