@@ -351,7 +351,7 @@ function CampaignDetailDialog({
   const qc = useQueryClient();
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
-  const { data: detail, isLoading } = useQuery<CampaignDetail>({
+  const { data: detail, isLoading, isError: detailError } = useQuery<CampaignDetail>({
     queryKey: ["campaign-detail", campaign.id],
     queryFn: () => sessionFetch(workspaceId, `/campaigns/${campaign.id}`),
     enabled: !!workspaceId,
@@ -370,7 +370,6 @@ function CampaignDetailDialog({
         body: JSON.stringify({
           stepType,
           config: {},
-          position: detail?.steps.length ?? 0,
         }),
       }),
     onSuccess: (newStep) => {
@@ -452,6 +451,10 @@ function CampaignDetailDialog({
                     <div key={i} className="h-10 rounded-lg shimmer" />
                   ))}
                 </div>
+              )}
+
+              {detailError && (
+                <p className="text-center text-[12px] text-destructive mt-4">Failed to load steps</p>
               )}
 
               {!isLoading && sortedSteps.length === 0 && (
@@ -592,7 +595,7 @@ function CampaignsPage() {
   const eventNameRef = useRef<HTMLInputElement>(null);
   const [triggerType, setTriggerType] = useState<"event" | "manual">("event");
 
-  const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
+  const { data: campaigns = [], isLoading, isError } = useQuery<Campaign[]>({
     queryKey: ["campaigns", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/campaigns"),
     enabled: !!activeWorkspaceId,
@@ -773,6 +776,12 @@ function CampaignsPage() {
           className="pl-9 h-9"
         />
       </div>
+
+      {isError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+          Failed to load campaigns.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4 border-b border-border">

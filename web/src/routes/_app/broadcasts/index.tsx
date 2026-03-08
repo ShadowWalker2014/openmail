@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, CheckCircle2, Search,
+  BarChart2, CheckCircle2, Search, AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
@@ -269,8 +269,8 @@ function BroadcastDetailDialog({
           subject,
           fromName: fromName || undefined,
           fromEmail: fromEmail || undefined,
-          ...(contentMode === "template"
-            ? { templateId: selectedTemplateId! }
+          ...(contentMode === "template" && selectedTemplateId
+            ? { templateId: selectedTemplateId }
             : { htmlContent }),
           segmentIds: selectedSegmentIds,
         }),
@@ -917,19 +917,27 @@ function BroadcastDetailDialog({
                     variant="outline"
                     size="sm"
                     disabled={saveMutation.isPending}
-                    onClick={() => saveMutation.mutate()}
+                    onClick={() => {
+                      if (contentMode === "template" && !selectedTemplateId) {
+                        toast.error("Select a template first");
+                        return;
+                      }
+                      saveMutation.mutate();
+                    }}
                   >
                     {saveMutation.isPending ? "Saving…" : "Save"}
                   </Button>
                 </>
               )}
-              <button
-                type="button"
-                onClick={() => setDeleteConfirm(true)}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {broadcast.status !== "sent" && broadcast.status !== "sending" && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(true)}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer border border-border"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </DialogHeader>
 
@@ -1035,7 +1043,7 @@ function BroadcastsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   // REST source of truth
-  const { data: restBroadcasts = [], isLoading } = useQuery<Broadcast[]>({
+  const { data: restBroadcasts = [], isLoading, isError } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
     queryFn: () =>
       sessionFetch<Record<string, unknown>[]>(activeWorkspaceId!, "/broadcasts").then(
@@ -1372,6 +1380,13 @@ function BroadcastsPage() {
           className="pl-9 h-9"
         />
       </div>
+
+      {isError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          Failed to load broadcasts.
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-lg border border-border overflow-hidden">

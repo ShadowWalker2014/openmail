@@ -42,6 +42,8 @@ function formatSendDate(dateStr: string): string {
 
 const PAGE_SIZE = 50;
 
+type BroadcastDraft = { id: string; name: string; subject: string; status: string; createdAt: string };
+
 function DeliveriesPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const [activeTab, setActiveTab] = useState<"deliveries" | "drafts">("deliveries");
@@ -66,8 +68,6 @@ function DeliveriesPage() {
     enabled: !!activeWorkspaceId && activeTab === "deliveries",
     staleTime: 30_000,
   });
-
-  type BroadcastDraft = { id: string; name: string; subject: string; status: string; createdAt: string };
 
   const { data: drafts = [], isLoading: draftsLoading, isError: draftsError } = useQuery<BroadcastDraft[]>({
     queryKey: ["broadcasts-drafts", activeWorkspaceId],

@@ -128,6 +128,8 @@ const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
 
 const NO_VALUE_OPERATORS = ["exists", "not_exists"];
 
+const PEOPLE_PAGE_SIZE = 50;
+
 const OPERATOR_ALIAS: Record<string, string> = {
   equals: "eq",
   not_equals: "ne",
@@ -259,7 +261,6 @@ interface SegmentDetailDialogProps {
 function SegmentDetailDialog({ segment, workspaceId, onClose, onEdit, onDelete }: SegmentDetailDialogProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "people" | "usage">("overview");
   const [peoplePage, setPeoplePage] = useState(1);
-  const PEOPLE_PAGE_SIZE = 50;
 
   const { data: peopleData, isLoading: peopleLoading } = useQuery<PeopleResponse>({
     queryKey: ["segment-people", segment.id, 1],
@@ -317,7 +318,10 @@ function SegmentDetailDialog({ segment, workspaceId, onClose, onEdit, onDelete }
           {tabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => setActiveTab(t.id)}
+              onClick={() => {
+                setActiveTab(t.id);
+                if (t.id === "people") setPeoplePage(1);
+              }}
               className={cn(
                 "px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer",
                 activeTab === t.id
