@@ -52,12 +52,14 @@ openmail/
 
 ## MCP Server Tools (exposed to AI agents)
 Auth: Bearer workspace API key
-Tools: list_campaigns, create_campaign, update_campaign, pause_campaign,
-       list_broadcasts, create_broadcast, schedule_broadcast, send_broadcast,
-       list_contacts, create_contact, update_contact, delete_contact,
-       list_segments, create_segment,
-       list_templates, create_template, update_template,
-       get_analytics, track_event
+Public URL: https://mcp.openmail.win/mcp
+Tools (27): list_campaigns, create_campaign, update_campaign, pause_campaign,
+ list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast,
+ list_contacts, create_contact, update_contact, delete_contact, track_event,
+ list_segments, create_segment,
+ list_templates, create_template, update_template, delete_template,
+ get_analytics, get_broadcast_analytics,
+ list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
 
 ## ID Format
 `{prefix}_{12-char-random}` — e.g. `ws_abc123def456`, `con_xyz789`, `cmp_...`

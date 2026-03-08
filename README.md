@@ -144,7 +144,7 @@ OpenMail exposes a native **Model Context Protocol (MCP) HTTP server** at `POST 
 {
   "mcpServers": {
     "openmail": {
-      "url": "https://your-mcp.railway.app/mcp",
+      "url": "https://mcp.openmail.win/mcp",
       "headers": {
         "Authorization": "Bearer om_your_workspace_api_key"
       }
