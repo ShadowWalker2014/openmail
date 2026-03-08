@@ -190,10 +190,10 @@ function TemplatesPage() {
                 required
                 defaultValue={editTemplate?.htmlContent}
                 placeholder="<html>...</html>"
-                className="w-full min-h-[220px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full min-h-[120px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button
                 type="submit"
                 disabled={createMutation.isPending || updateMutation.isPending}

@@ -318,10 +318,10 @@ function BroadcastsPage() {
                   ref={htmlRef}
                   required
                   placeholder="<h1>Hello {{firstName}}!</h1>"
-                  className="w-full min-h-[160px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="w-full min-h-[110px] resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
-              <DialogFooter>
+              <DialogFooter className="sticky bottom-0 bg-background pt-2">
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating…" : "Create Broadcast"}
                 </Button>
