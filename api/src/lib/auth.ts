@@ -27,6 +27,9 @@ export function getAuth() {
 
       emailAndPassword: {
         enabled: true,
+        // Never block sign-in waiting for email verification — avoids triggering
+        // email sends (and DNS lookups) on the sign-in path.
+        requireEmailVerification: false,
         sendResetPassword: async ({ user, url }) => {
           await sendPasswordResetEmail({ to: user.email, resetUrl: url });
         },
@@ -62,8 +65,11 @@ export function getAuth() {
       },
 
       secret: process.env.BETTER_AUTH_SECRET!,
-      baseURL: process.env.BETTER_AUTH_URL!,
-      trustedOrigins: [process.env.WEB_URL ?? "http://localhost:5173"],
+      baseURL: process.env.BETTER_AUTH_INTERNAL_URL ?? process.env.BETTER_AUTH_URL!,
+      trustedOrigins: [
+        process.env.WEB_URL ?? "[REDACTED]",
+        ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+      ],
 
       advanced: {
         // Web and API are on different up.railway.app subdomains (public suffix list),

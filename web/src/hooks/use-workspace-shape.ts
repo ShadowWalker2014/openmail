@@ -30,8 +30,16 @@ export function useWorkspaceShape<T extends Record<string, unknown>>(
     return p;
   }, [columnsKey]);
 
+  // Pass credentials: "include" so the session cookie is sent on cross-domain
+  // shape requests (API is on api-production-*.up.railway.app, web is on openmail.win).
+  // Without this, the session cookie is never forwarded and shapes return 401.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = useShape<T>({ url, params } as any);
+  const result = useShape<T>({
+    url,
+    params,
+    fetchClient: (input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(input, { ...init, credentials: "include" }),
+  } as any);
 
   return {
     ...result,
