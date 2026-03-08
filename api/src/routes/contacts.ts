@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
-import { contacts } from "@openmail/shared/schema";
+import { contacts, events, emailSends, emailEvents } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and, ilike, count, desc } from "drizzle-orm";
 import type { ApiVariables } from "../types.js";
@@ -108,6 +108,26 @@ app.delete("/:id", async (c) => {
     .returning({ id: contacts.id });
   if (!deleted) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
+});
+
+app.get("/:id/events", async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const data = await db.select().from(events)
+    .where(and(eq(events.contactId, c.req.param("id")), eq(events.workspaceId, workspaceId)))
+    .orderBy(desc(events.occurredAt))
+    .limit(50);
+  return c.json(data);
+});
+
+app.get("/:id/sends", async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const data = await db.select().from(emailSends)
+    .where(and(eq(emailSends.contactId, c.req.param("id")), eq(emailSends.workspaceId, workspaceId)))
+    .orderBy(desc(emailSends.createdAt))
+    .limit(50);
+  return c.json(data);
 });
 
 export default app;

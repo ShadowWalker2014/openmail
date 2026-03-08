@@ -73,4 +73,43 @@ app.delete("/:id", async (c) => {
   return c.json({ success: true });
 });
 
+app.post("/:id/steps", zValidator("json", z.object({
+  stepType: z.enum(["email", "wait"]),
+  config: z.record(z.unknown()).default({}),
+  position: z.number().int().min(0).optional(),
+})), async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const [campaign] = await db.select().from(campaigns).where(and(eq(campaigns.id, c.req.param("id")), eq(campaigns.workspaceId, workspaceId))).limit(1);
+  if (!campaign) return c.json({ error: "Not found" }, 404);
+  const body = c.req.valid("json");
+  let position = body.position;
+  if (position === undefined) {
+    const existing = await db.select().from(campaignSteps).where(eq(campaignSteps.campaignId, campaign.id));
+    position = existing.length;
+  }
+  const [step] = await db.insert(campaignSteps).values({ id: generateId("stp"), campaignId: campaign.id, workspaceId, stepType: body.stepType, config: body.config, position }).returning();
+  return c.json(step, 201);
+});
+
+app.patch("/:id/steps/:stepId", zValidator("json", z.object({
+  config: z.record(z.unknown()).optional(),
+  position: z.number().int().min(0).optional(),
+})), async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const body = c.req.valid("json");
+  const [step] = await db.update(campaignSteps).set({ ...body }).where(and(eq(campaignSteps.id, c.req.param("stepId")), eq(campaignSteps.workspaceId, workspaceId))).returning();
+  if (!step) return c.json({ error: "Not found" }, 404);
+  return c.json(step);
+});
+
+app.delete("/:id/steps/:stepId", async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const [deleted] = await db.delete(campaignSteps).where(and(eq(campaignSteps.id, c.req.param("stepId")), eq(campaignSteps.workspaceId, workspaceId))).returning({ id: campaignSteps.id });
+  if (!deleted) return c.json({ error: "Not found" }, 404);
+  return c.json({ success: true });
+});
+
 export default app;
