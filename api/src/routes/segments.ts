@@ -36,15 +36,10 @@ function parsePagination(pageStr?: string, pageSizeStr?: string) {
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
-  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  const data = await db
-    .select()
-    .from(segments)
-    .where(eq(segments.workspaceId, workspaceId))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
-  return c.json(data);
+  return c.json(
+    await db.select().from(segments).where(eq(segments.workspaceId, workspaceId))
+  );
 });
 
 app.post("/", zValidator("json", segmentSchema), async (c) => {

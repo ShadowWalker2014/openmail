@@ -142,6 +142,7 @@ function ContactDetailContent({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["contact-detail", contact.id] });
       toast.success("Contact updated");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -594,7 +595,7 @@ function ContactsPage() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
-  const [detailContact, setDetailContact] = useState<Contact | null>(null);
+  const [detailContactId, setDetailContactId] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const firstNameRef = useRef<HTMLInputElement>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
@@ -609,6 +610,15 @@ function ContactsPage() {
     queryFn: () =>
       sessionFetch(activeWorkspaceId!, `/contacts?search=${encodeURIComponent(debouncedSearch)}&page=${page}&pageSize=${PAGE_SIZE}`),
     enabled: !!activeWorkspaceId,
+  });
+
+  const { data: detailContact } = useQuery<Contact | null>({
+    queryKey: ["contact-detail", detailContactId],
+    queryFn: () =>
+      detailContactId
+        ? sessionFetch<Contact>(activeWorkspaceId!, `/contacts/${detailContactId}`)
+        : Promise.resolve(null),
+    enabled: !!detailContactId && !!activeWorkspaceId,
   });
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
@@ -722,7 +732,7 @@ function ContactsPage() {
               {!isLoading && data?.data.map((contact) => (
                 <tr
                   key={contact.id}
-                  onClick={() => setDetailContact(contact)}
+                  onClick={() => setDetailContactId(contact.id)}
                   className="group border-b border-border/40 last:border-0 transition-colors hover:bg-accent/50 cursor-pointer"
                 >
                   <td className="px-4 py-3 font-medium text-foreground/90">{contact.email}</td>
@@ -792,7 +802,7 @@ function ContactsPage() {
       )}
 
       {/* Contact Detail Dialog */}
-      <Dialog open={!!detailContact} onOpenChange={(o) => !o && setDetailContact(null)}>
+      <Dialog open={!!detailContactId} onOpenChange={(o) => !o && setDetailContactId(null)}>
         <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
           <DialogHeader className="sr-only">
             <DialogTitle>{detailContact?.email}</DialogTitle>
@@ -802,7 +812,7 @@ function ContactsPage() {
               key={detailContact.id}
               contact={detailContact}
               workspaceId={activeWorkspaceId!}
-              onClose={() => setDetailContact(null)}
+              onClose={() => setDetailContactId(null)}
             />
           )}
         </DialogContent>
