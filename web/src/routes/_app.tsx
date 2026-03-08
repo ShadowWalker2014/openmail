@@ -25,19 +25,7 @@ function AppLayout() {
     }
   }, [session, sessionPending, router]);
 
-  // Redirect to onboarding if authenticated but has no workspaces.
-  // Guard against location to prevent spamming history when already there.
-  useEffect(() => {
-    if (
-      session &&
-      !workspacesLoading &&
-      workspaces !== undefined &&
-      workspaces.length === 0 &&
-      !router.state.location.pathname.startsWith("/onboarding")
-    ) {
-      router.navigate({ to: "/onboarding" });
-    }
-  }, [session, workspaces, workspacesLoading, router]);
+  // No automatic onboarding redirect — default workspace is auto-created on signup.
 
   // Show skeleton while the session or workspace list is loading
   if (sessionPending || (!workspacesError && workspacesLoading && workspaces === undefined)) {
