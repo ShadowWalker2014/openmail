@@ -7,6 +7,8 @@ import { getResend } from "./resend";
 import { generateId } from "@openmail/shared/ids";
 import { workspaces, workspaceMembers } from "@openmail/shared/schema";
 
+// BetterAuth infers a specific generic type from the options object, which is incompatible
+// with the base ReturnType<typeof betterAuth>. `any` is required here for lazy singleton init.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _auth: any = null;
 
@@ -28,7 +30,7 @@ export function getAuth() {
         sendResetPassword: async ({ user, url }) => {
           const resend = getResend();
           await resend.emails.send({
-            from: process.env.FROM_EMAIL ?? "OpenMail <noreply@openmail.dev>",
+            from: process.env.DEFAULT_FROM_EMAIL ?? "OpenMail <noreply@openmail.dev>",
             to: user.email,
             subject: "Reset your OpenMail password",
             html: buildResetPasswordEmail({ url, email: user.email }),
@@ -85,7 +87,7 @@ function slugify(input: string): string {
 
 // If the generated slug is taken, append a short random suffix until unique
 async function ensureUniqueSlug(
-  tx: ReturnType<typeof getDb>,
+  tx: Omit<ReturnType<typeof getDb>, "$client">,
   base: string,
 ): Promise<string> {
   let candidate = base;
