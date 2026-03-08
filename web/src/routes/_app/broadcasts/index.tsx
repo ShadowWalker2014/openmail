@@ -545,6 +545,11 @@ function BroadcastsPage() {
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
   const [createHtml, setCreateHtml] = useState("");
   const [createPreviewMobile, setCreatePreviewMobile] = useState(false);
+  const [createFromName, setCreateFromName] = useState("");
+  const [createFromEmail, setCreateFromEmail] = useState("");
+  const [createPreviewText, setCreatePreviewText] = useState("");
+  const [createMode, setCreateMode] = useState<"html" | "template">("html");
+  const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
 
@@ -589,6 +594,12 @@ function BroadcastsPage() {
     enabled: !!activeWorkspaceId,
   });
 
+  const { data: templates = [] } = useQuery<{ id: string; name: string; subject: string; htmlContent: string }[]>({
+    queryKey: ["templates", activeWorkspaceId],
+    queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
+    enabled: !!activeWorkspaceId,
+  });
+
   const createMutation = useMutation({
     mutationFn: (body: object) =>
       sessionFetch(activeWorkspaceId!, "/broadcasts", {
@@ -600,6 +611,11 @@ function BroadcastsPage() {
       setCreateOpen(false);
       setSelectedSegmentIds([]);
       setCreateHtml("");
+      setCreateFromName("");
+      setCreateFromEmail("");
+      setCreatePreviewText("");
+      setCreateMode("html");
+      setCreateTemplateId(null);
       if (nameRef.current) nameRef.current.value = "";
       if (subjectRef.current) subjectRef.current.value = "";
       toast.success("Broadcast created");
@@ -623,7 +639,15 @@ function BroadcastsPage() {
           open={createOpen}
           onOpenChange={(v) => {
             setCreateOpen(v);
-            if (!v) { setSelectedSegmentIds([]); setCreateHtml(""); }
+            if (!v) {
+              setSelectedSegmentIds([]);
+              setCreateHtml("");
+              setCreateFromName("");
+              setCreateFromEmail("");
+              setCreatePreviewText("");
+              setCreateMode("html");
+              setCreateTemplateId(null);
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -673,7 +697,12 @@ function BroadcastsPage() {
                   createMutation.mutate({
                     name: nameRef.current!.value,
                     subject: subjectRef.current!.value,
-                    htmlContent: createHtml,
+                    previewText: createPreviewText || undefined,
+                    fromName: createFromName || undefined,
+                    fromEmail: createFromEmail || undefined,
+                    ...(createMode === "template"
+                      ? { templateId: createTemplateId! }
+                      : { htmlContent: createHtml }),
                     segmentIds: selectedSegmentIds,
                   });
                 }}
@@ -687,6 +716,24 @@ function BroadcastsPage() {
                   <div className="space-y-1.5">
                     <Label>Subject *</Label>
                     <Input ref={subjectRef} placeholder="Email subject line" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Preview Text</Label>
+                    <Input
+                      value={createPreviewText}
+                      onChange={(e) => setCreatePreviewText(e.target.value)}
+                      placeholder="Short preview shown in inbox"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>From Name</Label>
+                      <Input value={createFromName} onChange={(e) => setCreateFromName(e.target.value)} placeholder="Team Name" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>From Email</Label>
+                      <Input value={createFromEmail} onChange={(e) => setCreateFromEmail(e.target.value)} placeholder="hello@you.com" type="email" />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Segments *</Label>
@@ -729,14 +776,54 @@ function BroadcastsPage() {
                     )}
                   </div>
                   <div className="space-y-1.5 flex flex-col flex-1">
-                    <Label>HTML Content *</Label>
-                    <textarea
-                      required
-                      value={createHtml}
-                      onChange={(e) => setCreateHtml(e.target.value)}
-                      placeholder="<h1>Hello {{firstName}}!</h1>"
-                      className="flex-1 w-full min-h-[300px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    />
+                    <div className="flex items-center justify-between">
+                      <Label>Content</Label>
+                      <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+                        {(["html", "template"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => { setCreateMode(m); if (m === "html") setCreateTemplateId(null); }}
+                            className={cn(
+                              "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+                              createMode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {m === "html" ? "Write HTML" : "Use Template"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {createMode === "html" ? (
+                      <textarea
+                        required={createMode === "html"}
+                        value={createHtml}
+                        onChange={(e) => setCreateHtml(e.target.value)}
+                        placeholder="<h1>Hello {{firstName}}!</h1>"
+                        className="flex-1 w-full min-h-[200px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        {templates.length === 0 ? (
+                          <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
+                            No templates yet.{" "}
+                            <a href="/templates" className="font-medium text-foreground hover:underline">Create one first.</a>
+                          </p>
+                        ) : (
+                          <select
+                            value={createTemplateId ?? ""}
+                            onChange={(e) => setCreateTemplateId(e.target.value || null)}
+                            required={createMode === "template"}
+                            className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                          >
+                            <option value="">Select a template…</option>
+                            {templates.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="shrink-0 px-5 py-3 border-t border-border bg-card">
@@ -748,27 +835,36 @@ function BroadcastsPage() {
 
               {/* Right — live preview */}
               <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
-                <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
-                  {createHtml && <span className="text-[10px] text-muted-foreground">Live</span>}
-                </div>
-                <div className="flex-1 flex items-start justify-center overflow-auto p-6">
-                  {createHtml ? (
-                    <div className={cn("h-full transition-all duration-200", createPreviewMobile ? "w-[375px]" : "w-full max-w-[680px]")}>
-                      <iframe
-                        srcDoc={createHtml}
-                        sandbox="allow-same-origin"
-                        className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
-                        title="Email preview"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
-                      <Monitor className="h-8 w-8 text-muted-foreground" />
-                      <p className="text-[12px] text-muted-foreground">Start typing HTML to see a live preview</p>
-                    </div>
-                  )}
-                </div>
+                {(() => {
+                  const previewHtml = createMode === "html"
+                    ? createHtml
+                    : (templates.find((t) => t.id === createTemplateId)?.htmlContent ?? "");
+                  return (
+                    <>
+                      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+                        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
+                        {previewHtml && <span className="text-[10px] text-muted-foreground">Live</span>}
+                      </div>
+                      <div className="flex-1 flex items-start justify-center overflow-auto p-6">
+                        {previewHtml ? (
+                          <div className={cn("h-full transition-all duration-200", createPreviewMobile ? "w-[375px]" : "w-full max-w-[680px]")}>
+                            <iframe
+                              srcDoc={previewHtml}
+                              sandbox="allow-same-origin"
+                              className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                              title="Email preview"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
+                            <Monitor className="h-8 w-8 text-muted-foreground" />
+                            <p className="text-[12px] text-muted-foreground">Start typing HTML to see a live preview</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </DialogContent>
