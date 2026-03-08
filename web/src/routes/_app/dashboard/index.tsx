@@ -58,7 +58,7 @@ function StatCard({
   icon: React.ElementType;
 }) {
   return (
-    <div className="rounded-lg border bg-background p-4 transition-shadow hover:shadow-sm">
+    <div className="rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30">
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <Icon className="h-3.5 w-3.5 text-muted-foreground/60" />
@@ -163,7 +163,7 @@ function DashboardPage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Live Activity</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
             <LiveDot />
             Real-time
           </div>

@@ -70,7 +70,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[hsl(var(--app-bg))] flex items-center justify-center px-4">
-      <div className="w-full max-w-[360px]">
+      <div className="w-full max-w-sm">
         {/* Back */}
         <div className="mb-8">
           <Link
@@ -84,7 +84,7 @@ function LoginPage() {
 
         {/* Logo + heading */}
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl border bg-background shadow-sm">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border bg-background">
             <Mail className="h-5 w-5" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">
@@ -98,7 +98,7 @@ function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-xl border bg-background p-6 shadow-sm">
+        <div className="rounded-lg border bg-background p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <div className="space-y-1.5">
@@ -143,7 +143,7 @@ function LoginPage() {
             </div>
 
             {fieldError && (
-              <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+              <div className="animate-in fade-in slide-in-from-top-1 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive duration-150">
                 {fieldError}
               </div>
             )}

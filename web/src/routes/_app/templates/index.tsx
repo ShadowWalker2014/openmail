@@ -204,7 +204,7 @@ function TemplatesPage() {
           templates.map((tmpl) => (
             <div
               key={tmpl.id}
-              className="group rounded-lg border bg-background p-4 transition-shadow hover:shadow-sm"
+              className="group rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -236,13 +236,17 @@ function TemplatesPage() {
 
         {!isLoading && templates.length === 0 && (
           <div className="col-span-2 flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border bg-background">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
               <FileText className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="font-medium text-sm">No templates yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Create a reusable HTML email template
             </p>
+            <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Template
+            </Button>
           </div>
         )}
       </div>

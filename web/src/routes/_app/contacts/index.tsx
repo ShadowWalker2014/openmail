@@ -193,7 +193,7 @@ function ContactsPage() {
               data?.data.map((contact) => (
                 <tr
                   key={contact.id}
-                  className="group border-b last:border-0 transition-colors hover:bg-accent/40"
+                  className="group border-b last:border-0 transition-colors duration-150 hover:bg-accent/30"
                 >
                   <td className="px-4 py-3 font-medium">{contact.email}</td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -214,7 +214,7 @@ function ContactsPage() {
                   <td className="px-2 py-3">
                     <button
                       onClick={() => deleteMutation.mutate(contact.id)}
-                      className="rounded p-1 text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 cursor-pointer"
+                      className="rounded p-1 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -226,12 +226,12 @@ function ContactsPage() {
               <tr>
                 <td colSpan={5} className="py-16 text-center">
                   <div className="flex flex-col items-center">
-                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border">
                       <Users className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">No contacts yet</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Add contacts manually or via API
+                      Add contacts manually or via the REST API
                     </p>
                   </div>
                 </td>

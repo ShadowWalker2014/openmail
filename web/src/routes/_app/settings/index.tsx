@@ -36,7 +36,7 @@ function Section({
   return (
     <div className="rounded-lg border bg-background">
       <div className="flex items-center gap-3 border-b px-5 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md border bg-muted/40">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/60">
           <Icon className="h-4 w-4 text-muted-foreground" />
         </div>
         <div>
@@ -202,7 +202,7 @@ function SettingsPage() {
             {apiKeys.map((key, i) => (
               <div
                 key={key.id}
-                className={`flex items-center gap-3 py-3 ${i < apiKeys.length - 1 ? "border-b" : ""}`}
+                className={`group flex items-center gap-3 py-3 transition-colors duration-150 ${i < apiKeys.length - 1 ? "border-b" : ""}`}
               >
                 <Key className="h-4 w-4 shrink-0 text-muted-foreground/60" />
                 <div className="min-w-0 flex-1">
@@ -214,7 +214,7 @@ function SettingsPage() {
                 </div>
                 <button
                   onClick={() => deleteKeyMutation.mutate(key.id)}
-                  className="shrink-0 rounded p-1.5 text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                  className="shrink-0 rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

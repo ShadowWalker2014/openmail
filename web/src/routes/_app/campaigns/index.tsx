@@ -44,6 +44,21 @@ const STATUS_BADGE: Record<
   archived: "default",
 };
 
+function CampaignCardSkeleton() {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border bg-background p-4">
+      <div className="flex-1 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-28 rounded shimmer" />
+          <div className="h-5 w-14 rounded-full shimmer" />
+        </div>
+        <div className="h-3.5 w-40 rounded shimmer" />
+      </div>
+      <div className="h-3.5 w-10 rounded shimmer" />
+    </div>
+  );
+}
+
 function CampaignsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
@@ -53,7 +68,7 @@ function CampaignsPage() {
   const eventNameRef = useRef<HTMLInputElement>(null);
   const [triggerType, setTriggerType] = useState<"event" | "manual">("event");
 
-  const { data: campaigns = [] } = useQuery<Campaign[]>({
+  const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ["campaigns", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/campaigns"),
     enabled: !!activeWorkspaceId,
@@ -139,7 +154,7 @@ function CampaignsPage() {
                       type="button"
                       onClick={() => setTriggerType(t)}
                       className={cn(
-                        "rounded-md border px-3 py-1.5 text-sm transition-colors cursor-pointer",
+                        "rounded-md border px-3 py-1.5 text-sm transition-colors duration-150 cursor-pointer active:scale-95",
                         triggerType === t
                           ? "border-foreground bg-foreground text-background"
                           : "border-border hover:bg-accent"
@@ -150,16 +165,22 @@ function CampaignsPage() {
                   ))}
                 </div>
               </div>
-              {triggerType === "event" && (
-                <div className="space-y-1.5">
+              {/* Animated field appearance */}
+              <div
+                className={cn(
+                  "overflow-hidden transition-all duration-200",
+                  triggerType === "event" ? "max-h-20 opacity-100" : "max-h-0 opacity-0"
+                )}
+              >
+                <div className="space-y-1.5 pt-px">
                   <Label>Event Name *</Label>
                   <Input
                     ref={eventNameRef}
                     placeholder="user_signed_up"
-                    required
+                    required={triggerType === "event"}
                   />
                 </div>
-              )}
+              </div>
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating…" : "Create Campaign"}
@@ -172,65 +193,85 @@ function CampaignsPage() {
 
       {/* List */}
       <div className="space-y-2">
-        {campaigns.map((campaign) => (
-          <div
-            key={campaign.id}
-            className="flex items-center gap-4 rounded-lg border bg-background p-4 transition-shadow hover:shadow-sm"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{campaign.name}</span>
-                <Badge variant={STATUS_BADGE[campaign.status] ?? "secondary"}>
-                  {campaign.status}
-                </Badge>
-              </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {campaign.triggerType === "event"
-                  ? `Trigger: "${(campaign.triggerConfig as { eventName?: string }).eventName}"`
-                  : `Trigger: ${campaign.triggerType}`}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {format(new Date(campaign.createdAt), "MMM d")}
-              </span>
-              {(campaign.status === "draft" || campaign.status === "paused") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    toggleMutation.mutate({ id: campaign.id, status: "active" })
-                  }
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  Activate
-                </Button>
-              )}
-              {campaign.status === "active" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    toggleMutation.mutate({ id: campaign.id, status: "paused" })
-                  }
-                >
-                  <Pause className="h-3.5 w-3.5" />
-                  Pause
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+        {isLoading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <CampaignCardSkeleton key={i} />
+          ))}
 
-        {campaigns.length === 0 && (
+        {!isLoading &&
+          campaigns.map((campaign) => (
+            <div
+              key={campaign.id}
+              className="flex items-center gap-4 rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{campaign.name}</span>
+                  <Badge variant={STATUS_BADGE[campaign.status] ?? "secondary"}>
+                    {campaign.status}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {campaign.triggerType === "event"
+                    ? `Trigger: "${(campaign.triggerConfig as { eventName?: string }).eventName}"`
+                    : `Trigger: ${campaign.triggerType}`}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {format(new Date(campaign.createdAt), "MMM d")}
+                </span>
+                {(campaign.status === "draft" || campaign.status === "paused") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      toggleMutation.mutate({
+                        id: campaign.id,
+                        status: "active",
+                      })
+                    }
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Activate
+                  </Button>
+                )}
+                {campaign.status === "active" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      toggleMutation.mutate({
+                        id: campaign.id,
+                        status: "paused",
+                      })
+                    }
+                  >
+                    <Pause className="h-3.5 w-3.5" />
+                    Pause
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+
+        {!isLoading && campaigns.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border bg-background">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
               <Zap className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="font-medium text-sm">No campaigns yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create an automated campaign triggered by events
+              Automate emails triggered by events
             </p>
+            <Button
+              size="sm"
+              className="mt-4"
+              onClick={() => setOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              New Campaign
+            </Button>
           </div>
         )}
       </div>

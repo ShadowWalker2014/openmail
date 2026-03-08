@@ -62,7 +62,7 @@ function SendProgress({
     <div className="mt-3">
       <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
-          <Zap className="h-3 w-3 animate-pulse text-yellow-500" />
+          <Zap className="h-3 w-3 animate-pulse text-muted-foreground" />
           Sending live…
         </span>
         <span className="tabular-nums">
@@ -74,6 +74,23 @@ function SendProgress({
           className="h-full rounded-full bg-foreground transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
+      </div>
+    </div>
+  );
+}
+
+function BroadcastCardSkeleton() {
+  return (
+    <div className="rounded-lg border bg-background p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-32 rounded shimmer" />
+            <div className="h-5 w-14 rounded-full shimmer" />
+          </div>
+          <div className="h-3.5 w-48 rounded shimmer" />
+        </div>
+        <div className="h-3.5 w-10 rounded shimmer" />
       </div>
     </div>
   );
@@ -91,11 +108,13 @@ function BroadcastsPage() {
   const { data: liveBroadcasts, isLoading: electricLoading } =
     useWorkspaceShape<Broadcast>("broadcasts");
 
-  const { data: apiBroadcasts = [] } = useQuery<Broadcast[]>({
+  const { data: apiBroadcasts = [], isLoading: apiLoading } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/broadcasts"),
     enabled: !!activeWorkspaceId && electricLoading,
   });
+
+  const isLoading = electricLoading && apiLoading;
 
   const broadcasts = (liveBroadcasts?.length ? liveBroadcasts : apiBroadcasts)
     .slice()
@@ -177,11 +196,7 @@ function BroadcastsPage() {
             >
               <div className="space-y-1.5">
                 <Label>Name *</Label>
-                <Input
-                  ref={nameRef}
-                  placeholder="August Newsletter"
-                  required
-                />
+                <Input ref={nameRef} placeholder="August Newsletter" required />
               </div>
               <div className="space-y-1.5">
                 <Label>Subject *</Label>
@@ -207,7 +222,7 @@ function BroadcastsPage() {
                         )
                       }
                       className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer active:scale-95",
                         selectedSegmentIds.includes(seg.id)
                           ? "border-foreground bg-foreground text-background"
                           : "border-border hover:bg-accent"
@@ -239,68 +254,85 @@ function BroadcastsPage() {
 
       {/* List */}
       <div className="space-y-2">
-        {broadcasts.map((broadcast) => (
-          <div
-            key={broadcast.id}
-            className="rounded-lg border bg-background p-4 transition-shadow hover:shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium text-sm">{broadcast.name}</span>
-                  <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>
-                    {broadcast.status}
-                  </Badge>
-                </div>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                  {broadcast.subject}
-                </p>
-                {(broadcast.status === "sent" || broadcast.status === "sending") && (
-                  <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                    {(broadcast.sent_count ?? 0).toLocaleString()} sent
-                    {broadcast.open_count
-                      ? ` · ${broadcast.open_count.toLocaleString()} opens`
-                      : ""}
-                    {broadcast.click_count
-                      ? ` · ${broadcast.click_count.toLocaleString()} clicks`
-                      : ""}
+        {isLoading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <BroadcastCardSkeleton key={i} />
+          ))}
+
+        {!isLoading &&
+          broadcasts.map((broadcast) => (
+            <div
+              key={broadcast.id}
+              className="rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-sm">
+                      {broadcast.name}
+                    </span>
+                    <Badge variant={STATUS_BADGE[broadcast.status] ?? "secondary"}>
+                      {broadcast.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {broadcast.subject}
                   </p>
-                )}
-                {broadcast.status === "sending" && (
-                  <SendProgress
-                    sentCount={broadcast.sent_count ?? 0}
-                    recipientCount={broadcast.recipient_count ?? 0}
-                  />
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {format(new Date(broadcast.created_at), "MMM d")}
-                </span>
-                {broadcast.status === "draft" && (
-                  <Button
-                    size="sm"
-                    onClick={() => sendMutation.mutate(broadcast.id)}
-                    disabled={sendMutation.isPending}
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Send
-                  </Button>
-                )}
+                  {(broadcast.status === "sent" ||
+                    broadcast.status === "sending") && (
+                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                      {(broadcast.sent_count ?? 0).toLocaleString()} sent
+                      {broadcast.open_count
+                        ? ` · ${broadcast.open_count.toLocaleString()} opens`
+                        : ""}
+                      {broadcast.click_count
+                        ? ` · ${broadcast.click_count.toLocaleString()} clicks`
+                        : ""}
+                    </p>
+                  )}
+                  {broadcast.status === "sending" && (
+                    <SendProgress
+                      sentCount={broadcast.sent_count ?? 0}
+                      recipientCount={broadcast.recipient_count ?? 0}
+                    />
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {format(new Date(broadcast.created_at), "MMM d")}
+                  </span>
+                  {broadcast.status === "draft" && (
+                    <Button
+                      size="sm"
+                      onClick={() => sendMutation.mutate(broadcast.id)}
+                      disabled={sendMutation.isPending}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Send
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {broadcasts.length === 0 && (
+        {!isLoading && broadcasts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border bg-background">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
               <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="font-medium text-sm">No broadcasts yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create your first broadcast to get started
+              Send a one-off email to any segment
             </p>
+            <Button
+              size="sm"
+              className="mt-4"
+              onClick={() => setOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              New Broadcast
+            </Button>
           </div>
         )}
       </div>

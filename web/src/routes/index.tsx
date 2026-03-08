@@ -48,7 +48,7 @@ function Chip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-white/60",
+        "inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium text-white/60",
         className
       )}
     >
@@ -72,10 +72,10 @@ function FeatureCard({
   return (
     <div
       className={cn(
-        "group relative rounded-xl border p-5 transition-all duration-200",
+        "group relative rounded-xl border p-5 transition-colors duration-150",
         accent
           ? "border-violet-500/25 bg-violet-500/5 hover:border-violet-500/40 hover:bg-violet-500/8"
-          : "border-white/8 bg-white/[0.03] hover:border-white/14 hover:bg-white/[0.05]"
+          : "border-white/8 bg-white/5 hover:border-white/14 hover:bg-white/5"
       )}
     >
       <div
@@ -101,7 +101,7 @@ function DashboardMockup() {
 
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0e0e11] shadow-2xl shadow-black/50">
         {/* Window chrome */}
-        <div className="flex h-9 items-center gap-1.5 border-b border-white/8 bg-white/[0.03] px-4">
+        <div className="flex h-9 items-center gap-1.5 border-b border-white/8 bg-white/5 px-4">
           <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
           <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60" />
           <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
@@ -115,7 +115,7 @@ function DashboardMockup() {
         {/* App layout */}
         <div className="flex" style={{ height: 340 }}>
           {/* Sidebar */}
-          <div className="w-44 shrink-0 border-r border-white/8 bg-white/[0.02] p-3">
+          <div className="w-44 shrink-0 border-r border-white/8 bg-white/5 p-3">
             <div className="mb-3 flex items-center gap-2 px-1">
               <div className="h-5 w-5 rounded bg-white/90" />
               <div className="h-3 w-16 rounded bg-white/60" />
@@ -152,7 +152,7 @@ function DashboardMockup() {
               ].map(({ v, label }) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-white/8 bg-white/[0.04] p-2.5"
+                  className="rounded-lg border border-white/8 bg-white/5 p-2.5"
                 >
                   <div className="mb-1 text-[11px] text-white/35">{label}</div>
                   <div className="text-sm font-semibold text-white/80">{v}</div>
@@ -160,7 +160,7 @@ function DashboardMockup() {
               ))}
             </div>
             {/* Activity feed */}
-            <div className="rounded-lg border border-white/8 bg-white/[0.04]">
+            <div className="rounded-lg border border-white/8 bg-white/5">
               <div className="flex items-center justify-between border-b border-white/8 px-3 py-2">
                 <div className="h-2.5 w-20 rounded bg-white/40" />
                 <div className="flex items-center gap-1.5">
@@ -238,7 +238,7 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 transition-all hover:bg-white/8 hover:text-white sm:flex"
+              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex"
             >
               <Star className="h-3 w-3" />
               {stars != null ? stars.toLocaleString() : "Star"}
@@ -255,14 +255,14 @@ function LandingPage() {
 
       {/* ── Hero ─────────────────────────────────────────────────────────────── */}
       <section className="relative mx-auto max-w-6xl px-6 pt-20 pb-4 text-center">
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
           <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-          <span className="text-[11px] font-medium text-white/60">
+          <span className="text-xs font-medium text-white/60">
             Open source · ELv2 License
           </span>
         </div>
 
-        <h1 className="mx-auto max-w-3xl text-5xl font-bold leading-[1.08] tracking-tight md:text-6xl lg:text-[68px]">
+        <h1 className="mx-auto max-w-3xl text-5xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl">
           The open&#8209;source{" "}
           <span className="bg-gradient-to-br from-violet-300 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
             Customer.io
@@ -288,7 +288,7 @@ function LandingPage() {
             href={GITHUB_REPO}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white/70 transition-all hover:bg-white/8 hover:text-white"
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           >
             <Github className="h-4 w-4" />
             View on GitHub
@@ -316,8 +316,8 @@ function LandingPage() {
             Everything Customer.io has. Nothing you don't need.
           </h2>
 
-          <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
-            <div className="grid grid-cols-3 border-b border-white/8 bg-white/[0.03] px-5 py-2.5">
+          <div className="overflow-hidden rounded-xl border border-white/8 bg-white/5">
+            <div className="grid grid-cols-3 border-b border-white/8 bg-white/5 px-5 py-2.5">
               <span className="text-xs font-medium text-white/35">Feature</span>
               <span className="text-center text-xs font-semibold text-white">OpenMail</span>
               <span className="text-center text-xs font-medium text-white/35">Customer.io</span>
@@ -531,7 +531,7 @@ function LandingPage() {
 
         <div className="mx-auto grid max-w-2xl gap-4 md:grid-cols-2">
           {/* Self-hosted */}
-          <div className="flex flex-col rounded-xl border border-white/8 bg-white/[0.03] p-7">
+          <div className="flex flex-col rounded-xl border border-white/8 bg-white/5 p-7">
             <p className="mb-1 text-xs font-medium uppercase tracking-wider text-white/40">
               Self-hosted
             </p>
@@ -555,7 +555,7 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-medium text-white/60 transition-all hover:bg-white/5 hover:text-white cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-lg border border-white/10 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
             >
               <Github className="h-4 w-4" />
               Clone on GitHub
@@ -596,7 +596,7 @@ function LandingPage() {
 
       {/* ── CTA ─────────────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-6 pb-28 text-center">
-        <div className="relative overflow-hidden rounded-xl border border-white/8 bg-white/[0.03] px-8 py-16">
+        <div className="relative overflow-hidden rounded-xl border border-white/8 bg-white/5 px-8 py-16">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-gradient-to-b from-violet-600/5 to-transparent"
@@ -618,7 +618,7 @@ function LandingPage() {
             </Link>
             <a
               href="mailto:kai@1flow.ai"
-              className="flex items-center gap-2 rounded-lg border border-white/10 px-6 py-2.5 text-sm font-semibold text-white/60 transition-all hover:bg-white/5 hover:text-white"
+              className="flex items-center gap-2 rounded-lg border border-white/10 px-6 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
             >
               Talk to us
             </a>
