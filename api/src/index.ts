@@ -31,10 +31,13 @@ app.use("*", honoLogger());
 
 app.get("/health", (c) => c.json({ status: "ok", service: "api" }));
 
-app.all("/auth/*", async (c) => {
+// Handle both /auth/* and /api/auth/* (Better Auth default base path)
+const authHandler = async (c: any) => {
   const { getAuth } = await import("./lib/auth.js");
   return getAuth().handler(c.req.raw);
-});
+};
+app.all("/auth/*", authHandler);
+app.all("/api/auth/*", authHandler);
 
 const sessionApi = new Hono<{ Variables: ApiVariables }>();
 sessionApi.use("*", sessionAuth);
