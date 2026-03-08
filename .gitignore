@@ -12,3 +12,4 @@ dist/
 *.tsbuildinfo
 .DS_Store
 packages/shared/.env
+web/.tanstack/
