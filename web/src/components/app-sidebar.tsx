@@ -11,7 +11,7 @@ import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import {
   Sidebar,
@@ -37,41 +37,70 @@ const NAV_ITEMS = [
   { to: "/settings",   icon: Settings,         label: "Settings" },
 ] as const;
 
-// ── Expand button (visible on sidebar hover when collapsed) ──────────────────
-function ExpandButton() {
-  const { toggleSidebar, state } = useSidebar();
-  if (state !== "collapsed") return null;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
-          className="hidden group-hover/sidebar:flex items-center justify-center h-7 w-7 rounded-md bg-sidebar-accent text-sidebar-foreground cursor-pointer hover:bg-sidebar-accent/80 transition-colors shrink-0"
-        >
-          <PanelLeftOpen className="h-4 w-4" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right" align="center">Expand sidebar</TooltipContent>
-    </Tooltip>
-  );
-}
+// ── Sidebar header row — handles all logo/toggle states via React ─────────────
+function SidebarHeaderRow() {
+  const { state, toggleSidebar } = useSidebar();
+  const collapsed = state === "collapsed";
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-// ── Collapse toggle (visible in header when expanded) ───────────────────────
-function CollapseToggle() {
-  const { toggleSidebar, state } = useSidebar();
-  if (state !== "expanded") return null;
+  const LogoMark = () => (
+    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
+      <Mail className="h-3 w-3 text-sidebar" />
+    </div>
+  );
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          onClick={toggleSidebar}
-          className="h-7 w-7 flex items-center justify-center rounded-md text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer shrink-0"
-        >
-          <PanelLeftOpen className="h-4 w-4 rotate-180" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="right">Collapse sidebar <kbd className="ml-1 font-mono text-[10px] opacity-60">⌘B</kbd></TooltipContent>
-    </Tooltip>
+    <div
+      ref={ref}
+      className="flex h-11 items-center gap-2 px-2 border-b border-sidebar-border"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {collapsed ? (
+        // Collapsed: mail icon at rest, expand button on hover — never both
+        <div className="flex w-full items-center justify-center">
+          {hovered ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggleSidebar}
+                  className="flex items-center justify-center h-7 w-7 rounded-md bg-sidebar-accent text-sidebar-foreground cursor-pointer hover:bg-sidebar-accent/80 transition-colors"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Expand sidebar</TooltipContent>
+            </Tooltip>
+          ) : (
+            <LogoMark />
+          )}
+        </div>
+      ) : (
+        // Expanded: logo + name on left, collapse button on right
+        <>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <LogoMark />
+            <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground truncate">
+              OpenMail
+            </span>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={toggleSidebar}
+                className="h-7 w-7 flex items-center justify-center rounded-md text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer shrink-0"
+              >
+                <PanelLeftOpen className="h-4 w-4 rotate-180" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Collapse sidebar <kbd className="ml-1 font-mono text-[10px] opacity-60">⌘B</kbd>
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -280,25 +309,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border group/sidebar">
       {/* Header — logo + workspace switcher */}
       <SidebarHeader className="pb-0 gap-0">
-        {/* Logo row */}
-        <div className="flex h-11 items-center gap-2 px-2 border-b border-sidebar-border mb-0">
-          <ExpandButton />
-          <div className="group-data-[state=expanded]:flex hidden items-center gap-2 flex-1 min-w-0">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
-              <Mail className="h-3 w-3 text-sidebar" />
-            </div>
-            <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground truncate">
-              OpenMail
-            </span>
-          </div>
-          {/* Icon-only logo when collapsed (shown when NOT hovering) */}
-          <div className="group-data-[state=collapsed]:flex hidden group-hover/sidebar:hidden items-center justify-center w-7 h-7">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
-              <Mail className="h-3 w-3 text-sidebar" />
-            </div>
-          </div>
-          <CollapseToggle />
-        </div>
+        <SidebarHeaderRow />
 
         {/* Workspace switcher */}
         <div className="px-0 py-1 border-b border-sidebar-border">

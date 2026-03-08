@@ -118,7 +118,7 @@ function DashboardPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-7">
+    <div className="px-8 py-7 w-full">
       {/* ── Header ── */}
       <div className="mb-6 flex items-center justify-between">
         <div>

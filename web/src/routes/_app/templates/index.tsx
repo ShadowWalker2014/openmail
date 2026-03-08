@@ -124,7 +124,7 @@ function TemplatesPage() {
   const dialogOpen = open || !!editTemplate;
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-7">
+    <div className="px-8 py-7 w-full">
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div>

@@ -590,7 +590,7 @@ function SettingsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-7">
+    <div className="mx-auto max-w-2xl px-8 py-7">
       <div className="mb-6">
         <h1 className="text-[15px] font-semibold tracking-tight text-foreground">Settings</h1>
         <p className="mt-0.5 text-[12px] text-muted-foreground">Workspace configuration</p>
