@@ -16,6 +16,30 @@ services:
       timeout: 5s
       retries: 5
 
+  pgbouncer:
+    image: bitnami/pgbouncer:1.23.1
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: openmail
+      POSTGRESQL_USERNAME: openmail
+      POSTGRESQL_PASSWORD: openmail_password
+      PGBOUNCER_PORT: 5432
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: 1000
+      PGBOUNCER_DEFAULT_POOL_SIZE: 25
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
+      PGBOUNCER_AUTH_TYPE: scram-sha-256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U openmail"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -35,7 +59,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:5432/openmail
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-me-to-a-random-32-char-secret}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
@@ -43,7 +67,7 @@ services:
       WEB_URL: ${WEB_URL:-http://localhost:5173}
       PORT: 3001
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -54,14 +78,14 @@ services:
       dockerfile: worker/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:5432/openmail
       REDIS_URL: redis://redis:6379
       RESEND_API_KEY: ${RESEND_API_KEY}
       TRACKER_URL: ${TRACKER_URL:-http://tracker:3003}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@openmail.dev}
       DEFAULT_FROM_NAME: ${DEFAULT_FROM_NAME:-OpenMail}
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -74,10 +98,10 @@ services:
     ports:
       - "3003:3003"
     environment:
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:5432/openmail
       PORT: 3003
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
 
   mcp:
