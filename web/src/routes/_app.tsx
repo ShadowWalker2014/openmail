@@ -8,61 +8,83 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
+function SidebarSkeleton() {
+  return (
+    <div
+      className="flex h-screen w-[216px] shrink-0 flex-col sticky top-0"
+      style={{
+        background: "hsl(var(--sidebar-bg))",
+        borderRight: "1px solid hsl(var(--sidebar-border))",
+      }}
+    >
+      {/* Logo */}
+      <div
+        className="flex h-11 shrink-0 items-center gap-2 px-4"
+        style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
+      >
+        <div className="h-5 w-5 rounded-[5px] shimmer" />
+        <div className="h-3.5 w-20 rounded shimmer" />
+      </div>
+      {/* Workspace */}
+      <div
+        className="px-2 py-1.5"
+        style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
+      >
+        <div className="h-7 w-full rounded-md shimmer" />
+      </div>
+      {/* Nav */}
+      <div className="flex-1 p-2 space-y-px">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-[27px] w-full rounded-md shimmer opacity-60" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AppLayout() {
   const { data: session, isPending: sessionPending } = useSession();
   const router = useRouter();
 
-  // Only fetch workspaces once the session is confirmed — avoids a guaranteed
-  // 401 on every page load while Better Auth is still hydrating the session.
-  const { workspaces, isLoading: workspacesLoading, isError: workspacesError } = useWorkspaces({
-    enabled: !sessionPending && !!session,
-  });
+  const {
+    workspaces,
+    isLoading: workspacesLoading,
+    isError: workspacesError,
+  } = useWorkspaces({ enabled: !sessionPending && !!session });
 
-  // Redirect unauthenticated users — must be in useEffect to avoid render-time side effects
   useEffect(() => {
-    if (!sessionPending && !session) {
-      router.navigate({ to: "/login" });
-    }
+    if (!sessionPending && !session) router.navigate({ to: "/login" });
   }, [session, sessionPending, router]);
 
-  // No automatic onboarding redirect — default workspace is auto-created on signup.
-
-  // Show skeleton while the session or workspace list is loading
-  if (sessionPending || (!workspacesError && workspacesLoading && workspaces === undefined)) {
+  if (
+    sessionPending ||
+    (!workspacesError && workspacesLoading && workspaces === undefined)
+  ) {
     return (
-      <div className="flex h-screen">
-        <div className="flex h-screen w-[220px] shrink-0 flex-col border-r bg-[hsl(var(--sidebar-bg))]">
-          <div className="flex h-12 items-center gap-2 px-4 border-b border-[hsl(var(--sidebar-border))]">
-            <div className="h-6 w-6 rounded-md bg-muted shimmer" />
-            <div className="h-4 w-20 rounded bg-muted shimmer" />
-          </div>
-          <div className="p-3 border-b border-[hsl(var(--sidebar-border))]">
-            <div className="h-8 w-full rounded-md bg-muted shimmer" />
-          </div>
-          <div className="flex-1 p-2 space-y-1">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-8 w-full rounded-md bg-muted shimmer" />
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 bg-[hsl(var(--app-bg))]" />
+      <div className="flex h-screen" style={{ background: "hsl(var(--app-bg))" }}>
+        <SidebarSkeleton />
+        <div className="flex-1" style={{ background: "hsl(var(--app-bg))" }} />
       </div>
     );
   }
 
   if (!session) return null;
 
-  // Workspace fetch failed — show a minimal error so the user can refresh
   if (workspacesError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[hsl(var(--app-bg))]">
+      <div
+        className="flex h-screen items-center justify-center"
+        style={{ background: "hsl(var(--app-bg))" }}
+      >
         <div className="text-center">
-          <p className="text-sm font-medium">Failed to load workspaces</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-[13px] font-medium text-foreground">
+            Failed to load workspaces
+          </p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
             Check your connection and{" "}
             <button
               onClick={() => window.location.reload()}
-              className="underline hover:no-underline cursor-pointer"
+              className="text-foreground/70 hover:text-foreground underline cursor-pointer"
             >
               refresh
             </button>
@@ -73,9 +95,12 @@ function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-[hsl(var(--app-bg))]">
+    <div
+      className="flex h-screen"
+      style={{ background: "hsl(var(--app-bg))" }}
+    >
       <AppSidebar />
-      <main className="flex-1 overflow-auto animate-in fade-in duration-200">
+      <main className="flex-1 overflow-auto animate-in fade-in duration-150">
         <Outlet />
       </main>
     </div>

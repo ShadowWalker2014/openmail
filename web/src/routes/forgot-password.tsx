@@ -23,7 +23,6 @@ function ForgotPasswordPage() {
     setLoading(true);
 
     const email = emailRef.current!.value.trim();
-
     const { error } = await requestPasswordReset({
       email,
       redirectTo: `${window.location.origin}/reset-password`,
@@ -32,64 +31,74 @@ function ForgotPasswordPage() {
     setLoading(false);
 
     if (error) {
-      const msg = typeof error === "object" && "message" in error
-        ? String(error.message)
-        : "Something went wrong. Please try again.";
+      const msg =
+        typeof error === "object" && "message" in error
+          ? String(error.message)
+          : "Something went wrong. Please try again.";
       setFieldError(msg);
       toast.error(msg);
       return;
     }
-
     setSent(true);
   }
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--app-bg))] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Back */}
-        <div className="mb-8">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: "hsl(var(--background))" }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
+        <div className="absolute left-1/2 top-0 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-violet-600/6 blur-[90px]" />
+      </div>
+
+      <div className="relative w-full max-w-[340px]">
+        <div className="mb-7">
           <Link
             to="/login"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-3 w-3" />
             Back to sign in
           </Link>
         </div>
 
-        {/* Logo + heading */}
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border bg-background">
-            <Mail className="h-5 w-5" />
+        <div className="mb-6">
+          <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-[7px] border border-border bg-muted">
+            <Mail className="h-4 w-4 text-foreground/80" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-[15px] font-semibold tracking-tight text-foreground">
             {sent ? "Check your email" : "Forgot password?"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             {sent
-              ? "We've sent a password reset link to your email."
+              ? "We've sent a password reset link."
               : "Enter your email and we'll send you a reset link."}
           </p>
         </div>
 
         {sent ? (
-          <div className="rounded-lg border bg-background p-6 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+          <div className="rounded-lg border border-border bg-card p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/12 border border-emerald-500/20">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              </div>
+              <p className="text-[13px] text-foreground/80">
+                If{" "}
+                <span className="font-medium text-foreground">
+                  {emailRef.current?.value}
+                </span>{" "}
+                exists, you'll receive a link shortly.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              If an account exists for{" "}
-              <span className="font-medium text-foreground">
-                {emailRef.current?.value}
-              </span>
-              , you'll receive a reset link shortly.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Didn't get the email? Check your spam folder or{" "}
+            <p className="text-[11px] text-muted-foreground">
+              Didn't get it? Check spam or{" "}
               <button
                 type="button"
                 onClick={() => setSent(false)}
-                className="font-medium text-foreground hover:underline cursor-pointer"
+                className="text-foreground/70 hover:text-foreground transition-colors cursor-pointer"
               >
                 try again
               </button>
@@ -97,8 +106,8 @@ function ForgotPasswordPage() {
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border bg-background p-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-3.5">
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email address</Label>
                 <Input
@@ -114,12 +123,12 @@ function ForgotPasswordPage() {
               </div>
 
               {fieldError && (
-                <div className="animate-in fade-in slide-in-from-top-1 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive duration-150">
+                <div className="rounded-md border border-destructive/20 bg-destructive/8 px-3 py-2 text-[12px] text-destructive">
                   {fieldError}
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full mt-1" disabled={loading}>
                 {loading ? "Sending…" : "Send reset link"}
               </Button>
             </form>

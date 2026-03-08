@@ -124,12 +124,12 @@ function TemplatesPage() {
   const dialogOpen = open || !!editTemplate;
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
       <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Templates</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-[15px] font-semibold tracking-tight">Templates</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             Reusable email templates
           </p>
         </div>
@@ -211,7 +211,7 @@ function TemplatesPage() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {isLoading &&
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-lg border bg-background p-4">
+            <div key={i} className="rounded-lg border border-border bg-card p-4">
               <div className="mb-2 h-4 w-32 rounded shimmer" />
               <div className="h-3.5 w-48 rounded shimmer" />
               <div className="mt-4 h-3 w-20 rounded shimmer" />
@@ -222,12 +222,12 @@ function TemplatesPage() {
           templates.map((tmpl) => (
             <div
               key={tmpl.id}
-              className="group rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-sm">{tmpl.name}</p>
-                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {tmpl.subject}
                   </p>
                 </div>
@@ -256,11 +256,11 @@ function TemplatesPage() {
 
         {!isLoading && templates.length === 0 && (
           <div className="col-span-2 flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <FileText className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="font-medium text-sm">No templates yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-[13px] font-medium">No templates yet</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Create a reusable HTML email template
             </p>
             <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>

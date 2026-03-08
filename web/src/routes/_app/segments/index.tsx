@@ -130,7 +130,7 @@ function ConditionRow({
         <select
           value={condition.field}
           onChange={(e) => handleFieldChange(e.target.value)}
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+          className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
           {FIELD_OPTIONS.map((f) => (
             <option key={f.value} value={f.value}>
@@ -150,7 +150,7 @@ function ConditionRow({
                 : condition.value ?? "",
             })
           }
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+          className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
           {operators.map((o) => (
             <option key={o.value} value={o.value}>
@@ -164,7 +164,7 @@ function ConditionRow({
             <select
               value={condition.value ?? ""}
               onChange={(e) => onChange({ ...condition, value: e.target.value })}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+              className="h-8 rounded-md border border-border bg-input px-3 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
             >
               {valueOptions.map((v) => (
                 <option key={v.value} value={v.value}>
@@ -299,12 +299,12 @@ function SegmentsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
       <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Segments</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-[15px] font-semibold tracking-tight">Segments</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             Dynamic contact groups for targeting broadcasts and campaigns
           </p>
         </div>
@@ -318,7 +318,7 @@ function SegmentsPage() {
       <div className="space-y-2">
         {isLoading &&
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-lg border bg-background p-4">
+            <div key={i} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-2 flex-1">
                   <div className="h-4 w-36 rounded shimmer" />
@@ -333,16 +333,16 @@ function SegmentsPage() {
           segments.map((segment) => (
             <div
               key={segment.id}
-              className="group flex items-center gap-4 rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm">{segment.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="text-[13px] font-medium">{segment.name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {conditionSummary(segment.conditions, segment.conditionLogic)}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 mr-1">
+                <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 mr-1">
                   {segment.createdAt ? format(new Date(segment.createdAt), "MMM d") : ""}
                 </span>
                 <button
@@ -363,11 +363,11 @@ function SegmentsPage() {
 
         {!isLoading && segments.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Filter className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="font-medium text-sm">No segments yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-[13px] font-medium">No segments yet</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Create segments to target specific groups in broadcasts
             </p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>

@@ -108,7 +108,7 @@ function SendProgress({
 
 function BroadcastCardSkeleton() {
   return (
-    <div className="rounded-lg border bg-background p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2">
@@ -222,12 +222,12 @@ function BroadcastsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
       <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Broadcasts</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-[15px] font-semibold tracking-tight">Broadcasts</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             One-off email campaigns
           </p>
         </div>
@@ -275,7 +275,7 @@ function BroadcastsPage() {
               <div className="space-y-1.5">
                 <Label>Segments *</Label>
                 {segments.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-dashed px-4 py-3 text-[12px] text-muted-foreground">
                     No segments yet.{" "}
                     <Link
                       to="/segments"
@@ -340,7 +340,7 @@ function BroadcastsPage() {
           broadcasts.map((broadcast) => (
             <div
               key={broadcast.id}
-              className="group rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -352,7 +352,7 @@ function BroadcastsPage() {
                       {broadcast.status}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                     {broadcast.subject}
                   </p>
                   {(broadcast.status === "sent" || broadcast.status === "sending") && (
@@ -374,7 +374,7 @@ function BroadcastsPage() {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                  <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                   {broadcast.created_at ? format(new Date(broadcast.created_at), "MMM d") : ""}
                 </span>
                   {broadcast.status === "draft" && (
@@ -402,11 +402,11 @@ function BroadcastsPage() {
 
         {!isLoading && broadcasts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Mail className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="font-medium text-sm">No broadcasts yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-[13px] font-medium">No broadcasts yet</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Send a one-off email to any audience segment
             </p>
             <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>

@@ -87,7 +87,7 @@ function DashboardMockup() {
   return (
     <div className="relative mx-auto mt-16 max-w-4xl">
       <div className="absolute inset-x-0 -bottom-10 h-32 bg-gradient-to-t from-violet-600/10 to-transparent blur-xl" />
-        <div style={{ borderColor: "rgba(255,255,255,0.1)" }} className="relative overflow-hidden rounded-xl border bg-[#0e0e11] shadow-2xl shadow-black/50">
+        <div style={{ borderColor: "rgba(255,255,255,0.1)" }} className="relative overflow-hidden rounded-xl border bg-card shadow-2xl shadow-black/50">
         {/* Window chrome */}
         <div style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.05)" }} className="flex h-9 items-center gap-1.5 border-b px-4">
           <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
@@ -176,7 +176,7 @@ function LandingPage() {
   const { data: stars } = useGitHubStars();
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-white antialiased selection:bg-violet-500/25">
+    <div className="min-h-screen text-white antialiased selection:bg-violet-500/25" style={{ background: "hsl(var(--background))" }}>
       {/* Ambient glows */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/4 rounded-full bg-violet-600/8 blur-[100px]" />
@@ -184,7 +184,7 @@ function LandingPage() {
       </div>
 
       {/* ── Nav ── */}
-      <header style={{ borderColor: "rgba(255,255,255,0.06)" }} className="sticky top-0 z-50 border-b bg-[#08080a]/80 backdrop-blur-xl">
+      <header style={{ borderColor: "rgba(255,255,255,0.06)", background: "hsl(var(--background) / 0.85)" }} className="sticky top-0 z-50 border-b backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
@@ -441,7 +441,7 @@ function LandingPage() {
                 <Terminal className="h-3.5 w-3.5" />
                 <span>Connect in 30 seconds</span>
               </div>
-              <div style={{ borderColor: "rgba(255,255,255,0.08)" }} className="overflow-x-auto rounded-xl border bg-[#0c0c0f] p-5 shadow-inner">
+              <div style={{ borderColor: "rgba(255,255,255,0.08)" }} className="overflow-x-auto rounded-xl border bg-card p-5 shadow-inner">
                 <pre className="text-xs leading-relaxed">
                   <span className="text-cyan-400">{"{"}</span>
                   {"\n  "}

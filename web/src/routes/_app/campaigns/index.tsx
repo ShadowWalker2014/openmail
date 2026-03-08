@@ -47,7 +47,7 @@ interface Campaign {
 
 const STATUS_BADGE: Record<
   string,
-  "default" | "success" | "warning" | "secondary"
+  "default" | "success" | "warning" | "secondary" | "violet"
 > = {
   draft: "secondary",
   active: "success",
@@ -63,7 +63,7 @@ function getEventName(config: Record<string, unknown>): string {
 
 function CampaignCardSkeleton() {
   return (
-    <div className="flex items-center gap-4 rounded-lg border bg-background p-4">
+    <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
       <div className="flex-1 space-y-2">
         <div className="flex items-center gap-2">
           <div className="h-4 w-28 rounded shimmer" />
@@ -152,12 +152,12 @@ function CampaignsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-7">
       {/* Header */}
       <div className="mb-7 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Campaigns</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-[15px] font-semibold tracking-tight">Campaigns</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             Automated email sequences
           </p>
         </div>
@@ -260,7 +260,7 @@ function CampaignsPage() {
           campaigns.map((campaign) => (
             <div
               key={campaign.id}
-              className="group flex items-center gap-4 rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -269,14 +269,14 @@ function CampaignsPage() {
                     {campaign.status}
                   </Badge>
                 </div>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                   {campaign.triggerType === "event"
                     ? `Trigger: ${getEventName(campaign.triggerConfig)}`
                     : `Trigger: ${campaign.triggerType}`}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                <span className="text-[11px] text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                   {campaign.createdAt ? format(new Date(campaign.createdAt), "MMM d") : ""}
                 </span>
                 {(campaign.status === "draft" || campaign.status === "paused") && (
@@ -319,11 +319,11 @@ function CampaignsPage() {
 
         {!isLoading && campaigns.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+            <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <Zap className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="font-medium text-sm">No campaigns yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-[13px] font-medium">No campaigns yet</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
               Automate emails triggered by user events
             </p>
             <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
