@@ -5,7 +5,7 @@ import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import type { DomainRecord } from "@/hooks/use-workspaces";
 import { authClient, useSession } from "@/lib/auth-client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -435,6 +435,53 @@ function SendingDomainPanel({
   );
 }
 
+// ── Settings side nav sections ────────────────────────────────────────────────
+
+const SETTINGS_SECTIONS = [
+  { id: "workspace",  label: "Workspace",      icon: Building2 },
+  { id: "team",       label: "Team Members",   icon: Users },
+  { id: "email",      label: "Email Sending",  icon: Mail },
+  { id: "domain",     label: "Sending Domain", icon: Globe },
+  { id: "account",    label: "Account",        icon: User },
+  { id: "api-keys",   label: "API Keys",       icon: Code2 },
+] as const;
+
+function SettingsSideNav({ active }: { active: string }) {
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <nav className="w-44 shrink-0">
+      <div className="sticky top-6">
+        <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">
+          Settings
+        </p>
+        <ul className="space-y-px">
+          {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => {
+            const isActive = active === id;
+            return (
+              <li key={id}>
+                <button
+                  onClick={() => scrollTo(id)}
+                  className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors duration-100 cursor-pointer text-left ${
+                    isActive
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground/60"}`} />
+                  {label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </nav>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────────────────────
 
 function SettingsPage() {
@@ -459,6 +506,27 @@ function SettingsPage() {
   const [accountName, setAccountName] = useState(session?.user?.name ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [activeSection, setActiveSection] = useState("workspace");
+
+  // Track which section is in view for the side nav
+  useEffect(() => {
+    const observers: IntersectionObserver[] = [];
+    const sectionMap = new Map<Element, string>();
+
+    SETTINGS_SECTIONS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => { if (entry.isIntersecting) setActiveSection(id); },
+        { rootMargin: "-20% 0px -70% 0px", threshold: 0 }
+      );
+      obs.observe(el);
+      sectionMap.set(el, id);
+      observers.push(obs);
+    });
+
+    return () => observers.forEach((obs) => obs.disconnect());
+  }, []);
 
   const { data: apiKeys = [], isLoading: keysLoading } = useQuery<ApiKey[]>({
     queryKey: ["api-keys", activeWorkspaceId],
@@ -590,15 +658,18 @@ function SettingsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-8 py-7">
-      <div className="mb-6">
+    <div className="px-8 py-7 w-full">
+      <div className="mb-7">
         <h1 className="text-[15px] font-semibold tracking-tight text-foreground">Settings</h1>
         <p className="mt-0.5 text-[12px] text-muted-foreground">Workspace configuration</p>
       </div>
 
-      <div className="space-y-3.5">
+      <div className="flex gap-10">
+        <SettingsSideNav active={activeSection} />
+
+        <div className="flex-1 min-w-0 max-w-2xl space-y-3.5">
         {/* ── Workspace ── */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div id="workspace" className="rounded-lg border border-border bg-card overflow-hidden">
           <SectionHeader icon={Building2} title="Workspace" description="Manage your workspace settings" />
           <div className="px-5 py-4">
             <div className="space-y-1.5">
@@ -624,7 +695,7 @@ function SettingsPage() {
         </div>
 
         {/* ── Team Members ── */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div id="team" className="rounded-lg border border-border bg-card overflow-hidden">
           <SectionHeader icon={Users} title="Team Members" description="Manage who has access to this workspace" />
           <div className="px-5 py-4 space-y-5">
             <div>
@@ -745,7 +816,7 @@ function SettingsPage() {
         </div>
 
         {/* ── Email Sending ── */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div id="email" className="rounded-lg border border-border bg-card overflow-hidden">
           <SectionHeader icon={Mail} title="Email Sending" description="Resend API key and sender identity" />
           <div className="px-5 py-4">
             <form
@@ -792,14 +863,14 @@ function SettingsPage() {
 
         {/* ── Sending Domain ── */}
         {activeWorkspaceId && (
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div id="domain" className="rounded-lg border border-border bg-card overflow-hidden">
             <SectionHeader icon={Globe} title="Sending Domain" description="Connect and verify a custom domain for sending emails" />
             <SendingDomainPanel workspaceId={activeWorkspaceId} activeWorkspace={activeWorkspace} />
           </div>
         )}
 
         {/* ── Account ── */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div id="account" className="rounded-lg border border-border bg-card overflow-hidden">
           <SectionHeader icon={User} title="Account" description="Manage your personal account settings" />
           <div className="px-5 py-4 space-y-5">
             <div className="space-y-3">
@@ -854,7 +925,7 @@ function SettingsPage() {
         </div>
 
         {/* ── API Keys ── */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div id="api-keys" className="rounded-lg border border-border bg-card overflow-hidden">
           <SectionHeader icon={Code2} title="API Keys" description="Authenticate API and MCP server requests with a workspace key" />
           <div className="px-5 py-4">
             {createdKey && (
@@ -929,7 +1000,8 @@ function SettingsPage() {
             </form>
           </div>
         </div>
-      </div>
+        </div>{/* end flex-1 content */}
+      </div>{/* end flex gap-10 */}
 
       {/* Remove member confirm */}
       <AlertDialog open={!!removeMember} onOpenChange={(o) => !o && setRemoveMember(null)}>
