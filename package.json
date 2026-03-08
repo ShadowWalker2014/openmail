@@ -10,6 +10,8 @@
     "web"
   ],
   "scripts": {
+    "dev": "concurrently --kill-others-on-fail --prefix-colors \"cyan,magenta,yellow,green\" --names \"api,web,worker,tracker\" \"bun --cwd api dev\" \"bun --cwd web dev\" \"bun --cwd worker dev\" \"bun --cwd tracker dev\"",
+    "dev:full": "concurrently --kill-others-on-fail --prefix-colors \"cyan,magenta,yellow,green,blue\" --names \"api,web,worker,tracker,mcp\" \"bun --cwd api dev\" \"bun --cwd web dev\" \"bun --cwd worker dev\" \"bun --cwd tracker dev\" \"bun --cwd mcp dev\"",
     "dev:api": "bun --cwd api dev",
     "dev:mcp": "bun --cwd mcp dev",
     "dev:worker": "bun --cwd worker dev",
@@ -20,6 +22,7 @@
     "db:studio": "bun --cwd packages/shared db:studio"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "pg": "^8.20.0"
   }
 }
