@@ -68,17 +68,18 @@ const FIELD_OPTIONS = [
   { value: "attributes.company", label: "Company" },
 ];
 
+// Canonical short-form operators — matches MCP and backend short-form standard.
 const DEFAULT_OPERATORS = [
-  { value: "equals", label: "is" },
-  { value: "not_equals", label: "is not" },
+  { value: "eq", label: "is" },
+  { value: "ne", label: "is not" },
   { value: "contains", label: "contains" },
   { value: "not_contains", label: "does not contain" },
-  { value: "is_set", label: "is set" },
-  { value: "is_not_set", label: "is not set" },
+  { value: "exists", label: "is set" },
+  { value: "not_exists", label: "is not set" },
 ];
 
 const BOOLEAN_OPERATORS = [
-  { value: "equals", label: "is" },
+  { value: "eq", label: "is" },
 ];
 
 const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
@@ -88,7 +89,19 @@ const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
-const NO_VALUE_OPERATORS = ["is_set", "is_not_set"];
+const NO_VALUE_OPERATORS = ["exists", "not_exists"];
+
+// Map legacy long-form operators (saved by older UI) to canonical short-form.
+const OPERATOR_ALIAS: Record<string, string> = {
+  equals: "eq",
+  not_equals: "ne",
+  is_set: "exists",
+  is_not_set: "not_exists",
+};
+
+function normalizeOperator(op: string): string {
+  return OPERATOR_ALIAS[op] ?? op;
+}
 
 function makeCondition(): Condition {
   return {
@@ -97,6 +110,10 @@ function makeCondition(): Condition {
     operator: "contains",
     value: "",
   };
+}
+
+function normalizeCondition(c: ApiCondition): ApiCondition {
+  return { ...c, operator: normalizeOperator(c.operator) };
 }
 
 const INITIAL_CONDITIONS: Condition[] = [makeCondition()];
@@ -122,7 +139,7 @@ function ConditionRow({
     onChange({
       ...condition,
       field,
-      operator: "equals",
+      operator: "eq",
       value: isBoolean ? "true" : "",
     });
   }
@@ -205,9 +222,10 @@ function ConditionRow({
 function conditionSummary(conditions: ApiCondition[], logic: "and" | "or"): string {
   if (!conditions?.length) return "No conditions";
   const parts = conditions.map((c) => {
+    const normalized = normalizeOperator(c.operator);
     const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;
-    const op = DEFAULT_OPERATORS.find((o) => o.value === c.operator)?.label ?? c.operator;
-    return NO_VALUE_OPERATORS.includes(c.operator)
+    const op = DEFAULT_OPERATORS.find((o) => o.value === normalized)?.label ?? normalized;
+    return NO_VALUE_OPERATORS.includes(normalized)
       ? `${field} ${op}`
       : `${field} ${op} "${c.value}"`;
   });
@@ -238,8 +256,8 @@ function SegmentsPage() {
     setName(segment.name);
     setDescription(segment.description ?? "");
     setConditionLogic(segment.conditionLogic);
-    // Hydrate conditions with local IDs for React reconciliation
-    setConditions(segment.conditions.map((c) => ({ ...c, id: crypto.randomUUID() })));
+    // Hydrate conditions — normalize stored operators to canonical short-form
+    setConditions(segment.conditions.map((c) => ({ ...normalizeCondition(c), id: crypto.randomUUID() })));
     setEditTarget(segment);
     setCreateOpen(true);
   }
