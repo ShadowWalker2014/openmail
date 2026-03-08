@@ -9,7 +9,8 @@ import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
-// Safe subset of workspace columns to return — never expose resendApiKey
+// Safe subset of workspace columns — never expose resendApiKey (the private key)
+// Domain info (name, status, records) is safe to expose for settings display
 const SAFE_WORKSPACE_COLUMNS = {
   id: workspaces.id,
   name: workspaces.name,
@@ -17,6 +18,9 @@ const SAFE_WORKSPACE_COLUMNS = {
   plan: workspaces.plan,
   resendFromEmail: workspaces.resendFromEmail,
   resendFromName: workspaces.resendFromName,
+  resendDomainName: workspaces.resendDomainName,
+  resendDomainStatus: workspaces.resendDomainStatus,
+  resendDomainRecords: workspaces.resendDomainRecords,
   createdAt: workspaces.createdAt,
   updatedAt: workspaces.updatedAt,
 } as const;
