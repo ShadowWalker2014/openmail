@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
+import { Route as AppSegmentsIndexRouteImport } from './routes/_app/segments/index'
 import { Route as AppOnboardingIndexRouteImport } from './routes/_app/onboarding/index'
 import { Route as AppDashboardIndexRouteImport } from './routes/_app/dashboard/index'
 import { Route as AppContactsIndexRouteImport } from './routes/_app/contacts/index'
@@ -42,6 +43,11 @@ const AppTemplatesIndexRoute = AppTemplatesIndexRouteImport.update({
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSegmentsIndexRoute = AppSegmentsIndexRouteImport.update({
+  id: '/segments/',
+  path: '/segments/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOnboardingIndexRoute = AppOnboardingIndexRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/contacts/': typeof AppContactsIndexRoute
   '/dashboard/': typeof AppDashboardIndexRoute
   '/onboarding/': typeof AppOnboardingIndexRoute
+  '/segments/': typeof AppSegmentsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/templates/': typeof AppTemplatesIndexRoute
 }
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof AppContactsIndexRoute
   '/dashboard': typeof AppDashboardIndexRoute
   '/onboarding': typeof AppOnboardingIndexRoute
+  '/segments': typeof AppSegmentsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/templates': typeof AppTemplatesIndexRoute
 }
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/_app/contacts/': typeof AppContactsIndexRoute
   '/_app/dashboard/': typeof AppDashboardIndexRoute
   '/_app/onboarding/': typeof AppOnboardingIndexRoute
+  '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/templates/': typeof AppTemplatesIndexRoute
 }
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/contacts/'
     | '/dashboard/'
     | '/onboarding/'
+    | '/segments/'
     | '/settings/'
     | '/templates/'
   fileRoutesByTo: FileRoutesByTo
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/onboarding'
+    | '/segments'
     | '/settings'
     | '/templates'
   id:
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/_app/contacts/'
     | '/_app/dashboard/'
     | '/_app/onboarding/'
+    | '/_app/segments/'
     | '/_app/settings/'
     | '/_app/templates/'
   fileRoutesById: FileRoutesById
@@ -185,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/segments/': {
+      id: '/_app/segments/'
+      path: '/segments'
+      fullPath: '/segments/'
+      preLoaderRoute: typeof AppSegmentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/onboarding/': {
       id: '/_app/onboarding/'
       path: '/onboarding'
@@ -229,6 +248,7 @@ interface AppRouteChildren {
   AppContactsIndexRoute: typeof AppContactsIndexRoute
   AppDashboardIndexRoute: typeof AppDashboardIndexRoute
   AppOnboardingIndexRoute: typeof AppOnboardingIndexRoute
+  AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
   AppTemplatesIndexRoute: typeof AppTemplatesIndexRoute
 }
@@ -239,6 +259,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppContactsIndexRoute: AppContactsIndexRoute,
   AppDashboardIndexRoute: AppDashboardIndexRoute,
   AppOnboardingIndexRoute: AppOnboardingIndexRoute,
+  AppSegmentsIndexRoute: AppSegmentsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
   AppTemplatesIndexRoute: AppTemplatesIndexRoute,
 }

@@ -144,7 +144,8 @@ function TemplatesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-xl">
+        {/* key forces full remount when switching between templates so defaultValue re-populates */}
+        <DialogContent key={editTemplate?.id ?? "new"} className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {editTemplate ? "Edit Template" : "New Template"}

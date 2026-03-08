@@ -1,16 +1,31 @@
 import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useSession } from "@/lib/auth-client";
+import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
 function AppLayout() {
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending: sessionPending } = useSession();
   const router = useRouter();
+  const { workspaces, isLoading: workspacesLoading } = useWorkspaces();
 
-  if (isPending) {
+  // Redirect to onboarding if authenticated but has no workspaces
+  useEffect(() => {
+    if (
+      session &&
+      !workspacesLoading &&
+      workspaces !== undefined &&
+      workspaces.length === 0
+    ) {
+      router.navigate({ to: "/onboarding" });
+    }
+  }, [session, workspaces, workspacesLoading, router]);
+
+  if (sessionPending) {
     return (
       <div className="flex h-screen">
         {/* Sidebar skeleton */}
@@ -28,7 +43,6 @@ function AppLayout() {
             ))}
           </div>
         </div>
-        {/* Content skeleton */}
         <div className="flex-1 bg-[hsl(var(--app-bg))]" />
       </div>
     );

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,18 +47,25 @@ function ContactsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const firstNameRef = useRef<HTMLInputElement>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
 
+  // Debounce search input — prevents a request on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data, isLoading } = useQuery<{ data: Contact[]; total: number }>({
-    queryKey: ["contacts", activeWorkspaceId, search],
+    queryKey: ["contacts", activeWorkspaceId, debouncedSearch],
     queryFn: () =>
       sessionFetch(
         activeWorkspaceId!,
-        `/contacts?search=${encodeURIComponent(search)}`
+        `/contacts?search=${encodeURIComponent(debouncedSearch)}`
       ),
     enabled: !!activeWorkspaceId,
   });
@@ -72,6 +79,10 @@ function ContactsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["contacts", activeWorkspaceId] });
       setOpen(false);
+      // Reset form fields
+      if (emailRef.current) emailRef.current.value = "";
+      if (firstNameRef.current) firstNameRef.current.value = "";
+      if (lastNameRef.current) lastNameRef.current.value = "";
       toast.success("Contact added");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -122,7 +133,12 @@ function ContactsPage() {
             >
               <div className="space-y-1.5">
                 <Label>Email *</Label>
-                <Input ref={emailRef} type="email" required placeholder="name@company.com" />
+                <Input
+                  ref={emailRef}
+                  type="email"
+                  required
+                  placeholder="name@company.com"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -235,9 +251,13 @@ function ContactsPage() {
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border">
                       <Users className="h-5 w-5 text-muted-foreground" />
                     </div>
-                    <p className="text-sm font-medium">No contacts yet</p>
+                    <p className="text-sm font-medium">
+                      {debouncedSearch ? "No contacts found" : "No contacts yet"}
+                    </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Add contacts manually or via the REST API
+                      {debouncedSearch
+                        ? `No results for "${debouncedSearch}"`
+                        : "Add contacts manually or via the REST API"}
                     </p>
                   </div>
                 </td>
@@ -259,13 +279,15 @@ function ContactsPage() {
               <strong className="text-foreground font-medium">
                 {deleteContact?.email}
               </strong>{" "}
-              will be permanently deleted. This action cannot be undone.
+              will be permanently deleted along with all their event history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteContact && deleteMutation.mutate(deleteContact.id)}
+              onClick={() =>
+                deleteContact && deleteMutation.mutate(deleteContact.id)
+              }
             >
               Delete
             </AlertDialogAction>

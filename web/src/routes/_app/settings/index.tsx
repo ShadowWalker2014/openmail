@@ -159,6 +159,7 @@ function SettingsPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (!activeWorkspaceId) return;
               updateWorkspaceMutation.mutate({
                 resendApiKey: resendKeyRef.current!.value || undefined,
                 resendFromEmail: fromEmailRef.current!.value || undefined,

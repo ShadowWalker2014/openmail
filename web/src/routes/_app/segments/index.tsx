@@ -1,0 +1,485 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { sessionFetch } from "@/lib/api";
+import { useWorkspaceStore } from "@/store/workspace";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { Plus, Filter, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/_app/segments/")({
+  component: SegmentsPage,
+});
+
+interface Segment {
+  id: string;
+  name: string;
+  description: string | null;
+  conditions: Condition[];
+  conditionLogic: "and" | "or";
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Condition {
+  field: string;
+  operator: string;
+  value?: string;
+}
+
+const FIELD_OPTIONS = [
+  { value: "email", label: "Email" },
+  { value: "firstName", label: "First Name" },
+  { value: "lastName", label: "Last Name" },
+  { value: "unsubscribed", label: "Subscription Status" },
+  { value: "attributes.plan", label: "Plan" },
+  { value: "attributes.company", label: "Company" },
+];
+
+const OPERATOR_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  default: [
+    { value: "equals", label: "is" },
+    { value: "not_equals", label: "is not" },
+    { value: "contains", label: "contains" },
+    { value: "not_contains", label: "does not contain" },
+    { value: "is_set", label: "is set" },
+    { value: "is_not_set", label: "is not set" },
+  ],
+  unsubscribed: [
+    { value: "equals", label: "is" },
+  ],
+};
+
+const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  unsubscribed: [
+    { value: "true", label: "Unsubscribed" },
+    { value: "false", label: "Subscribed" },
+  ],
+};
+
+const NO_VALUE_OPERATORS = ["is_set", "is_not_set"];
+
+function ConditionRow({
+  condition,
+  index,
+  total,
+  onChange,
+  onRemove,
+}: {
+  condition: Condition;
+  index: number;
+  total: number;
+  onChange: (c: Condition) => void;
+  onRemove: () => void;
+}) {
+  const isUnsubscribed = condition.field === "unsubscribed";
+  const operators = OPERATOR_OPTIONS[isUnsubscribed ? "unsubscribed" : "default"];
+  const valueOptions = VALUE_OPTIONS[condition.field];
+  const showValue = !NO_VALUE_OPERATORS.includes(condition.operator);
+
+  return (
+    <div className="flex items-start gap-2">
+      <div className="grid flex-1 grid-cols-[1fr_auto_1fr] gap-2">
+        {/* Field */}
+        <select
+          value={condition.field}
+          onChange={(e) => {
+            const field = e.target.value;
+            const defaultOperator =
+              field === "unsubscribed" ? "equals" : "equals";
+            const defaultValue = field === "unsubscribed" ? "true" : "";
+            onChange({ field, operator: defaultOperator, value: defaultValue });
+          }}
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+        >
+          {FIELD_OPTIONS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Operator */}
+        <select
+          value={condition.operator}
+          onChange={(e) =>
+            onChange({ ...condition, operator: e.target.value, value: NO_VALUE_OPERATORS.includes(e.target.value) ? undefined : condition.value ?? "" })
+          }
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+        >
+          {operators.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Value */}
+        {showValue ? (
+          valueOptions ? (
+            <select
+              value={condition.value ?? ""}
+              onChange={(e) => onChange({ ...condition, value: e.target.value })}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+            >
+              {valueOptions.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              value={condition.value ?? ""}
+              onChange={(e) => onChange({ ...condition, value: e.target.value })}
+              placeholder="Value"
+            />
+          )
+        ) : (
+          <div className="h-9" />
+        )}
+      </div>
+
+      {total > 1 && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="mt-0.5 rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CreateSegmentDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [conditionLogic, setConditionLogic] = useState<"and" | "or">("and");
+  const [conditions, setConditions] = useState<Condition[]>([
+    { field: "email", operator: "contains", value: "" },
+  ]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(activeWorkspaceId!, "/segments", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          description: description || undefined,
+          conditions,
+          conditionLogic,
+        }),
+      }),
+    onSuccess: () => {
+      onSuccess();
+      onOpenChange(false);
+      setName("");
+      setDescription("");
+      setConditions([{ field: "email", operator: "contains", value: "" }]);
+      toast.success("Segment created");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    mutation.mutate();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>New Segment</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1.5">
+            <Label>Name *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Active paying customers"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Conditions *</Label>
+              {conditions.length > 1 && (
+                <div className="flex items-center gap-1 rounded-md border p-0.5">
+                  {(["and", "or"] as const).map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => setConditionLogic(l)}
+                      className={cn(
+                        "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+                        conditionLogic === l
+                          ? "bg-foreground text-background"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {l.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {conditions.map((cond, i) => (
+                <div key={i}>
+                  {i > 0 && (
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase">
+                        {conditionLogic}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <ConditionRow
+                    condition={cond}
+                    index={i}
+                    total={conditions.length}
+                    onChange={(updated) =>
+                      setConditions((cs) =>
+                        cs.map((c, idx) => (idx === i ? updated : c))
+                      )
+                    }
+                    onRemove={() =>
+                      setConditions((cs) => cs.filter((_, idx) => idx !== i))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setConditions((cs) => [
+                  ...cs,
+                  { field: "email", operator: "contains", value: "" },
+                ])
+              }
+              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add condition
+            </button>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending || !name.trim()}>
+              {mutation.isPending ? "Creating…" : "Create Segment"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function conditionSummary(conditions: Condition[], logic: "and" | "or"): string {
+  if (!conditions.length) return "No conditions";
+  const parts = conditions.map((c) => {
+    const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;
+    const op = OPERATOR_OPTIONS.default.find((o) => o.value === c.operator)?.label ?? c.operator;
+    return NO_VALUE_OPERATORS.includes(c.operator)
+      ? `${field} ${op}`
+      : `${field} ${op} "${c.value}"`;
+  });
+  return parts.join(` ${logic.toUpperCase()} `);
+}
+
+function SegmentsPage() {
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Segment | null>(null);
+
+  const { data: segments = [], isLoading } = useQuery<Segment[]>({
+    queryKey: ["segments", activeWorkspaceId],
+    queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
+    enabled: !!activeWorkspaceId,
+  });
+
+  // Note: The API doesn't have a DELETE /segments/:id endpoint yet.
+  // This mutation will fail gracefully with a toast error.
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      sessionFetch(activeWorkspaceId!, `/segments/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["segments", activeWorkspaceId] });
+      setDeleteTarget(null);
+      toast.success("Segment deleted");
+    },
+    onError: () => {
+      setDeleteTarget(null);
+      toast.error("Segment deletion is not available yet");
+    },
+  });
+
+  return (
+    <div className="mx-auto max-w-5xl px-8 py-8">
+      {/* Header */}
+      <div className="mb-7 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Segments</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Dynamic contact groups for targeting broadcasts and campaigns
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          New Segment
+        </Button>
+      </div>
+
+      {/* List */}
+      <div className="space-y-2">
+        {isLoading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-lg border bg-background p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2 flex-1">
+                  <div className="h-4 w-36 rounded shimmer" />
+                  <div className="h-3.5 w-64 rounded shimmer" />
+                </div>
+                <div className="h-3.5 w-16 rounded shimmer" />
+              </div>
+            </div>
+          ))}
+
+        {!isLoading &&
+          segments.map((segment) => (
+            <div
+              key={segment.id}
+              className="group flex items-center gap-4 rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-sm">{segment.name}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {conditionSummary(segment.conditions, segment.conditionLogic)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                  {format(new Date(segment.createdAt), "MMM d")}
+                </span>
+                <button
+                  onClick={() => setDeleteTarget(segment)}
+                  className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+        {!isLoading && segments.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border bg-background">
+              <Filter className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-sm">No segments yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create segments to target specific groups of contacts in broadcasts
+            </p>
+            <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Segment
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Create dialog */}
+      <CreateSegmentDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={() =>
+          qc.invalidateQueries({ queryKey: ["segments", activeWorkspaceId] })
+        }
+      />
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete segment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteTarget?.name}
+              </strong>{" "}
+              will be permanently deleted. Broadcasts that used this segment will
+              not be affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

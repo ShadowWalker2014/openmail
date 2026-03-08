@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Check,
   LogOut,
+  Filter,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { useState, useRef, useEffect } from "react";
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/contacts", icon: Users, label: "Contacts" },
+  { to: "/segments", icon: Filter, label: "Segments" },
   { to: "/broadcasts", icon: Mail, label: "Broadcasts" },
   { to: "/campaigns", icon: Zap, label: "Campaigns" },
   { to: "/templates", icon: FileText, label: "Templates" },

@@ -15,11 +15,22 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Send, Mail, Zap } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { Plus, Send, Mail, Zap, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/broadcasts/")({
   component: BroadcastsPage,
@@ -36,6 +47,23 @@ interface Broadcast {
   click_count: number;
   sent_at: string | null;
   created_at: string;
+}
+
+// The REST API returns camelCase; ElectricSQL returns snake_case.
+// This normalizer handles both so mixing sources never breaks the UI.
+function normalizeBroadcast(b: Record<string, unknown>): Broadcast {
+  return {
+    id: b.id as string,
+    name: b.name as string,
+    subject: b.subject as string,
+    status: b.status as string,
+    recipient_count: ((b.recipient_count ?? b.recipientCount ?? 0) as number),
+    sent_count: ((b.sent_count ?? b.sentCount ?? 0) as number),
+    open_count: ((b.open_count ?? b.openCount ?? 0) as number),
+    click_count: ((b.click_count ?? b.clickCount ?? 0) as number),
+    sent_at: ((b.sent_at ?? b.sentAt ?? null) as string | null),
+    created_at: ((b.created_at ?? b.createdAt) as string),
+  };
 }
 
 const STATUS_BADGE: Record<
@@ -100,28 +128,31 @@ function BroadcastsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Broadcast | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const htmlRef = useRef<HTMLTextAreaElement>(null);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
 
-  const { data: liveBroadcasts, isLoading: electricLoading } =
-    useWorkspaceShape<Broadcast>("broadcasts");
-
-  const { data: apiBroadcasts = [], isLoading: apiLoading } = useQuery<Broadcast[]>({
+  // Always load from REST for reliable initial data
+  const { data: restBroadcasts = [], isLoading } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/broadcasts"),
-    enabled: !!activeWorkspaceId && electricLoading,
+    queryFn: () =>
+      sessionFetch<Record<string, unknown>[]>(activeWorkspaceId!, "/broadcasts").then(
+        (data) => data.map(normalizeBroadcast)
+      ),
+    enabled: !!activeWorkspaceId,
   });
 
-  const isLoading = electricLoading && apiLoading;
+  // Also subscribe to Electric for real-time progress updates
+  const { data: rawElectricBroadcasts } =
+    useWorkspaceShape<Record<string, unknown>>("broadcasts");
+  const electricBroadcasts = rawElectricBroadcasts?.map(normalizeBroadcast);
 
-  const broadcasts = (liveBroadcasts?.length ? liveBroadcasts : apiBroadcasts)
+  // Prefer Electric data (real-time) when available, fall back to REST
+  const broadcasts = (electricBroadcasts?.length ? electricBroadcasts : restBroadcasts)
     .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
@@ -139,6 +170,10 @@ function BroadcastsPage() {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
       setOpen(false);
       setSelectedSegmentIds([]);
+      // Reset form
+      if (nameRef.current) nameRef.current.value = "";
+      if (subjectRef.current) subjectRef.current.value = "";
+      if (htmlRef.current) htmlRef.current.value = "";
       toast.success("Broadcast created");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -146,13 +181,21 @@ function BroadcastsPage() {
 
   const sendMutation = useMutation({
     mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, {
-        method: "POST",
-        body: "{}",
-      }),
+      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
-      toast.success("Broadcast sending — watching live…");
+      toast.success("Sending — watch the progress bar update live");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
+      setDeleteTarget(null);
+      toast.success("Broadcast deleted");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -164,10 +207,16 @@ function BroadcastsPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Broadcasts</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            One-off email campaigns · live via ElectricSQL
+            One-off email campaigns
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) setSelectedSegmentIds([]);
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm">
               <Plus className="h-4 w-4" />
@@ -204,34 +253,43 @@ function BroadcastsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Segments *</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {segments.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      No segments yet — create one first
-                    </p>
-                  )}
-                  {segments.map((seg) => (
-                    <button
-                      key={seg.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedSegmentIds((ids) =>
-                          ids.includes(seg.id)
-                            ? ids.filter((id) => id !== seg.id)
-                            : [...ids, seg.id]
-                        )
-                      }
-                      className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer active:scale-95",
-                        selectedSegmentIds.includes(seg.id)
-                          ? "border-foreground bg-foreground text-background"
-                          : "border-border hover:bg-accent"
-                      )}
+                {segments.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                    No segments yet.{" "}
+                    <Link
+                      to="/segments"
+                      onClick={() => setOpen(false)}
+                      className="font-medium text-foreground hover:underline"
                     >
-                      {seg.name}
-                    </button>
-                  ))}
-                </div>
+                      Create a segment
+                    </Link>{" "}
+                    first.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {segments.map((seg) => (
+                      <button
+                        key={seg.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedSegmentIds((ids) =>
+                            ids.includes(seg.id)
+                              ? ids.filter((id) => id !== seg.id)
+                              : [...ids, seg.id]
+                          )
+                        }
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer active:scale-95",
+                          selectedSegmentIds.includes(seg.id)
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border hover:bg-accent"
+                        )}
+                      >
+                        {seg.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>HTML Content *</Label>
@@ -255,15 +313,13 @@ function BroadcastsPage() {
       {/* List */}
       <div className="space-y-2">
         {isLoading &&
-          Array.from({ length: 3 }).map((_, i) => (
-            <BroadcastCardSkeleton key={i} />
-          ))}
+          Array.from({ length: 3 }).map((_, i) => <BroadcastCardSkeleton key={i} />)}
 
         {!isLoading &&
           broadcasts.map((broadcast) => (
             <div
               key={broadcast.id}
-              className="rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
+              className="group rounded-lg border bg-background p-4 transition-colors duration-150 hover:bg-accent/30"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -278,8 +334,7 @@ function BroadcastsPage() {
                   <p className="mt-0.5 truncate text-sm text-muted-foreground">
                     {broadcast.subject}
                   </p>
-                  {(broadcast.status === "sent" ||
-                    broadcast.status === "sending") && (
+                  {(broadcast.status === "sent" || broadcast.status === "sending") && (
                     <p className="mt-1 text-xs text-muted-foreground tabular-nums">
                       {(broadcast.sent_count ?? 0).toLocaleString()} sent
                       {broadcast.open_count
@@ -297,19 +352,27 @@ function BroadcastsPage() {
                     />
                   )}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                     {format(new Date(broadcast.created_at), "MMM d")}
                   </span>
                   {broadcast.status === "draft" && (
-                    <Button
-                      size="sm"
-                      onClick={() => sendMutation.mutate(broadcast.id)}
-                      disabled={sendMutation.isPending}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      Send
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => sendMutation.mutate(broadcast.id)}
+                        disabled={sendMutation.isPending}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Send
+                      </Button>
+                      <button
+                        onClick={() => setDeleteTarget(broadcast)}
+                        className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -323,19 +386,41 @@ function BroadcastsPage() {
             </div>
             <p className="font-medium text-sm">No broadcasts yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Send a one-off email to any segment
+              Send a one-off email to any audience segment
             </p>
-            <Button
-              size="sm"
-              className="mt-4"
-              onClick={() => setOpen(true)}
-            >
+            <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4" />
               New Broadcast
             </Button>
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete broadcast?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteTarget?.name}
+              </strong>{" "}
+              will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
