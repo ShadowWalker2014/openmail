@@ -2,311 +2,333 @@ import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   LayoutDashboard, Users, Mail, Zap, FileText, Settings,
-  ChevronDown, Check, LogOut, Filter, Search,
+  Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown,
 } from "lucide-react";
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from "@/components/ui/tooltip";
+import type { ComponentType } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  SidebarSeparator,
+  useSidebar,
+} from "@/components/ui/sidebar";
 
 const NAV_ITEMS = [
-  { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard",  shortcut: "G D" },
-  { to: "/contacts",   icon: Users,            label: "Contacts",   shortcut: "G C" },
-  { to: "/segments",   icon: Filter,           label: "Segments",   shortcut: "G S" },
-  { to: "/broadcasts", icon: Mail,             label: "Broadcasts", shortcut: "G B" },
-  { to: "/campaigns",  icon: Zap,              label: "Campaigns",  shortcut: "G A" },
-  { to: "/templates",  icon: FileText,         label: "Templates",  shortcut: "G T" },
+  { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/contacts",   icon: Users,            label: "Contacts" },
+  { to: "/segments",   icon: Filter,           label: "Segments" },
+  { to: "/broadcasts", icon: Mail,             label: "Broadcasts" },
+  { to: "/campaigns",  icon: Zap,              label: "Campaigns" },
+  { to: "/templates",  icon: FileText,         label: "Templates" },
+  { to: "/settings",   icon: Settings,         label: "Settings" },
 ] as const;
 
-function WorkspaceSwitcher() {
-  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
-  const { workspaces } = useWorkspaces();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const activeWs = workspaces?.find((w) => w.id === activeWorkspaceId);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
-
-  if (!workspaces?.length) return null;
-
-  return (
-    <div ref={ref} className="relative px-2 py-1">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5",
-          "text-[12px] font-medium transition-colors duration-100 cursor-pointer",
-          "hover:bg-white/[0.06] active:bg-white/[0.08]",
-          open && "bg-white/[0.06]"
-        )}
-      >
-        {/* Workspace avatar — tiny rounded square */}
-        <div className="flex h-4.5 w-[18px] h-[18px] shrink-0 items-center justify-center rounded-[3px] bg-violet-500/25 text-[9px] font-bold text-violet-300 uppercase select-none">
-          {(activeWs?.name ?? "W")[0]}
-        </div>
-        <span className="min-w-0 flex-1 truncate text-left text-foreground/80">
-          {activeWs?.name ?? "Select workspace"}
-        </span>
-        <ChevronDown
-          className={cn(
-            "h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform duration-150",
-            open && "rotate-180"
-          )}
-        />
-      </button>
-
-      {/* Dropdown — spring animation */}
-      <div
-        className={cn(
-          "absolute left-2 right-2 top-full z-50 mt-1 overflow-hidden rounded-lg",
-          "border border-border/70 bg-popover shadow-2xl shadow-black/50",
-          "transition-all duration-150 origin-top",
-          open
-            ? "opacity-100 scale-y-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 scale-y-95 -translate-y-1 pointer-events-none"
-        )}
-      >
-        {workspaces.map((ws) => (
-          <button
-            key={ws.id}
-            onClick={() => { setActiveWorkspaceId(ws.id); setOpen(false); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-[12px] transition-colors duration-75 hover:bg-accent cursor-pointer first:rounded-t-lg last:rounded-b-lg"
-          >
-            <div className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[3px] bg-violet-500/25 text-[9px] font-bold text-violet-300 uppercase">
-              {ws.name[0]}
-            </div>
-            <span className="flex-1 min-w-0 truncate text-left text-foreground/85">{ws.name}</span>
-            {ws.id === activeWorkspaceId && (
-              <Check className="h-3 w-3 shrink-0 text-foreground/50" />
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NavItem({
-  to,
-  icon: Icon,
-  label,
-  active,
-  shortcut,
-}: {
-  to: string;
-  icon: React.ElementType;
-  label: string;
-  active: boolean;
-  shortcut?: string;
-}) {
+// ── Expand button (visible on sidebar hover when collapsed) ──────────────────
+function ExpandButton() {
+  const { toggleSidebar, state } = useSidebar();
+  if (state !== "collapsed") return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Link
-          to={to}
-          className={cn(
-            "group relative flex items-center gap-2 rounded-md px-2 py-[6px]",
-            "text-[12px] leading-none transition-all duration-100 cursor-pointer",
-            active
-              ? "bg-white/[0.08] text-foreground font-medium"
-              : "text-muted-foreground/80 hover:bg-white/[0.05] hover:text-foreground/90"
-          )}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
+          className="hidden group-hover/sidebar:flex items-center justify-center h-7 w-7 rounded-md bg-sidebar-accent text-sidebar-foreground cursor-pointer hover:bg-sidebar-accent/80 transition-colors shrink-0"
         >
-          {/* Active indicator bar */}
-          {active && (
-            <span
-              className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-violet-400"
-              style={{ width: 2, height: 14 }}
-            />
-          )}
-          <Icon
-            className={cn(
-              "h-[14px] w-[14px] shrink-0 transition-colors duration-100",
-              active
-                ? "text-foreground"
-                : "text-muted-foreground/50 group-hover:text-foreground/70"
-            )}
-          />
-          <span className="truncate min-w-0 flex-1">{label}</span>
-        </Link>
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
       </TooltipTrigger>
-      {shortcut && (
-        <TooltipContent side="right" className="flex items-center gap-2">
-          <span>{label}</span>
-          <kbd className="text-[10px] text-muted-foreground/60 font-mono tracking-wider">
-            {shortcut}
-          </kbd>
-        </TooltipContent>
-      )}
+      <TooltipContent side="right" align="center">Expand sidebar</TooltipContent>
     </Tooltip>
   );
 }
 
-export function AppSidebar() {
+// ── Collapse toggle (visible in header when expanded) ───────────────────────
+function CollapseToggle() {
+  const { toggleSidebar, state } = useSidebar();
+  if (state !== "expanded") return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={toggleSidebar}
+          className="h-7 w-7 flex items-center justify-center rounded-md text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer shrink-0"
+        >
+          <PanelLeftOpen className="h-4 w-4 rotate-180" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Collapse sidebar <kbd className="ml-1 font-mono text-[10px] opacity-60">⌘B</kbd></TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ── Workspace switcher (Popover) ─────────────────────────────────────────────
+function WorkspaceSwitcher() {
+  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+  const { workspaces } = useWorkspaces();
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+  const [open, setOpen] = useState(false);
+  const activeWs = workspaces?.find((w) => w.id === activeWorkspaceId);
+
+  if (!workspaces?.length) return null;
+
+  const initial = (activeWs?.name ?? "W")[0].toUpperCase();
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <SidebarMenuButton
+          size="lg"
+          className={cn("w-full cursor-pointer", collapsed && "justify-center")}
+        >
+          <div
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-md bg-violet-500/20 text-violet-300 text-xs font-bold shrink-0 uppercase select-none",
+              collapsed && "group-hover/sidebar:hidden"
+            )}
+          >
+            {initial}
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-[13px] font-semibold truncate leading-tight text-sidebar-foreground">
+                  {activeWs?.name ?? "Select workspace"}
+                </p>
+                <p className="text-[10px] text-sidebar-foreground/50 leading-tight">Free plan</p>
+              </div>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
+            </>
+          )}
+        </SidebarMenuButton>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          side={collapsed ? "right" : "bottom"}
+          sideOffset={4}
+          className="z-50 w-60 rounded-lg border border-border bg-popover p-1 shadow-xl shadow-black/40 animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+        >
+          <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            Workspaces
+          </p>
+          {workspaces.map((ws) => (
+            <button
+              key={ws.id}
+              onClick={() => { setActiveWorkspaceId(ws.id); setOpen(false); }}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-accent cursor-pointer text-left"
+            >
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-violet-500/20 text-violet-300 text-[10px] font-bold uppercase">
+                {ws.name[0]}
+              </div>
+              <span className="flex-1 min-w-0 truncate font-medium">{ws.name}</span>
+              {ws.id === activeWorkspaceId && <Check className="h-3.5 w-3.5 shrink-0 text-foreground/50" />}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+// ── Search trigger ───────────────────────────────────────────────────────────
+function SearchButton() {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  const trigger = () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+  };
+
+  if (collapsed) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton tooltip="Search  ⌘K" onClick={trigger} className="cursor-pointer">
+          <Search className="h-4 w-4" />
+          <span>Search</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  return (
+    <SidebarMenuItem>
+      <button
+        onClick={trigger}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5",
+          "text-[12px] text-sidebar-foreground/50 cursor-pointer",
+          "border border-sidebar-border/60 bg-sidebar-accent/30",
+          "transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/90 hover:border-sidebar-border",
+          "group"
+        )}
+      >
+        <Search className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1 text-left">Search…</span>
+        <kbd className="flex items-center gap-0.5 rounded bg-sidebar-accent px-1 py-0.5 font-mono text-[9px] text-sidebar-foreground/40">
+          ⌘K
+        </kbd>
+      </button>
+    </SidebarMenuItem>
+  );
+}
+
+// ── Nav item ─────────────────────────────────────────────────────────────────
+function NavItem({ to, icon: Icon, label }: { to: string; icon: ComponentType<{ className?: string }>; label: string }) {
   const location = useLocation();
-  const router = useRouter();
+  const isActive = location.pathname === to || location.pathname.startsWith(to + "/");
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild isActive={isActive} tooltip={label}>
+        <Link
+          to={to}
+          className="cursor-pointer"
+        >
+          <Icon className="h-4 w-4" />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+// ── User footer row ──────────────────────────────────────────────────────────
+function UserRow() {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
   const { data: session } = useSession();
   const { setActiveWorkspaceId } = useWorkspaceStore();
   const queryClient = useQueryClient();
+  const router = useRouter();
+
+  if (!session?.user) return null;
+
+  const name = session.user.name ?? session.user.email;
+  const initial = name[0].toUpperCase();
+
+  const handleSignOut = () =>
+    signOut()
+      .then(() => {
+        queryClient.clear();
+        setActiveWorkspaceId(null);
+        router.navigate({ to: "/login" });
+      })
+      .catch(() => toast.error("Sign out failed"));
 
   return (
-    <TooltipProvider delayDuration={600}>
-      <aside
-        className="flex h-screen w-[216px] shrink-0 flex-col sticky top-0 z-40"
-        style={{
-          background: "hsl(var(--sidebar-bg))",
-          borderRight: "1px solid hsl(var(--sidebar-border))",
-        }}
-      >
-        {/* ── Logo ── */}
-        <div
-          className="flex h-11 shrink-0 items-center gap-2.5 px-4"
-          style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          tooltip={name}
+          className={cn(collapsed && "flex items-center justify-center")}
         >
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-foreground">
-            <Mail className="h-3 w-3 text-background" />
-          </div>
-          <span className="text-[13px] font-semibold tracking-tight text-foreground">
-            OpenMail
-          </span>
-        </div>
-
-        {/* ── Workspace switcher ── */}
-        <div style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}>
-          <WorkspaceSwitcher />
-        </div>
-
-        {/* ── Search / Command palette trigger ── */}
-        <div className="px-2 py-1.5" style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}>
+          <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80 uppercase select-none">
+              {initial}
+            </div>
+            {!collapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-medium leading-none">{name}</p>
+                  {session.user.name && (
+                    <p className="mt-0.5 truncate text-[10px] leading-none text-sidebar-foreground/50">
+                      {session.user.email}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </Link>
+        </SidebarMenuButton>
+        {!collapsed && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => {
-                  // Dispatch a synthetic Cmd+K event to open the command palette
-                  const e = new KeyboardEvent("keydown", {
-                    key: "k",
-                    metaKey: true,
-                    bubbles: true,
-                  });
-                  document.dispatchEvent(e);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5",
-                  "text-[12px] text-muted-foreground/60 cursor-pointer",
-                  "border border-border/50 bg-white/[0.03]",
-                  "transition-all duration-100 hover:bg-white/[0.06] hover:text-muted-foreground/90 hover:border-border",
-                  "group"
-                )}
+                onClick={handleSignOut}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-sidebar-foreground/30 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground/70 cursor-pointer opacity-0 group-hover/menu-item:opacity-100 focus-visible:opacity-100"
               >
-                <Search className="h-3 w-3 shrink-0" />
-                <span className="flex-1 text-left">Search…</span>
-                <kbd className="hidden sm:flex items-center gap-0.5 rounded bg-muted/60 px-1 py-0.5 font-mono text-[9px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">
-                  ⌘K
-                </kbd>
+                <LogOut className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">
-              Command Palette
-              <kbd className="ml-2 font-mono text-[10px] text-muted-foreground/60">⌘K</kbd>
-            </TooltipContent>
+            <TooltipContent side="right">Sign out</TooltipContent>
           </Tooltip>
-        </div>
+        )}
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
 
-        {/* ── Navigation ── */}
-        <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-px">
-          {NAV_ITEMS.map(({ to, icon, label, shortcut }) => {
-            const active =
-              location.pathname === to || location.pathname.startsWith(to + "/");
-            return (
-              <NavItem
-                key={to}
-                to={to}
-                icon={icon}
-                label={label}
-                active={active}
-                shortcut={shortcut}
-              />
-            );
-          })}
-
-          {/* Separator */}
-          <div
-            className="my-1 h-px"
-            style={{ background: "hsl(var(--sidebar-border))" }}
-          />
-
-          <NavItem
-            to="/settings"
-            icon={Settings}
-            label="Settings"
-            active={location.pathname.startsWith("/settings")}
-            shortcut="G ,"
-          />
-        </nav>
-
-        {/* ── User footer ── */}
-        {session?.user && (
-          <div
-            className="p-2"
-            style={{ borderTop: "1px solid hsl(var(--sidebar-border))" }}
-          >
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-              {/* Avatar */}
-              <div className="flex h-5.5 h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/70 uppercase select-none">
-                {(session.user.name?.[0] ?? session.user.email[0]).toUpperCase()}
-              </div>
-              {/* Info */}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-medium leading-none text-foreground/85">
-                  {session.user.name ?? session.user.email}
-                </p>
-                {session.user.name && (
-                  <p className="mt-0.5 truncate text-[10px] leading-none text-muted-foreground/60">
-                    {session.user.email}
-                  </p>
-                )}
-              </div>
-              {/* Sign out */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() =>
-                      signOut()
-                        .then(() => {
-                          queryClient.clear();
-                          setActiveWorkspaceId(null);
-                          router.navigate({ to: "/login" });
-                        })
-                        .catch(() => toast.error("Sign out failed"))
-                    }
-                    className="shrink-0 rounded p-1 text-muted-foreground/40 transition-colors duration-100 hover:bg-white/[0.06] hover:text-foreground/70 cursor-pointer focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <LogOut className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Sign out</TooltipContent>
-              </Tooltip>
+// ── Main sidebar ──────────────────────────────────────────────────────────────
+export function AppSidebar() {
+  return (
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border group/sidebar">
+      {/* Header — logo + workspace switcher */}
+      <SidebarHeader className="pb-0 gap-0">
+        {/* Logo row */}
+        <div className="flex h-11 items-center gap-2 px-2 border-b border-sidebar-border mb-0">
+          <ExpandButton />
+          <div className="group-data-[state=expanded]:flex hidden items-center gap-2 flex-1 min-w-0">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
+              <Mail className="h-3 w-3 text-sidebar" />
+            </div>
+            <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground truncate">
+              OpenMail
+            </span>
+          </div>
+          {/* Icon-only logo when collapsed (shown when NOT hovering) */}
+          <div className="group-data-[state=collapsed]:flex hidden group-hover/sidebar:hidden items-center justify-center w-7 h-7">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
+              <Mail className="h-3 w-3 text-sidebar" />
             </div>
           </div>
-        )}
-      </aside>
-    </TooltipProvider>
+          <CollapseToggle />
+        </div>
+
+        {/* Workspace switcher */}
+        <div className="px-0 py-1 border-b border-sidebar-border">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <WorkspaceSwitcher />
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
+      </SidebarHeader>
+
+      {/* Nav */}
+      <SidebarContent>
+        <SidebarGroup className="py-2 gap-1">
+          <SidebarMenu>
+            <SearchButton />
+            {NAV_ITEMS.map(({ to, icon, label }) => (
+              <NavItem key={to} to={to} icon={icon} label={label} />
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+
+      {/* Footer — user */}
+      <SidebarFooter className="gap-1 pb-2">
+        <SidebarSeparator className="mb-1" />
+        <UserRow />
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }

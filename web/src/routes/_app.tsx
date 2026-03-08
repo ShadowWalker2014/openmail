@@ -2,18 +2,17 @@ import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useSession } from "@/lib/auth-client";
 import { useWorkspaces } from "@/hooks/use-workspaces";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
-export const Route = createFileRoute("/_app")({
-  component: AppLayout,
-});
+const SIDEBAR_KEY = "sidebar_state";
 
 function SidebarSkeleton() {
   return (
     <div
-      className="flex h-screen w-[216px] shrink-0 flex-col sticky top-0"
+      className="flex h-svh w-[216px] shrink-0 flex-col"
       style={{
-        background: "hsl(var(--sidebar-bg))",
+        background: "hsl(var(--sidebar))",
         borderRight: "1px solid hsl(var(--sidebar-border))",
       }}
     >
@@ -27,15 +26,15 @@ function SidebarSkeleton() {
       </div>
       {/* Workspace */}
       <div
-        className="px-2 py-1.5"
+        className="px-2 py-2"
         style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
       >
-        <div className="h-7 w-full rounded-md shimmer" />
+        <div className="h-10 w-full rounded-md shimmer" />
       </div>
       {/* Nav */}
-      <div className="flex-1 p-2 space-y-px">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-[27px] w-full rounded-md shimmer opacity-60" />
+      <div className="flex-1 p-2 space-y-1">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="h-8 w-full rounded-md shimmer opacity-60" />
         ))}
       </div>
     </div>
@@ -52,6 +51,17 @@ function AppLayout() {
     isError: workspacesError,
   } = useWorkspaces({ enabled: !sessionPending && !!session });
 
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(SIDEBAR_KEY);
+    return stored === null ? true : stored === "true";
+  });
+
+  const handleSidebarOpenChange = (value: boolean) => {
+    setSidebarOpen(value);
+    localStorage.setItem(SIDEBAR_KEY, String(value));
+  };
+
   useEffect(() => {
     if (!sessionPending && !session) router.navigate({ to: "/login" });
   }, [session, sessionPending, router]);
@@ -61,9 +71,9 @@ function AppLayout() {
     (!workspacesError && workspacesLoading && workspaces === undefined)
   ) {
     return (
-      <div className="flex h-screen" style={{ background: "hsl(var(--app-bg))" }}>
+      <div className="flex h-svh" style={{ background: "hsl(var(--background))" }}>
         <SidebarSkeleton />
-        <div className="flex-1" style={{ background: "hsl(var(--app-bg))" }} />
+        <div className="flex-1" />
       </div>
     );
   }
@@ -72,14 +82,9 @@ function AppLayout() {
 
   if (workspacesError) {
     return (
-      <div
-        className="flex h-screen items-center justify-center"
-        style={{ background: "hsl(var(--app-bg))" }}
-      >
+      <div className="flex h-svh items-center justify-center" style={{ background: "hsl(var(--background))" }}>
         <div className="text-center">
-          <p className="text-[13px] font-medium text-foreground">
-            Failed to load workspaces
-          </p>
+          <p className="text-[13px] font-medium text-foreground">Failed to load workspaces</p>
           <p className="mt-1 text-[12px] text-muted-foreground">
             Check your connection and{" "}
             <button
@@ -95,14 +100,15 @@ function AppLayout() {
   }
 
   return (
-    <div
-      className="flex h-screen"
-      style={{ background: "hsl(var(--app-bg))" }}
-    >
+    <SidebarProvider open={sidebarOpen} onOpenChange={handleSidebarOpenChange}>
       <AppSidebar />
-      <main className="flex-1 overflow-auto animate-in fade-in duration-150">
+      <SidebarInset className="overflow-y-auto h-dvh animate-in fade-in duration-150">
         <Outlet />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
+
+export const Route = createFileRoute("/_app")({
+  component: AppLayout,
+});

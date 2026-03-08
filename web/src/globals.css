@@ -40,8 +40,17 @@
 
     /* App shell — slightly deeper than base for depth */
     --sidebar-bg: 240 7% 7%;            /* #111115 */
-    --sidebar-border: 240 4% 13%;       /* #1f1f23 */
     --app-bg: 240 6% 6%;                /* #0e0e12 */
+
+    /* shadcn Sidebar system */
+    --sidebar: 240 7% 7%;
+    --sidebar-foreground: 240 5% 93%;
+    --sidebar-border: 240 4% 13%;
+    --sidebar-accent: 240 4% 12%;
+    --sidebar-accent-foreground: 240 5% 93%;
+    --sidebar-ring: 240 4% 42%;
+    --sidebar-width: 216px;
+    --sidebar-width-icon: 3rem;
 
     /* Brand accent */
     --violet: 250 89% 70%;              /* #7c6af8 */
