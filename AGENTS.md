@@ -66,10 +66,18 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
 ## Railway Deployment
 - Same GitHub repo, each service = subfolder root in Railway
 - Env vars set per service in Railway dashboard
-- Shared: DATABASE_URL, REDIS_URL
+- Shared: DATABASE_URL (points to PgBouncer, not Postgres directly), REDIS_URL
 - api: BETTER_AUTH_SECRET, RESEND_API_KEY (platform default)
 - tracker: API internal URL for reporting events back to api
 - mcp: API internal URL
+
+## PgBouncer (Connection Pooling)
+- Service: `pgbouncer/` — bitnami/pgbouncer:1.23.1, transaction pooling mode
+- All DB services (api, worker, tracker) connect via PgBouncer, not Postgres directly
+- DATABASE_URL pattern: `postgresql://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{PgBouncer.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.PGDATABASE}}`
+- DB client uses `prepare: false` + `max: 10` (required for transaction pooling)
+- Pool: 25 real Postgres conns, 1000 max client conns
+- See `pgbouncer/RAILWAY_SETUP.md` for full Railway config steps
 
 ## Dev Commands
 - `bun install` at root to install all workspace deps
