@@ -82,7 +82,7 @@ function normalizeBroadcast(b: Record<string, unknown>): Broadcast {
     sentCount: ((b.sentCount ?? b.sent_count ?? 0) as number),
     openCount: ((b.openCount ?? b.open_count ?? 0) as number),
     clickCount: ((b.clickCount ?? b.click_count ?? 0) as number),
-    createdAt: ((b.createdAt ?? b.created_at ?? "") as string),
+    createdAt: ((b.createdAt ?? b.created_at ?? "1970-01-01T00:00:00Z") as string),
     updatedAt: ((b.updatedAt ?? b.updated_at ?? "") as string),
   };
 }
@@ -154,6 +154,49 @@ function BroadcastCardSkeleton() {
 }
 
 // ─── Detail / Edit Dialog ────────────────────────────────────────────────────
+
+function PreviewToggle({
+  previewMobile,
+  setPreviewMobile,
+}: {
+  previewMobile: boolean;
+  setPreviewMobile: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+      <button
+        type="button"
+        onClick={() => setPreviewMobile(false)}
+        className={cn(
+          "rounded px-2 py-1 transition-colors cursor-pointer",
+          !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Monitor className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setPreviewMobile(true)}
+        className={cn(
+          "rounded px-2 py-1 transition-colors cursor-pointer",
+          previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Smartphone className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60 mb-1">{label}</p>
+      <p className="text-[22px] font-semibold tabular-nums">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
 
 type Tab = "overview" | "content" | "sent" | "recipients";
 
@@ -273,7 +316,7 @@ function BroadcastDetailDialog({
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
-  const { data: topLinks = [] } = useQuery<{ url: string; clicks: number }[]>({
+  const { data: topLinks = [], isLoading: topLinksLoading } = useQuery<{ url: string; clicks: number }[]>({
     queryKey: ["broadcast-top-links", broadcast.id],
     queryFn: () => sessionFetch(workspaceId, `/broadcasts/${broadcast.id}/top-links`),
     enabled: broadcast.status === "sent",
@@ -315,43 +358,6 @@ function BroadcastDetailDialog({
     contentMode === "template"
       ? (templates.find((t) => t.id === selectedTemplateId)?.htmlContent ?? "")
       : htmlContent;
-
-  // ── Preview toggle widget ────────────────────────────────────────────────────
-
-  const PreviewToggle = () => (
-    <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-      <button
-        type="button"
-        onClick={() => setPreviewMobile(false)}
-        className={cn(
-          "rounded px-2 py-1 transition-colors cursor-pointer",
-          !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Monitor className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setPreviewMobile(true)}
-        className={cn(
-          "rounded px-2 py-1 transition-colors cursor-pointer",
-          previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Smartphone className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-
-  // ── Metric card ──────────────────────────────────────────────────────────────
-
-  const MetricCard = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60 mb-1">{label}</p>
-      <p className="text-[22px] font-semibold tabular-nums">{value}</p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-    </div>
-  );
 
   // ── Tab content renderers ────────────────────────────────────────────────────
 
@@ -427,7 +433,7 @@ function BroadcastDetailDialog({
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                 Preview
               </span>
-              <PreviewToggle />
+              <PreviewToggle previewMobile={previewMobile} setPreviewMobile={setPreviewMobile} />
             </div>
             <div className="flex-1 flex items-start justify-center overflow-auto p-6">
               {previewHtml ? (
@@ -517,7 +523,16 @@ function BroadcastDetailDialog({
                 Total Clicks
               </span>
             </div>
-            {topLinks.length === 0 ? (
+            {topLinksLoading ? (
+              <div className="space-y-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2 border-b border-border/50">
+                    <div className="h-3 flex-1 rounded shimmer" />
+                    <div className="h-3 w-8 rounded shimmer shrink-0" />
+                  </div>
+                ))}
+              </div>
+            ) : topLinks.length === 0 ? (
               <p className="text-[12px] text-muted-foreground py-4 text-center">
                 No link clicks yet
               </p>
@@ -585,9 +600,9 @@ function BroadcastDetailDialog({
               ) : templates.length === 0 ? (
                 <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
                   No templates yet.{" "}
-                  <a href="/templates" className="font-medium text-foreground hover:underline">
+                  <Link to="/templates" onClick={onClose} className="font-medium text-foreground hover:underline">
                     Create one first.
-                  </a>
+                  </Link>
                 </p>
               ) : (
                 <select
@@ -612,7 +627,7 @@ function BroadcastDetailDialog({
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                 Preview
               </span>
-              <PreviewToggle />
+              <PreviewToggle previewMobile={previewMobile} setPreviewMobile={setPreviewMobile} />
             </div>
             <div className="flex-1 flex items-start justify-center overflow-auto p-6">
               {previewHtml ? (
@@ -1014,7 +1029,7 @@ function BroadcastsPage() {
   const subjectRef = useRef<HTMLInputElement>(null);
 
   // Detail view state
-  const [detailBroadcast, setDetailBroadcast] = useState<Broadcast | null>(null);
+  const [detailBroadcastId, setDetailBroadcastId] = useState<string | null>(null);
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -1061,6 +1076,8 @@ function BroadcastsPage() {
       ),
     [broadcasts, searchQuery]
   );
+
+  const detailBroadcast = detailBroadcastId ? (broadcasts.find(b => b.id === detailBroadcastId) ?? null) : null;
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
@@ -1281,7 +1298,7 @@ function BroadcastsPage() {
                         {templates.length === 0 ? (
                           <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
                             No templates yet.{" "}
-                            <a href="/templates" className="font-medium text-foreground hover:underline">Create one first.</a>
+                            <Link to="/templates" onClick={() => setCreateOpen(false)} className="font-medium text-foreground hover:underline">Create one first.</Link>
                           </p>
                         ) : (
                           <select
@@ -1413,7 +1430,7 @@ function BroadcastsPage() {
               filteredBroadcasts.map((broadcast) => (
                 <tr
                   key={broadcast.id}
-                  onClick={() => setDetailBroadcast(broadcast)}
+                  onClick={() => setDetailBroadcastId(broadcast.id)}
                   className="group border-b border-border/50 last:border-0 hover:bg-accent/50 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3">
@@ -1462,7 +1479,7 @@ function BroadcastsPage() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDetailBroadcast(broadcast);
+                            setDetailBroadcastId(broadcast.id);
                           }}
                         >
                           <Send className="h-3.5 w-3.5" />
@@ -1507,11 +1524,11 @@ function BroadcastsPage() {
       {detailBroadcast && activeWorkspaceId && (
         <BroadcastDetailDialog
           broadcast={detailBroadcast}
-          onClose={() => setDetailBroadcast(null)}
+          onClose={() => setDetailBroadcastId(null)}
           segments={segments}
           templates={templates}
-          onSendSuccess={() => setDetailBroadcast(null)}
-          onDeleteSuccess={() => setDetailBroadcast(null)}
+          onSendSuccess={() => setDetailBroadcastId(null)}
+          onDeleteSuccess={() => setDetailBroadcastId(null)}
           workspaceId={activeWorkspaceId}
         />
       )}

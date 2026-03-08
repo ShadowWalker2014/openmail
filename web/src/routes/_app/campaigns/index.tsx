@@ -14,7 +14,6 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -137,6 +136,9 @@ function StepConfigPanel({
   const [duration, setDuration] = useState(1);
   const [unit, setUnit] = useState<"hours" | "days" | "weeks">("days");
 
+  // Delete confirmation
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   // Sync local state when step changes
   useEffect(() => {
     if (!step) return;
@@ -203,9 +205,7 @@ function StepConfigPanel({
   }
 
   function handleDelete() {
-    if (window.confirm("Delete this step?")) {
-      deleteMutation.mutate();
-    }
+    setConfirmDelete(true);
   }
 
   return (
@@ -316,6 +316,21 @@ function StepConfigPanel({
           {saveMutation.isPending ? "Saving…" : "Save step"}
         </Button>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete step?</AlertDialogTitle>
+            <AlertDialogDescription>This step will be permanently removed from the campaign.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { deleteMutation.mutate(); setConfirmDelete(false); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -569,7 +584,7 @@ function CampaignsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
-  const [detailCampaign, setDetailCampaign] = useState<Campaign | null>(null);
+  const [detailCampaignId, setDetailCampaignId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const nameRef = useRef<HTMLInputElement>(null);
@@ -582,6 +597,8 @@ function CampaignsPage() {
     queryFn: () => sessionFetch(activeWorkspaceId!, "/campaigns"),
     enabled: !!activeWorkspaceId,
   });
+
+  const detailCampaign = detailCampaignId ? (campaigns.find(c => c.id === detailCampaignId) ?? null) : null;
 
   function resetForm() {
     if (nameRef.current) nameRef.current.value = "";
@@ -792,7 +809,7 @@ function CampaignsPage() {
           filteredCampaigns.map((campaign) => (
             <div
               key={campaign.id}
-              onClick={() => setDetailCampaign(campaign)}
+              onClick={() => setDetailCampaignId(campaign.id)}
               className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50 cursor-pointer"
             >
               <div className="min-w-0 flex-1">
@@ -875,6 +892,12 @@ function CampaignsPage() {
             </div>
           ))}
 
+        {!isLoading && filteredCampaigns.length === 0 && campaigns.length > 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-[13px] font-medium text-muted-foreground">No campaigns match your filter</p>
+          </div>
+        )}
+
         {!isLoading && campaigns.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
@@ -897,7 +920,7 @@ function CampaignsPage() {
         <CampaignDetailDialog
           key={detailCampaign.id}
           campaign={detailCampaign}
-          onClose={() => setDetailCampaign(null)}
+          onClose={() => setDetailCampaignId(null)}
           workspaceId={activeWorkspaceId!}
         />
       )}

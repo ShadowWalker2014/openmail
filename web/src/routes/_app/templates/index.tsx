@@ -52,7 +52,7 @@ function TemplatesPage() {
   const subjectRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLInputElement>(null);
 
-  const { data: templates = [], isLoading } = useQuery<Template[]>({
+  const { data: templates = [], isLoading, isError } = useQuery<Template[]>({
     queryKey: ["templates", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
     enabled: !!activeWorkspaceId,
@@ -158,6 +158,7 @@ function TemplatesPage() {
             setOpen(false);
             setEditTemplate(null);
             setHtmlContent("");
+            setPreviewMobile(false);
           }
         }}
       >
@@ -290,6 +291,12 @@ function TemplatesPage() {
         </DialogContent>
       </Dialog>
 
+      {isError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+          Failed to load templates.
+        </div>
+      )}
+
       {/* Grid */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {isLoading &&
@@ -338,7 +345,7 @@ function TemplatesPage() {
           ))}
 
         {!isLoading && templates.length === 0 && (
-          <div className="col-span-2 flex flex-col items-center justify-center py-20 text-center">
+          <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg border border-border">
               <FileText className="h-5 w-5 text-muted-foreground" />
             </div>

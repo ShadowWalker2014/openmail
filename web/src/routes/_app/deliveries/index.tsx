@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -48,30 +48,35 @@ function DeliveriesPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const { data, isLoading } = useQuery<{ data: EmailSend[]; total: number; page: number; pageSize: number }>({
-    queryKey: ["sends", activeWorkspaceId, page, statusFilter, search, refreshKey],
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading, isError, refetch } = useQuery<{ data: EmailSend[]; total: number; page: number; pageSize: number }>({
+    queryKey: ["sends", activeWorkspaceId, page, statusFilter, debouncedSearch],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
       if (statusFilter) params.set("status", statusFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       return sessionFetch(activeWorkspaceId!, `/sends?${params}`);
     },
     enabled: !!activeWorkspaceId && activeTab === "deliveries",
     staleTime: 30_000,
   });
 
-  const { data: drafts = [], isLoading: draftsLoading } = useQuery<{ id: string; name: string; subject: string; createdAt: string }[]>({
+  type BroadcastDraft = { id: string; name: string; subject: string; status: string; createdAt: string };
+
+  const { data: drafts = [], isLoading: draftsLoading, isError: draftsError } = useQuery<BroadcastDraft[]>({
     queryKey: ["broadcasts-drafts", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/broadcasts"),
-    select: (all: any[]) => all.filter((b) => b.status === "draft"),
+    select: (all: BroadcastDraft[]) => all.filter((b) => b.status === "draft"),
     enabled: !!activeWorkspaceId && activeTab === "drafts",
   });
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
-
-  const handleRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   return (
     <div className="px-8 py-7 w-full">
@@ -110,7 +115,7 @@ function DeliveriesPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
               <Input
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by email…"
                 className="pl-9 h-8 text-[13px]"
               />
@@ -127,7 +132,7 @@ function DeliveriesPage() {
               <option value="failed">Failed</option>
             </select>
             <button
-              onClick={handleRefresh}
+              onClick={() => refetch()}
               className="h-8 w-8 flex items-center justify-center rounded-md border border-input bg-input text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               title="Refresh"
             >
@@ -139,6 +144,13 @@ function DeliveriesPage() {
               </span>
             )}
           </div>
+
+          {/* Error state */}
+          {isError && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+              Failed to load deliveries.
+            </div>
+          )}
 
           {/* Table */}
           <div className="rounded-lg border border-border overflow-hidden">
@@ -219,6 +231,12 @@ function DeliveriesPage() {
 
       {/* Drafts tab */}
       {activeTab === "drafts" && (
+        <>
+        {draftsError && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+            Failed to load drafts.
+          </div>
+        )}
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-[13px]">
             <thead>
@@ -236,7 +254,7 @@ function DeliveriesPage() {
                   <td className="px-4 py-3"><div className="h-3 w-20 rounded shimmer" /></td>
                 </tr>
               ))}
-              {!draftsLoading && drafts.map((draft: any) => (
+              {!draftsLoading && drafts.map((draft) => (
                 <tr key={draft.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors">
                   <td className="px-4 py-3 font-medium">{draft.name}</td>
                   <td className="px-4 py-3 text-muted-foreground truncate max-w-[300px]">{draft.subject}</td>
@@ -258,6 +276,7 @@ function DeliveriesPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

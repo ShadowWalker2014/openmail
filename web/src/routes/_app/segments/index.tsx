@@ -147,7 +147,6 @@ function normalizeCondition(c: ApiCondition): ApiCondition {
   return { ...c, operator: normalizeOperator(c.operator) };
 }
 
-const INITIAL_CONDITIONS: Condition[] = [makeCondition()];
 
 // ── ConditionRow ──────────────────────────────────────────────────────────────
 
@@ -245,21 +244,6 @@ function ConditionRow({
       )}
     </div>
   );
-}
-
-// ── conditionSummary ──────────────────────────────────────────────────────────
-
-function conditionSummary(conditions: ApiCondition[], logic: "and" | "or"): string {
-  if (!conditions?.length) return "No conditions";
-  const parts = conditions.map((c) => {
-    const normalized = normalizeOperator(c.operator);
-    const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;
-    const op = DEFAULT_OPERATORS.find((o) => o.value === normalized)?.label ?? normalized;
-    return NO_VALUE_OPERATORS.includes(normalized)
-      ? `${field} ${op}`
-      : `${field} ${op} "${c.value}"`;
-  });
-  return parts.join(` ${logic.toUpperCase()} `);
 }
 
 // ── SegmentDetailDialog ───────────────────────────────────────────────────────
@@ -692,7 +676,7 @@ function SegmentsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [conditionLogic, setConditionLogic] = useState<"and" | "or">("and");
-  const [conditions, setConditions] = useState<Condition[]>(INITIAL_CONDITIONS);
+  const [conditions, setConditions] = useState<Condition[]>(() => [makeCondition()]);
 
   function resetCreateForm() {
     setName("");
@@ -716,7 +700,7 @@ function SegmentsPage() {
     setDeleteTarget(segment);
   }
 
-  const { data: segments = [], isLoading } = useQuery<Segment[]>({
+  const { data: segments = [], isLoading, isError } = useQuery<Segment[]>({
     queryKey: ["segments", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
     enabled: !!activeWorkspaceId,
@@ -820,6 +804,12 @@ function SegmentsPage() {
             placeholder="Search segments…"
             className="pl-8 h-8 text-[13px]"
           />
+        </div>
+      )}
+
+      {isError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/8 px-3.5 py-2.5 text-[13px] text-destructive">
+          Failed to load segments.
         </div>
       )}
 

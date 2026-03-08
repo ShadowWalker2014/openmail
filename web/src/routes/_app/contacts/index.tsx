@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Plus, Search, Trash2, Users, ChevronLeft, ChevronRight,
-  AlertCircle, X, Mail, Activity, Clock,
+  AlertCircle, X, Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, isToday, isYesterday } from "date-fns";
@@ -125,7 +125,7 @@ function ContactDetailContent({
   const [phone, setPhone] = useState(contact.phone ?? "");
   const [unsubscribed, setUnsubscribed] = useState(contact.unsubscribed);
   const [attrs, setAttrs] = useState(() =>
-    Object.entries(contact.attributes ?? {}).map(([key, value]) => ({ key, value: String(value) }))
+    Object.entries(contact.attributes ?? {}).map(([key, value]) => ({ id: crypto.randomUUID(), key, value: String(value) }))
   );
 
   const patchMutation = useMutation({
@@ -451,19 +451,19 @@ function ContactDetailContent({
 
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Custom Attributes</p>
-                {attrs.map((attr, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
+                {attrs.map((attr) => (
+                  <div key={attr.id} className="flex items-center gap-1.5">
                     <Input className="w-1/3" placeholder="key" value={attr.key}
-                      onChange={(e) => { const n = [...attrs]; n[i] = { ...n[i], key: e.target.value }; setAttrs(n); }} />
+                      onChange={(e) => setAttrs(attrs.map(a => a.id === attr.id ? { ...a, key: e.target.value } : a))} />
                     <Input className="flex-1" placeholder="value" value={attr.value}
-                      onChange={(e) => { const n = [...attrs]; n[i] = { ...n[i], value: e.target.value }; setAttrs(n); }} />
-                    <button type="button" onClick={() => setAttrs(attrs.filter((_, j) => j !== i))}
+                      onChange={(e) => setAttrs(attrs.map(a => a.id === attr.id ? { ...a, value: e.target.value } : a))} />
+                    <button type="button" onClick={() => setAttrs(attrs.filter(a => a.id !== attr.id))}
                       className="rounded p-1 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
-                <button type="button" onClick={() => setAttrs([...attrs, { key: "", value: "" }])}
+                <button type="button" onClick={() => setAttrs([...attrs, { id: crypto.randomUUID(), key: "", value: "" }])}
                   className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                   <Plus className="h-3 w-3" />Add attribute
                 </button>
