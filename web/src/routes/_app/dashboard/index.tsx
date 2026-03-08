@@ -97,7 +97,7 @@ function DashboardPage() {
     queryKey: ["analytics", "overview", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/analytics/overview"),
     enabled: !!activeWorkspaceId,
-    refetchInterval: 30_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: liveEvents = [], isLoading: eventsLoading } =

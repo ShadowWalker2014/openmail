@@ -15,6 +15,16 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Plus, Search, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -38,6 +48,7 @@ function ContactsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const firstNameRef = useRef<HTMLInputElement>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
@@ -53,11 +64,7 @@ function ContactsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: {
-      email: string;
-      firstName?: string;
-      lastName?: string;
-    }) =>
+    mutationFn: (body: { email: string; firstName?: string; lastName?: string }) =>
       sessionFetch(activeWorkspaceId!, "/contacts", {
         method: "POST",
         body: JSON.stringify(body),
@@ -72,11 +79,10 @@ function ContactsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/contacts/${id}`, {
-        method: "DELETE",
-      }),
+      sessionFetch(activeWorkspaceId!, `/contacts/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["contacts", activeWorkspaceId] });
+      setDeleteContact(null);
       toast.success("Contact deleted");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -116,16 +122,16 @@ function ContactsPage() {
             >
               <div className="space-y-1.5">
                 <Label>Email *</Label>
-                <Input ref={emailRef} type="email" required />
+                <Input ref={emailRef} type="email" required placeholder="name@company.com" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>First Name</Label>
-                  <Input ref={firstNameRef} />
+                  <Input ref={firstNameRef} placeholder="Jane" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Last Name</Label>
-                  <Input ref={lastNameRef} />
+                  <Input ref={lastNameRef} placeholder="Smith" />
                 </div>
               </div>
               <DialogFooter>
@@ -213,7 +219,7 @@ function ContactsPage() {
                   </td>
                   <td className="px-2 py-3">
                     <button
-                      onClick={() => deleteMutation.mutate(contact.id)}
+                      onClick={() => setDeleteContact(contact)}
                       className="rounded p-1 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -240,6 +246,32 @@ function ContactsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteContact}
+        onOpenChange={(o) => !o && setDeleteContact(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete contact?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteContact?.email}
+              </strong>{" "}
+              will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteContact && deleteMutation.mutate(deleteContact.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

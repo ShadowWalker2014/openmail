@@ -16,6 +16,16 @@ import {
 import { Plus, FileText, Trash2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/templates/")({
   component: TemplatesPage,
@@ -35,6 +45,7 @@ function TemplatesPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
+  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLInputElement>(null);
@@ -84,6 +95,7 @@ function TemplatesPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
+      setDeleteTemplate(null);
       toast.success("Template deleted");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -221,7 +233,7 @@ function TemplatesPage() {
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(tmpl.id)}
+                    onClick={() => setDeleteTemplate(tmpl)}
                     className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive cursor-pointer"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -250,6 +262,32 @@ function TemplatesPage() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteTemplate}
+        onOpenChange={(o) => !o && setDeleteTemplate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteTemplate?.name}
+              </strong>{" "}
+              will be permanently deleted. Any broadcasts using this template will be unaffected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTemplate && deleteMutation.mutate(deleteTemplate.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

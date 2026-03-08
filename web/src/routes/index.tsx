@@ -302,8 +302,10 @@ function LandingPage() {
           ))}
         </div>
 
-        {/* Dashboard mockup */}
-        <DashboardMockup />
+        {/* Dashboard mockup — hidden on mobile */}
+        <div className="hidden sm:block">
+          <DashboardMockup />
+        </div>
       </section>
 
       {/* ── Comparison ──────────────────────────────────────────────────────── */}

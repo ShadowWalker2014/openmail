@@ -6,7 +6,17 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Plus, Trash2, Key, Mail, Code2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { Copy, Check, Plus, Trash2, Key, Mail, Code2, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -51,16 +61,41 @@ function Section({
   );
 }
 
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="shrink-0 rounded p-1.5 text-emerald-700 transition-colors hover:bg-emerald-100 cursor-pointer"
+      title={copied ? "Copied!" : "Copy"}
+    >
+      {copied ? (
+        <Check className="h-4 w-4" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
 function SettingsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [deleteKey, setDeleteKey] = useState<ApiKey | null>(null);
   const resendKeyRef = useRef<HTMLInputElement>(null);
   const fromEmailRef = useRef<HTMLInputElement>(null);
   const fromNameRef = useRef<HTMLInputElement>(null);
 
-  const { data: apiKeys = [] } = useQuery<ApiKey[]>({
+  const { data: apiKeys = [], isLoading: keysLoading } = useQuery<ApiKey[]>({
     queryKey: ["api-keys", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/api-keys"),
     enabled: !!activeWorkspaceId,
@@ -76,18 +111,16 @@ function SettingsPage() {
       qc.invalidateQueries({ queryKey: ["api-keys", activeWorkspaceId] });
       setCreatedKey(data.key);
       setNewKeyName("");
-      toast.success("API key created — copy it now!");
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteKeyMutation = useMutation({
     mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/api-keys/${id}`, {
-        method: "DELETE",
-      }),
+      sessionFetch(activeWorkspaceId!, `/api-keys/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["api-keys", activeWorkspaceId] });
+      setDeleteKey(null);
       toast.success("API key deleted");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -139,10 +172,10 @@ function SettingsPage() {
               <Input
                 ref={resendKeyRef}
                 type="password"
-                placeholder="re_..."
+                placeholder="re_••••••••••••••••"
               />
               <p className="text-xs text-muted-foreground">
-                Your workspace Resend API key. Leave blank to use platform
+                Your workspace Resend API key. Leave blank to use the platform
                 default.
               </p>
             </div>
@@ -174,59 +207,81 @@ function SettingsPage() {
         <Section
           icon={Code2}
           title="API Keys"
-          description="Authenticate API and MCP server requests"
+          description="Authenticate API and MCP server requests with a workspace key"
         >
+          {/* New key reveal banner */}
           {createdKey && (
-            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3.5">
-              <p className="mb-2 text-xs font-medium text-emerald-800">
-                New key created — copy it now, it won&apos;t be shown again:
-              </p>
+            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-emerald-800">
+                  Copy this key now — it won&apos;t be shown again
+                </p>
+                <button
+                  onClick={() => setCreatedKey(null)}
+                  className="rounded p-0.5 text-emerald-600 transition-colors hover:bg-emerald-100 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded border bg-white px-2.5 py-1.5 font-mono text-xs">
                   {createdKey}
                 </code>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(createdKey);
-                    toast.success("Copied!");
-                  }}
-                  className="shrink-0 rounded p-1.5 text-emerald-700 transition-colors hover:bg-emerald-100 cursor-pointer"
-                >
-                  <Copy className="h-4 w-4" />
-                </button>
+                <CopyButton value={createdKey} />
               </div>
             </div>
           )}
 
-          <div className="mb-4 space-y-0">
-            {apiKeys.map((key, i) => (
-              <div
-                key={key.id}
-                className={`group flex items-center gap-3 py-3 transition-colors duration-150 ${i < apiKeys.length - 1 ? "border-b" : ""}`}
-              >
-                <Key className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{key.name}</p>
-                  <p className="font-mono text-xs text-muted-foreground">
-                    {key.keyPrefix}•••••••••••• ·{" "}
-                    {format(new Date(key.createdAt), "MMM d, yyyy")}
-                  </p>
-                </div>
-                <button
-                  onClick={() => deleteKeyMutation.mutate(key.id)}
-                  className="shrink-0 rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+          {/* Key list */}
+          <div className="mb-4">
+            {keysLoading && (
+              <div className="space-y-px">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 py-3 border-b last:border-0">
+                    <div className="h-4 w-4 rounded shimmer" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-24 rounded shimmer" />
+                      <div className="h-3 w-48 rounded shimmer" />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {apiKeys.length === 0 && (
+            )}
+
+            {!keysLoading && apiKeys.length === 0 && (
               <p className="py-2 text-sm text-muted-foreground">
-                No API keys yet
+                No API keys yet — create one to use the API or MCP server
               </p>
             )}
+
+            {!keysLoading &&
+              apiKeys.map((key, i) => (
+                <div
+                  key={key.id}
+                  className={`group flex items-center gap-3 py-3 transition-colors duration-150 ${
+                    i < apiKeys.length - 1 ? "border-b" : ""
+                  }`}
+                >
+                  <Key className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{key.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {key.keyPrefix}••••••••••••{" "}
+                      <span className="font-sans">·</span>{" "}
+                      {format(new Date(key.createdAt), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDeleteKey(key)}
+                    className="shrink-0 rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
           </div>
 
+          {/* Create key form */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -246,11 +301,38 @@ function SettingsPage() {
               disabled={!newKeyName || createKeyMutation.isPending}
             >
               <Plus className="h-4 w-4" />
-              Create
+              {createKeyMutation.isPending ? "Creating…" : "Create"}
             </Button>
           </form>
         </Section>
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deleteKey}
+        onOpenChange={(o) => !o && setDeleteKey(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke API key?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground font-medium">
+                {deleteKey?.name}
+              </strong>{" "}
+              ({deleteKey?.keyPrefix}••••) will be permanently revoked. Any
+              services using this key will stop working immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteKey && deleteKeyMutation.mutate(deleteKey.id)}
+            >
+              Revoke key
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

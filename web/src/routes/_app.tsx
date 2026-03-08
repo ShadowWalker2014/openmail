@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useSession } from "@/lib/auth-client";
 
@@ -8,6 +8,7 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { data: session, isPending } = useSession();
+  const router = useRouter();
 
   if (isPending) {
     return (
@@ -34,14 +35,14 @@ function AppLayout() {
   }
 
   if (!session) {
-    window.location.href = "/login";
+    router.navigate({ to: "/login" });
     return null;
   }
 
   return (
     <div className="flex h-screen bg-[hsl(var(--app-bg))]">
       <AppSidebar />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto animate-in fade-in duration-200">
         <Outlet />
       </main>
     </div>

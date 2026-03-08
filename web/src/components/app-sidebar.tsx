@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
@@ -103,6 +103,7 @@ function WorkspaceSwitcher() {
 
 export function AppSidebar() {
   const location = useLocation();
+  const router = useRouter();
   const { data: session } = useSession();
 
   return (
@@ -127,26 +128,29 @@ export function AppSidebar() {
             const isActive =
               location.pathname === to || location.pathname.startsWith(to + "/");
             return (
-              <Link
-                key={to}
-                to={to}
+            <Link
+              key={to}
+              to={to}
+              className={cn(
+                "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-100 mb-px cursor-pointer",
+                isActive
+                  ? "bg-accent font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent/70"
+              )}
+            >
+              {isActive && (
+                <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-foreground" />
+              )}
+              <Icon
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-100 mb-px cursor-pointer",
+                  "h-4 w-4 shrink-0 transition-colors duration-100",
                   isActive
-                    ? "bg-accent font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent/70"
+                    ? "text-foreground"
+                    : "text-muted-foreground group-hover:text-foreground"
                 )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-colors duration-100",
-                    isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground group-hover:text-foreground"
-                  )}
-                />
-                <span className="truncate">{label}</span>
-              </Link>
+              />
+              <span className="truncate">{label}</span>
+            </Link>
             );
           })}
 
@@ -155,12 +159,15 @@ export function AppSidebar() {
           <Link
             to="/settings"
             className={cn(
-              "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-100 cursor-pointer",
+              "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-100 cursor-pointer",
               location.pathname.startsWith("/settings")
                 ? "bg-accent font-medium text-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent/70"
             )}
           >
+            {location.pathname.startsWith("/settings") && (
+              <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-foreground" />
+            )}
             <Settings
               className={cn(
                 "h-4 w-4 shrink-0 transition-colors duration-100",
@@ -195,7 +202,7 @@ export function AppSidebar() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() =>
-                      signOut().then(() => (window.location.href = "/login"))
+                      signOut().then(() => router.navigate({ to: "/login" }))
                     }
                     className="shrink-0 rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-foreground active:bg-accent/70 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
                   >
