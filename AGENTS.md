@@ -113,3 +113,68 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
 - Self-hosted (single tenant) + hosted SaaS (multi-tenant) both supported
 - Template builder: visual drag-and-drop + raw HTML/code mode
 - Event tracking: REST API + JS/Node SDK + webhook ingestion
+
+## Cursor Cloud specific instructions
+
+### Infrastructure (Docker required)
+Postgres 16 + Redis 7 run via `docker compose`. Start them before any service:
+```bash
+sudo dockerd &>/tmp/dockerd.log &
+sleep 3
+sudo docker compose -f /workspace/docker-compose.yml up -d postgres redis
+```
+Wait for healthy status before proceeding. Get container IPs for env files:
+```bash
+POSTGRES_IP=$(sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' workspace-postgres-1)
+REDIS_IP=$(sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' workspace-redis-1)
+```
+
+### Environment files
+Each service needs `.env.local` (gitignored). See `.env.example` in each service. Key local dev notes:
+- `DATABASE_URL` — postgres connection using Docker container IP
+- `REDIS_URL` — redis connection using Docker container IP
+- `BETTER_AUTH_SECRET` — any 32+ char random string
+- `BETTER_AUTH_URL` — set to API local address (port 3001)
+- `RESEND_API_KEY` — placeholder value OK for dev; actual email sends require a real Resend key
+- `DATABASE_SSL=false` (required in `packages/shared/.env.local` and `api/.env.local` for local Postgres without SSL)
+
+### Drizzle SSL gotcha
+`packages/shared/drizzle.config.ts` has `ssl: "require"` by default (for Railway). Set `DATABASE_SSL=false` in env to disable for local dev (the config reads this env var).
+
+### Running services
+Standard dev commands from root `package.json`: `bun dev:api`, `bun dev:web`, `bun dev:worker`, `bun dev:tracker`, `bun dev:mcp`.
+- **Tracker port gotcha**: When running `bun dev:tracker` from workspace root via `bun --cwd tracker dev`, it may not pick up `PORT` from `tracker/.env.local`. Workaround: `cd tracker && PORT=3003 bun run --watch src/index.ts`.
+- **pino-pretty**: Required as dev dep at root for pino logger pretty-printing in dev mode. Already added to root `package.json`.
+- API health check: `curl localhost:3001/health`
+- Tracker health check: `curl localhost:3003/health`
+
+### Service ports
+| Service | Port |
+|---------|------|
+| api | 3001 |
+| mcp | 3002 |
+| tracker | 3003 |
+| web (Vite) | 5173 |
+| worker | N/A (no HTTP) |
+
+### DB migrations
+```bash
+cd packages/shared && DATABASE_URL="..." DATABASE_SSL=false bun x drizzle-kit migrate
+```
+Or from root: `DATABASE_SSL=false bun db:migrate` (if `packages/shared/.env.local` is set up).
+
+### Type checking (CI lint)
+No dedicated linter config; CI runs `tsc --noEmit` on all 5 services:
+```bash
+cd api && bun x tsc --noEmit
+cd web && bun x tsc --noEmit
+cd worker && bun x tsc --noEmit
+cd mcp && bun x tsc --noEmit
+cd tracker && bun x tsc --noEmit
+```
+
+### ElectricSQL (optional for local dev)
+Dashboard "Live Activity" and Broadcasts real-time progress need ElectricSQL. Without it, the dashboard shows "Connecting to live feed..." — all other features work fine. Not blocking for development.
+
+### Auth route path
+Better Auth endpoints are at `/api/auth/*` on the API. The Vite dev server proxies `/api` → API on port 3001.
