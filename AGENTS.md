@@ -93,6 +93,22 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
 - Topics: email-marketing, customer-io-alternative, mcp, ai-agents, self-hosted, typescript, hono, drizzle-orm, bullmq, resend, saas, plg
 - CI: .github/workflows/ci.yml — tsc --noEmit on all 5 services
 
+## ElectricSQL Real-time Sync
+- Service: `electric` on Railway (electricsql/electric:latest image, port 3000)
+- Wired directly to Postgres (NOT via PgBouncer — needs logical replication)
+- DATABASE_URL = direct postgres.railway.internal connection
+- ELECTRIC_SECRET = server-side only (never exposed to browser)
+- Postgres requires: wal_level=logical, max_replication_slots=10, max_wal_senders=10
+  → Set via Postgres service startCommand: `docker-entrypoint.sh postgres -c wal_level=logical ...`
+- API proxy: `/api/session/ws/:workspaceId/shapes/:table`
+  → Validates session auth, enforces workspace_id scope, forwards to Electric
+  → Allowed tables: broadcasts, email_events, email_sends, contacts, campaigns, campaign_enrollments, events
+- Frontend hook: `useWorkspaceShape<T>(table, options)` in web/src/hooks/use-workspace-shape.ts
+- Real-time features using ElectricSQL:
+  → Broadcasts page: live send progress bar (sent_count/recipient_count)
+  → Dashboard: live activity feed (opens, clicks, unsubscribes as they happen)
+- @electric-sql/react + @electric-sql/client v1.0.41
+
 ## Feature Flags / Notes
 - Self-hosted (single tenant) + hosted SaaS (multi-tenant) both supported
 - Template builder: visual drag-and-drop + raw HTML/code mode
