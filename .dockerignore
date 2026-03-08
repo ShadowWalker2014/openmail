@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env.local
+.env.*.local
+*.tsbuildinfo
+.git/
+.turbo/
+.DS_Store
