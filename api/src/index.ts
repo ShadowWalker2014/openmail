@@ -18,6 +18,7 @@ import membersRouter from "./routes/members.js";
 import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
 import assetsRouter from "./routes/assets.js";
+import sendsRouter from "./routes/sends.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -100,6 +101,7 @@ sessionApi.route("/ws/:workspaceId/domains", domainsRouter);
 sessionApi.route("/ws/:workspaceId/members", membersRouter);
 sessionApi.route("/ws/:workspaceId/invites", invitesRouter);
 sessionApi.route("/ws/:workspaceId/assets", assetsRouter);
+sessionApi.route("/ws/:workspaceId/sends", sendsRouter);
 sessionApi.route("/invites", inviteAcceptRouter);
 
 app.route("/api/session", sessionApi);
