@@ -87,7 +87,7 @@ app.patch(
     const [updated] = await db
       .update(broadcasts)
       .set({ ...body, scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined, updatedAt: new Date() })
-      .where(eq(broadcasts.id, c.req.param("id")))
+      .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
       .returning();
     return c.json(updated);
   }
@@ -108,10 +108,18 @@ app.post("/:id/send", async (c) => {
   const [updated] = await db
     .update(broadcasts)
     .set({ status: "sending", updatedAt: new Date() })
-    .where(eq(broadcasts.id, broadcast.id))
+    .where(and(eq(broadcasts.id, broadcast.id), eq(broadcasts.workspaceId, workspaceId)))
     .returning();
 
-  await getBroadcastQueue().add("send-broadcast", { broadcastId: broadcast.id, workspaceId }, { removeOnComplete: 100 });
+  // If Redis is unavailable, reset to draft so the user can retry
+  await getBroadcastQueue()
+    .add("send-broadcast", { broadcastId: broadcast.id, workspaceId }, { removeOnComplete: 100 })
+    .catch(async () => {
+      await getDb()
+        .update(broadcasts)
+        .set({ status: "draft", updatedAt: new Date() })
+        .where(and(eq(broadcasts.id, broadcast.id), eq(broadcasts.workspaceId, workspaceId)));
+    });
   return c.json(updated);
 });
 
@@ -125,7 +133,7 @@ app.delete("/:id", async (c) => {
     .limit(1);
   if (!broadcast) return c.json({ error: "Not found" }, 404);
   if (broadcast.status === "sending") return c.json({ error: "Cannot delete a broadcast that is currently sending" }, 400);
-  await db.delete(broadcasts).where(eq(broadcasts.id, c.req.param("id")));
+  await db.delete(broadcasts).where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)));
   return c.json({ success: true });
 });
 

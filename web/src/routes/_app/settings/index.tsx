@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch, apiFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +88,7 @@ function CopyButton({ value }: { value: string }) {
 
 function SettingsPage() {
   const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspace } = useWorkspaces();
   const qc = useQueryClient();
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -156,7 +158,9 @@ function SettingsPage() {
           title="Email Sending"
           description="Configure your Resend account for sending emails"
         >
+          {/* key forces re-mount when workspace changes so defaultValues refresh */}
           <form
+            key={activeWorkspaceId ?? "none"}
             onSubmit={(e) => {
               e.preventDefault();
               if (!activeWorkspaceId) return;
@@ -187,11 +191,16 @@ function SettingsPage() {
                   ref={fromEmailRef}
                   type="email"
                   placeholder="hello@yourapp.com"
+                  defaultValue={activeWorkspace?.resendFromEmail ?? ""}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>From Name</Label>
-                <Input ref={fromNameRef} placeholder="Your App" />
+                <Input
+                ref={fromNameRef}
+                placeholder="Your App"
+                defaultValue={activeWorkspace?.resendFromName ?? ""}
+              />
               </div>
             </div>
             <Button
@@ -327,9 +336,10 @@ function SettingsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={deleteKeyMutation.isPending}
               onClick={() => deleteKey && deleteKeyMutation.mutate(deleteKey.id)}
             >
-              Revoke key
+              {deleteKeyMutation.isPending ? "Revoking…" : "Revoke key"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

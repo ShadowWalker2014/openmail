@@ -11,7 +11,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -44,6 +43,7 @@ interface Segment {
 }
 
 interface Condition {
+  id: string; // stable key for React reconciliation
   field: string;
   operator: string;
   value?: string;
@@ -58,19 +58,18 @@ const FIELD_OPTIONS = [
   { value: "attributes.company", label: "Company" },
 ];
 
-const OPERATOR_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  default: [
-    { value: "equals", label: "is" },
-    { value: "not_equals", label: "is not" },
-    { value: "contains", label: "contains" },
-    { value: "not_contains", label: "does not contain" },
-    { value: "is_set", label: "is set" },
-    { value: "is_not_set", label: "is not set" },
-  ],
-  unsubscribed: [
-    { value: "equals", label: "is" },
-  ],
-};
+const DEFAULT_OPERATORS = [
+  { value: "equals", label: "is" },
+  { value: "not_equals", label: "is not" },
+  { value: "contains", label: "contains" },
+  { value: "not_contains", label: "does not contain" },
+  { value: "is_set", label: "is set" },
+  { value: "is_not_set", label: "is not set" },
+];
+
+const BOOLEAN_OPERATORS = [
+  { value: "equals", label: "is" },
+];
 
 const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
   unsubscribed: [
@@ -81,37 +80,49 @@ const VALUE_OPTIONS: Record<string, { value: string; label: string }[]> = {
 
 const NO_VALUE_OPERATORS = ["is_set", "is_not_set"];
 
+function makeCondition(): Condition {
+  return {
+    id: crypto.randomUUID(),
+    field: "email",
+    operator: "contains",
+    value: "",
+  };
+}
+
+const INITIAL_CONDITIONS: Condition[] = [makeCondition()];
+
 function ConditionRow({
   condition,
-  index,
   total,
   onChange,
   onRemove,
 }: {
   condition: Condition;
-  index: number;
   total: number;
   onChange: (c: Condition) => void;
   onRemove: () => void;
 }) {
-  const isUnsubscribed = condition.field === "unsubscribed";
-  const operators = OPERATOR_OPTIONS[isUnsubscribed ? "unsubscribed" : "default"];
+  const isBooleanField = condition.field === "unsubscribed";
+  const operators = isBooleanField ? BOOLEAN_OPERATORS : DEFAULT_OPERATORS;
   const valueOptions = VALUE_OPTIONS[condition.field];
   const showValue = !NO_VALUE_OPERATORS.includes(condition.operator);
 
+  function handleFieldChange(field: string) {
+    const isBoolean = field === "unsubscribed";
+    onChange({
+      ...condition,
+      field,
+      operator: "equals",
+      value: isBoolean ? "true" : "",
+    });
+  }
+
   return (
     <div className="flex items-start gap-2">
-      <div className="grid flex-1 grid-cols-[1fr_auto_1fr] gap-2">
-        {/* Field */}
+      <div className="grid flex-1 grid-cols-[1fr_auto_1fr] gap-2 items-center">
         <select
           value={condition.field}
-          onChange={(e) => {
-            const field = e.target.value;
-            const defaultOperator =
-              field === "unsubscribed" ? "equals" : "equals";
-            const defaultValue = field === "unsubscribed" ? "true" : "";
-            onChange({ field, operator: defaultOperator, value: defaultValue });
-          }}
+          onChange={(e) => handleFieldChange(e.target.value)}
           className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
           {FIELD_OPTIONS.map((f) => (
@@ -121,11 +132,16 @@ function ConditionRow({
           ))}
         </select>
 
-        {/* Operator */}
         <select
           value={condition.operator}
           onChange={(e) =>
-            onChange({ ...condition, operator: e.target.value, value: NO_VALUE_OPERATORS.includes(e.target.value) ? undefined : condition.value ?? "" })
+            onChange({
+              ...condition,
+              operator: e.target.value,
+              value: NO_VALUE_OPERATORS.includes(e.target.value)
+                ? undefined
+                : condition.value ?? "",
+            })
           }
           className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
         >
@@ -136,7 +152,6 @@ function ConditionRow({
           ))}
         </select>
 
-        {/* Value */}
         {showValue ? (
           valueOptions ? (
             <select
@@ -175,167 +190,11 @@ function ConditionRow({
   );
 }
 
-function CreateSegmentDialog({
-  open,
-  onOpenChange,
-  onSuccess,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onSuccess: () => void;
-}) {
-  const { activeWorkspaceId } = useWorkspaceStore();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [conditionLogic, setConditionLogic] = useState<"and" | "or">("and");
-  const [conditions, setConditions] = useState<Condition[]>([
-    { field: "email", operator: "contains", value: "" },
-  ]);
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      sessionFetch(activeWorkspaceId!, "/segments", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          description: description || undefined,
-          conditions,
-          conditionLogic,
-        }),
-      }),
-    onSuccess: () => {
-      onSuccess();
-      onOpenChange(false);
-      setName("");
-      setDescription("");
-      setConditions([{ field: "email", operator: "contains", value: "" }]);
-      toast.success("Segment created");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    mutation.mutate();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>New Segment</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5">
-            <Label>Name *</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Active paying customers"
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Conditions *</Label>
-              {conditions.length > 1 && (
-                <div className="flex items-center gap-1 rounded-md border p-0.5">
-                  {(["and", "or"] as const).map((l) => (
-                    <button
-                      key={l}
-                      type="button"
-                      onClick={() => setConditionLogic(l)}
-                      className={cn(
-                        "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
-                        conditionLogic === l
-                          ? "bg-foreground text-background"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {l.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              {conditions.map((cond, i) => (
-                <div key={i}>
-                  {i > 0 && (
-                    <div className="flex items-center gap-2 py-1">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                        {conditionLogic}
-                      </span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  )}
-                  <ConditionRow
-                    condition={cond}
-                    index={i}
-                    total={conditions.length}
-                    onChange={(updated) =>
-                      setConditions((cs) =>
-                        cs.map((c, idx) => (idx === i ? updated : c))
-                      )
-                    }
-                    onRemove={() =>
-                      setConditions((cs) => cs.filter((_, idx) => idx !== i))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setConditions((cs) => [
-                  ...cs,
-                  { field: "email", operator: "contains", value: "" },
-                ])
-              }
-              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add condition
-            </button>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={mutation.isPending || !name.trim()}>
-              {mutation.isPending ? "Creating…" : "Create Segment"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function conditionSummary(conditions: Condition[], logic: "and" | "or"): string {
-  if (!conditions.length) return "No conditions";
+  if (!conditions?.length) return "No conditions";
   const parts = conditions.map((c) => {
     const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;
-    const op = OPERATOR_OPTIONS.default.find((o) => o.value === c.operator)?.label ?? c.operator;
+    const op = DEFAULT_OPERATORS.find((o) => o.value === c.operator)?.label ?? c.operator;
     return NO_VALUE_OPERATORS.includes(c.operator)
       ? `${field} ${op}`
       : `${field} ${op} "${c.value}"`;
@@ -349,14 +208,43 @@ function SegmentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Segment | null>(null);
 
+  // Create dialog state
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [conditionLogic, setConditionLogic] = useState<"and" | "or">("and");
+  const [conditions, setConditions] = useState<Condition[]>(INITIAL_CONDITIONS);
+
+  function resetCreateForm() {
+    setName("");
+    setDescription("");
+    setConditionLogic("and");
+    setConditions([makeCondition()]);
+  }
+
   const { data: segments = [], isLoading } = useQuery<Segment[]>({
     queryKey: ["segments", activeWorkspaceId],
     queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
     enabled: !!activeWorkspaceId,
   });
 
-  // Note: The API doesn't have a DELETE /segments/:id endpoint yet.
-  // This mutation will fail gracefully with a toast error.
+  const createMutation = useMutation({
+    mutationFn: () => {
+      // Strip internal `id` field before sending to API
+      const apiConditions = conditions.map(({ id: _id, ...rest }) => rest);
+      return sessionFetch(activeWorkspaceId!, "/segments", {
+        method: "POST",
+        body: JSON.stringify({ name, description: description || undefined, conditions: apiConditions, conditionLogic }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["segments", activeWorkspaceId] });
+      setCreateOpen(false);
+      resetCreateForm();
+      toast.success("Segment created");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       sessionFetch(activeWorkspaceId!, `/segments/${id}`, { method: "DELETE" }),
@@ -365,11 +253,22 @@ function SegmentsPage() {
       setDeleteTarget(null);
       toast.success("Segment deleted");
     },
-    onError: () => {
-      setDeleteTarget(null);
-      toast.error("Segment deletion is not available yet");
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
+
+  function handleCreateSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    // Validate: all conditions with a value-requiring operator must have a non-empty value
+    const invalid = conditions.find(
+      (c) => !NO_VALUE_OPERATORS.includes(c.operator) && !VALUE_OPTIONS[c.field] && !c.value?.trim()
+    );
+    if (invalid) {
+      toast.error("All conditions must have a value");
+      return;
+    }
+    createMutation.mutate();
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
@@ -416,7 +315,7 @@ function SegmentsPage() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                  {format(new Date(segment.createdAt), "MMM d")}
+                  {segment.createdAt ? format(new Date(segment.createdAt), "MMM d") : ""}
                 </span>
                 <button
                   onClick={() => setDeleteTarget(segment)}
@@ -435,7 +334,7 @@ function SegmentsPage() {
             </div>
             <p className="font-medium text-sm">No segments yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create segments to target specific groups of contacts in broadcasts
+              Create segments to target specific groups in broadcasts
             </p>
             <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
@@ -446,13 +345,119 @@ function SegmentsPage() {
       </div>
 
       {/* Create dialog */}
-      <CreateSegmentDialog
+      <Dialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
-        onSuccess={() =>
-          qc.invalidateQueries({ queryKey: ["segments", activeWorkspaceId] })
-        }
-      />
+        onOpenChange={(v) => {
+          setCreateOpen(v);
+          if (!v) resetCreateForm();
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>New Segment</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Active paying customers"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Conditions *</Label>
+                {conditions.length > 1 && (
+                  <div className="flex items-center gap-1 rounded-md border p-0.5">
+                    {(["and", "or"] as const).map((l) => (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => setConditionLogic(l)}
+                        className={cn(
+                          "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
+                          conditionLogic === l
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {l.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {conditions.map((cond, i) => (
+                  <div key={cond.id}>
+                    {i > 0 && (
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase">
+                          {conditionLogic}
+                        </span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                    )}
+                    <ConditionRow
+                      condition={cond}
+                      total={conditions.length}
+                      onChange={(updated) =>
+                        setConditions((cs) =>
+                          cs.map((c) => (c.id === cond.id ? updated : c))
+                        )
+                      }
+                      onRemove={() =>
+                        setConditions((cs) => cs.filter((c) => c.id !== cond.id))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConditions((cs) => [...cs, makeCondition()])}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add condition
+              </button>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreateOpen(false);
+                  resetCreateForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || !name.trim()}
+              >
+                {createMutation.isPending ? "Creating…" : "Create Segment"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog
@@ -466,16 +471,19 @@ function SegmentsPage() {
               <strong className="text-foreground font-medium">
                 {deleteTarget?.name}
               </strong>{" "}
-              will be permanently deleted. Broadcasts that used this segment will
-              not be affected.
+              will be permanently deleted. Broadcasts that used this segment
+              will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

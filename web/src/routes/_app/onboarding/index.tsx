@@ -20,29 +20,40 @@ function OnboardingPage() {
   const nameRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const workspace = await apiFetch<{
-      id: string;
-      name: string;
-      slug: string;
-    }>("/api/session/workspaces", {
-      method: "POST",
-      body: JSON.stringify({
-        name: nameRef.current!.value,
-        slug: slugRef.current!.value,
-      }),
-    }).catch((err: Error) => {
+    const workspace = await apiFetch<{ id: string; name: string; slug: string }>(
+      "/api/session/workspaces",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: nameRef.current!.value,
+          slug: slugRef.current!.value,
+        }),
+      }
+    ).catch((err: Error) => {
       toast.error(err.message);
-      setLoading(false);
       return null;
     });
+
+    setLoading(false);
     if (!workspace) return;
     setActiveWorkspaceId(workspace.id);
     await qc.invalidateQueries({ queryKey: ["workspaces"] });
     router.navigate({ to: "/dashboard" });
+  }
+
+  function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // Only auto-generate slug if user hasn't manually edited it
+    if (!slugTouched && slugRef.current) {
+      slugRef.current.value = e.target.value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
   }
 
   return (
@@ -69,14 +80,7 @@ function OnboardingPage() {
                 ref={nameRef}
                 placeholder="Acme Corp"
                 required
-                onChange={(e) => {
-                  if (slugRef.current) {
-                    slugRef.current.value = e.target.value
-                      .toLowerCase()
-                      .replace(/[^a-z0-9]+/g, "-")
-                      .replace(/^-+|-+$/g, "");
-                  }
-                }}
+                onChange={handleNameChange}
               />
             </div>
             <div className="space-y-1.5">
@@ -87,6 +91,7 @@ function OnboardingPage() {
                 placeholder="acme-corp"
                 pattern="[a-z0-9-]+"
                 required
+                onChange={() => setSlugTouched(true)}
               />
               <p className="text-xs text-muted-foreground">
                 Lowercase letters, numbers, and hyphens only

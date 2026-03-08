@@ -3,14 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
-import {
-  MousePointerClick,
-  Mail,
-  Users,
-  TrendingUp,
-  UserMinus,
-  Activity,
-} from "lucide-react";
+import { Mail, Users, TrendingUp, MousePointerClick, UserMinus, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/dashboard/")({
@@ -27,7 +20,7 @@ interface Analytics {
   clickRate: number;
 }
 
-interface EmailEvent {
+interface EmailEvent extends Record<string, unknown> {
   id: string;
   event_type: "open" | "click" | "unsubscribe" | "bounce" | "complaint";
   occurred_at: string;
@@ -35,15 +28,12 @@ interface EmailEvent {
   workspace_id: string;
 }
 
-const EVENT_CONFIG: Record<
-  string,
-  { label: string; dotClass: string; icon: React.ElementType }
-> = {
-  open:        { label: "Email opened",  dotClass: "bg-blue-400",   icon: Mail },
-  click:       { label: "Link clicked",  dotClass: "bg-green-400",  icon: MousePointerClick },
-  unsubscribe: { label: "Unsubscribed",  dotClass: "bg-red-400",    icon: UserMinus },
-  bounce:      { label: "Bounced",       dotClass: "bg-orange-400", icon: Mail },
-  complaint:   { label: "Complaint",     dotClass: "bg-red-500",    icon: Mail },
+const EVENT_CONFIG: Record<string, { label: string; dotClass: string }> = {
+  open:        { label: "Email opened",  dotClass: "bg-blue-400"   },
+  click:       { label: "Link clicked",  dotClass: "bg-green-400"  },
+  unsubscribe: { label: "Unsubscribed",  dotClass: "bg-red-400"    },
+  bounce:      { label: "Bounced",       dotClass: "bg-orange-400" },
+  complaint:   { label: "Complaint",     dotClass: "bg-red-500"    },
 };
 
 function StatCard({

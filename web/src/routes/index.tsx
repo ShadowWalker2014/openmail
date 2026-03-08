@@ -205,7 +205,7 @@ function LandingPage() {
               href={GITHUB_REPO}
               target="_blank"
               rel="noreferrer"
-              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex"
+              className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:flex tabular-nums"
             >
               <Star className="h-3 w-3" />
               {stars != null ? stars.toLocaleString() : "Star"}

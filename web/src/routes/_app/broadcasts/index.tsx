@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_app/broadcasts/")({
   component: BroadcastsPage,
 });
 
-interface Broadcast {
+interface Broadcast extends Record<string, unknown> {
   id: string;
   name: string;
   subject: string;
@@ -62,7 +62,7 @@ function normalizeBroadcast(b: Record<string, unknown>): Broadcast {
     open_count: ((b.open_count ?? b.openCount ?? 0) as number),
     click_count: ((b.click_count ?? b.clickCount ?? 0) as number),
     sent_at: ((b.sent_at ?? b.sentAt ?? null) as string | null),
-    created_at: ((b.created_at ?? b.createdAt) as string),
+    created_at: ((b.created_at ?? b.createdAt ?? "") as string),
   };
 }
 
@@ -129,6 +129,7 @@ function BroadcastsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Broadcast | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const htmlRef = useRef<HTMLTextAreaElement>(null);
@@ -180,8 +181,11 @@ function BroadcastsPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: (id: string) =>
-      sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST" }),
+    mutationFn: (id: string) => {
+      setSendingId(id);
+      return sessionFetch(activeWorkspaceId!, `/broadcasts/${id}/send`, { method: "POST" });
+    },
+    onSettled: () => setSendingId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", activeWorkspaceId] });
       toast.success("Sending — watch the progress bar update live");
@@ -354,25 +358,27 @@ function BroadcastsPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <span className="text-xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                    {format(new Date(broadcast.created_at), "MMM d")}
-                  </span>
+                  {broadcast.created_at ? format(new Date(broadcast.created_at), "MMM d") : ""}
+                </span>
                   {broadcast.status === "draft" && (
                     <>
                       <Button
                         size="sm"
                         onClick={() => sendMutation.mutate(broadcast.id)}
-                        disabled={sendMutation.isPending}
+                        disabled={sendingId === broadcast.id}
                       >
                         <Send className="h-3.5 w-3.5" />
-                        Send
+                        {sendingId === broadcast.id ? "Sending…" : "Send"}
                       </Button>
-                      <button
-                        onClick={() => setDeleteTarget(broadcast)}
-                        className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
                     </>
+                  )}
+                  {(broadcast.status === "draft" || broadcast.status === "failed") && (
+                    <button
+                      onClick={() => setDeleteTarget(broadcast)}
+                      className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -414,9 +420,10 @@ function BroadcastsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={deleteMutation.isPending}
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

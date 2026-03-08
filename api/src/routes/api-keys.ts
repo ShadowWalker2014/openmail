@@ -43,7 +43,9 @@ app.post(
       keyPrefix,
     }).returning();
 
-    return c.json({ ...key, key: rawKey }, 201);
+    // Explicitly omit keyHash and workspaceId from the response
+    const { keyHash: _kh, workspaceId: _ws, ...safeKey } = key;
+    return c.json({ ...safeKey, key: rawKey }, 201);
   }
 );
 

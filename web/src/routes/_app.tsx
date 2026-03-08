@@ -13,6 +13,13 @@ function AppLayout() {
   const router = useRouter();
   const { workspaces, isLoading: workspacesLoading } = useWorkspaces();
 
+  // Redirect unauthenticated users — in useEffect to avoid render-time side effects
+  useEffect(() => {
+    if (!sessionPending && !session) {
+      router.navigate({ to: "/login" });
+    }
+  }, [session, sessionPending, router]);
+
   // Redirect to onboarding if authenticated but has no workspaces
   useEffect(() => {
     if (
@@ -28,13 +35,12 @@ function AppLayout() {
   if (sessionPending) {
     return (
       <div className="flex h-screen">
-        {/* Sidebar skeleton */}
         <div className="flex h-screen w-[220px] shrink-0 flex-col border-r bg-[hsl(var(--sidebar-bg))]">
-          <div className="flex h-12 items-center gap-2 px-4 border-b">
+          <div className="flex h-12 items-center gap-2 px-4 border-b border-[hsl(var(--sidebar-border))]">
             <div className="h-6 w-6 rounded-md bg-muted shimmer" />
             <div className="h-4 w-20 rounded bg-muted shimmer" />
           </div>
-          <div className="p-3 border-b">
+          <div className="p-3 border-b border-[hsl(var(--sidebar-border))]">
             <div className="h-8 w-full rounded-md bg-muted shimmer" />
           </div>
           <div className="flex-1 p-2 space-y-1">
@@ -48,10 +54,7 @@ function AppLayout() {
     );
   }
 
-  if (!session) {
-    router.navigate({ to: "/login" });
-    return null;
-  }
+  if (!session) return null;
 
   return (
     <div className="flex h-screen bg-[hsl(var(--app-bg))]">

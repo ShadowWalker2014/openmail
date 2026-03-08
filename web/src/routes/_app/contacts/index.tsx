@@ -231,7 +231,7 @@ function ContactsPage() {
                     )}
                   </td>
                   <td className="tabular-nums px-4 py-3 text-muted-foreground">
-                    {format(new Date(contact.createdAt), "MMM d, yyyy")}
+                    {contact.createdAt ? format(new Date(contact.createdAt), "MMM d, yyyy") : "—"}
                   </td>
                   <td className="px-2 py-3">
                     <button
@@ -285,11 +285,12 @@ function ContactsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={deleteMutation.isPending}
               onClick={() =>
                 deleteContact && deleteMutation.mutate(deleteContact.id)
               }
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

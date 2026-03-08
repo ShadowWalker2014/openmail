@@ -142,11 +142,14 @@
   100% { background-position: 200% 0; }
 }
 
-@keyframes fade-in {
+/* Note: tailwindcss-animate provides .fade-in as a modifier (--tw-enter-opacity: 0).
+   We do NOT redefine .fade-in here to avoid overriding the plugin's layered utility. */
+@keyframes fade-in-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.fade-in {
-  animation: fade-in 0.2s ease-out forwards;
+/* Use .fade-in-up instead of .fade-in to avoid collision with tailwindcss-animate */
+.fade-in-up {
+  animation: fade-in-enter 0.2s ease-out forwards;
 }

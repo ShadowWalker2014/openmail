@@ -1,34 +1,36 @@
 import { useShape } from "@electric-sql/react";
 import { useWorkspaceStore } from "@/store/workspace";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+interface ShapeOptions {
+  columns?: string[];
+}
 
-/**
- * Subscribe to a real-time ElectricSQL shape scoped to the active workspace.
- * The API proxy handles workspace_id filtering and Electric auth server-side.
- * Extra params (columns, etc.) are appended directly to the URL.
- */
-export function useWorkspaceShape<T>(
+// Electric requires T to extend Record<string, unknown>
+export function useWorkspaceShape<T extends Record<string, unknown>>(
   table: string,
-  options?: { columns?: string[]; enabled?: boolean }
+  options?: ShapeOptions
 ) {
   const { activeWorkspaceId } = useWorkspaceStore();
-  const enabled = options?.enabled !== false && !!activeWorkspaceId;
+  const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001"; // pragma: allowlist secret
 
-  let shapeUrl = enabled
-    ? `${API_URL}/api/session/ws/${activeWorkspaceId}/shapes/${table}`
-    : "";
+  // When no workspace is active, use a URL that will cleanly fail
+  // rather than fetching the current page (url: "")
+  const url = activeWorkspaceId
+    ? `${apiUrl}/api/session/ws/${activeWorkspaceId}/shapes/${table}`
+    : `${apiUrl}/api/session/ws/_disabled_/shapes/${table}`;
 
-  if (enabled && options?.columns?.length) {
-    shapeUrl += `?columns=${options.columns.join(",")}`;
+  const params: Record<string, string> = {};
+  if (options?.columns?.length) {
+    params.columns = options.columns.join(",");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = useShape({ url: shapeUrl } as any);
+  const result = useShape<T>({ url, params } as any);
 
   return {
     ...result,
-    data: (result.data ?? []) as T[],
-    isLoading: result.isLoading as boolean,
+    // Only report loading when workspace is active; otherwise treat as idle
+    isLoading: result.isLoading && !!activeWorkspaceId,
+    data: activeWorkspaceId ? result.data : ([] as T[]),
   };
 }

@@ -1,4 +1,5 @@
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -76,7 +77,7 @@ function WorkspaceSwitcher() {
       <div
         className={cn(
           "absolute left-3 right-3 top-full z-50 mt-1 overflow-hidden rounded-lg border bg-background shadow-lg",
-          "transition-all duration-150 origin-top",
+          "transition-[opacity,transform] duration-150 origin-top",
           open ? "opacity-100 scale-y-100 pointer-events-auto" : "opacity-0 scale-y-95 pointer-events-none"
         )}
       >
@@ -107,6 +108,7 @@ export function AppSidebar() {
   const location = useLocation();
   const router = useRouter();
   const { data: session } = useSession();
+  const { setActiveWorkspaceId } = useWorkspaceStore();
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -204,7 +206,12 @@ export function AppSidebar() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() =>
-                      signOut().then(() => router.navigate({ to: "/login" }))
+                      signOut()
+                        .then(() => {
+                          setActiveWorkspaceId(null);
+                          router.navigate({ to: "/login" });
+                        })
+                        .catch(() => toast.error("Sign out failed"))
                     }
                     className="shrink-0 rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-foreground active:bg-accent/70 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
                   >

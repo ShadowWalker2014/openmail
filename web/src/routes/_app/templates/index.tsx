@@ -66,6 +66,11 @@ function TemplatesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
       setOpen(false);
+      // Reset form refs so re-opening shows a blank form
+      if (nameRef.current) nameRef.current.value = "";
+      if (subjectRef.current) subjectRef.current.value = "";
+      if (previewRef.current) previewRef.current.value = "";
+      if (htmlRef.current) htmlRef.current.value = "";
       toast.success("Template created");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -242,7 +247,9 @@ function TemplatesPage() {
                 </div>
               </div>
               <p className="mt-3 text-xs text-muted-foreground tabular-nums">
-                Updated {format(new Date(tmpl.updatedAt), "MMM d, yyyy")}
+                {tmpl.updatedAt
+                  ? `Updated ${format(new Date(tmpl.updatedAt), "MMM d, yyyy")}`
+                  : ""}
               </p>
             </div>
           ))}
@@ -282,9 +289,10 @@ function TemplatesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={deleteMutation.isPending}
               onClick={() => deleteTemplate && deleteMutation.mutate(deleteTemplate.id)}
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

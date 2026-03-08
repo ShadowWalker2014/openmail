@@ -21,7 +21,11 @@ export function useWorkspaces() {
   });
 
   useEffect(() => {
-    if (query.data && query.data.length > 0 && !activeWorkspaceId) {
+    if (!query.data || query.data.length === 0) return;
+
+    // Auto-select if no active workspace OR if the stored ID is no longer valid
+    const isValid = query.data.some((w) => w.id === activeWorkspaceId);
+    if (!activeWorkspaceId || !isValid) {
       setActiveWorkspaceId(query.data[0].id);
     }
   }, [query.data, activeWorkspaceId, setActiveWorkspaceId]);
