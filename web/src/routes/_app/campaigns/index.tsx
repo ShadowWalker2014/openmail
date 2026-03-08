@@ -131,6 +131,8 @@ function StepConfigPanel({
   const [fromName, setFromName] = useState("");
   const [fromEmail, setFromEmail] = useState("");
   const [htmlContent, setHtmlContent] = useState("");
+  const [contentMode, setContentMode] = useState<"html" | "template">("html");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Wait step state
   const [duration, setDuration] = useState(1);
@@ -138,6 +140,12 @@ function StepConfigPanel({
 
   // Delete confirmation
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { data: templates = [] } = useQuery<{ id: string; name: string; htmlContent: string }[]>({
+    queryKey: ["templates", workspaceId],
+    queryFn: () => sessionFetch(workspaceId, "/templates"),
+    enabled: step?.stepType === "email",
+  });
 
   // Sync local state when step changes
   useEffect(() => {
@@ -147,6 +155,8 @@ function StepConfigPanel({
       setFromName((step.config.fromName as string) ?? "");
       setFromEmail((step.config.fromEmail as string) ?? "");
       setHtmlContent((step.config.htmlContent as string) ?? "");
+      setSelectedTemplateId((step.config.templateId as string | null) ?? null);
+      setContentMode((step.config.templateId as string | null) ? "template" : "html");
     } else if (step.stepType === "wait") {
       setDuration((step.config.duration as number) ?? 1);
       setUnit((step.config.unit as "hours" | "days" | "weeks") ?? "days");
@@ -198,7 +208,14 @@ function StepConfigPanel({
 
   function handleSave() {
     if (step!.stepType === "email") {
-      saveMutation.mutate({ subject, fromName, fromEmail, htmlContent });
+      saveMutation.mutate({
+        subject,
+        fromName,
+        fromEmail,
+        ...(contentMode === "template" && selectedTemplateId
+          ? { templateId: selectedTemplateId, htmlContent: undefined }
+          : { htmlContent }),
+      });
     } else {
       saveMutation.mutate({ duration, unit });
     }
@@ -242,16 +259,51 @@ function StepConfigPanel({
                 />
               </div>
             </div>
+            {/* Content mode toggle */}
             <div className="space-y-1.5">
-              <Label className="text-[12px]">HTML Content</Label>
-              <textarea
-                value={htmlContent}
-                onChange={(e) => setHtmlContent(e.target.value)}
-                placeholder="<p>Hello {{contact.firstName}}</p>"
-                className="w-full min-h-[200px] rounded-md border border-border bg-input px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-y"
-              />
+              <div className="flex items-center justify-between">
+                <Label className="text-[12px]">Content</Label>
+                <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+                  {(["html", "template"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setContentMode(m); if (m === "html") setSelectedTemplateId(null); }}
+                      className={cn(
+                        "rounded px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer",
+                        contentMode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {m === "html" ? "Write HTML" : "Template"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {contentMode === "html" ? (
+                <textarea
+                  value={htmlContent}
+                  onChange={(e) => setHtmlContent(e.target.value)}
+                  placeholder="<p>Hello {{contact.firstName}}</p>"
+                  className="w-full min-h-[200px] rounded-md border border-border bg-input px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+                />
+              ) : templates.length === 0 ? (
+                <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">No templates yet. Create one in the Templates page.</p>
+              ) : (
+                <select
+                  value={selectedTemplateId ?? ""}
+                  onChange={(e) => setSelectedTemplateId(e.target.value || null)}
+                  className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                >
+                  <option value="">Select a template…</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
-            {htmlContent && (
+
+            {/* Preview */}
+            {contentMode === "html" && htmlContent && (
               <div className="space-y-1.5">
                 <Label className="text-[12px]">Preview</Label>
                 <iframe
@@ -259,6 +311,17 @@ function StepConfigPanel({
                   sandbox="allow-same-origin"
                   className="w-full min-h-[300px] rounded-md border border-border bg-white"
                   title="Email preview"
+                />
+              </div>
+            )}
+            {contentMode === "template" && selectedTemplateId && (
+              <div className="space-y-1.5">
+                <Label className="text-[12px]">Preview</Label>
+                <iframe
+                  srcDoc={templates.find(t => t.id === selectedTemplateId)?.htmlContent ?? ""}
+                  sandbox="allow-same-origin"
+                  className="w-full min-h-[300px] rounded-md border border-border bg-white"
+                  title="Template preview"
                 />
               </div>
             )}
