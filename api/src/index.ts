@@ -31,7 +31,7 @@ app.use("*", honoLogger());
 
 app.get("/health", (c) => c.json({ status: "ok", service: "api" }));
 
-app.all("/auth/*", async (c) => {
+app.all("/api/auth/*", async (c) => {
   const { getAuth } = await import("./lib/auth.js");
   return getAuth().handler(c.req.raw);
 });
