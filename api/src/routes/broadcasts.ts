@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
-import { broadcasts } from "@openmail/shared/schema";
+import { broadcasts, emailSends } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count, desc } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
@@ -152,6 +152,84 @@ app.delete("/:id", async (c) => {
   if (!broadcast) return c.json({ error: "Not found" }, 404);
   if (broadcast.status === "sending") return c.json({ error: "Cannot delete a broadcast that is currently sending" }, 400);
   await db.delete(broadcasts).where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)));
+  return c.json({ success: true });
+});
+
+app.get("/:id/sends", async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const page = Number(c.req.query("page") ?? 1);
+  const pageSize = Number(c.req.query("pageSize") ?? 50);
+  const status = c.req.query("status");
+  const db = getDb();
+
+  const [broadcast] = await db.select({ id: broadcasts.id })
+    .from(broadcasts)
+    .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
+    .limit(1);
+  if (!broadcast) return c.json({ error: "Not found" }, 404);
+
+  const conditions = [eq(emailSends.broadcastId, c.req.param("id")), eq(emailSends.workspaceId, workspaceId)];
+  if (status) conditions.push(eq(emailSends.status, status));
+
+  const [{ total }] = await db.select({ total: count() }).from(emailSends).where(and(...conditions));
+  const data = await db.select().from(emailSends).where(and(...conditions))
+    .orderBy(desc(emailSends.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  return c.json({ data, total, page, pageSize });
+});
+
+app.get("/:id/top-links", async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+
+  const [broadcast] = await db.select({ id: broadcasts.id })
+    .from(broadcasts)
+    .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
+    .limit(1);
+  if (!broadcast) return c.json({ error: "Not found" }, 404);
+
+  const { sql } = await import("drizzle-orm");
+  const rows = await db.execute(sql`
+    SELECT (ee.metadata->>'url') as url, COUNT(*)::int as clicks
+    FROM email_events ee
+    JOIN email_sends es ON es.id = ee.send_id
+    WHERE es.broadcast_id = ${c.req.param("id")}
+      AND es.workspace_id = ${workspaceId}
+      AND ee.event_type = 'click'
+      AND ee.metadata->>'url' IS NOT NULL
+    GROUP BY url
+    ORDER BY clicks DESC
+    LIMIT 10
+  `);
+
+  return c.json(Array.from(rows));
+});
+
+app.post("/:id/test-send", zValidator("json", z.object({ email: z.string().email() })), async (c) => {
+  const workspaceId = c.get("workspaceId") as string;
+  const db = getDb();
+  const { email } = c.req.valid("json");
+
+  const [broadcast] = await db.select()
+    .from(broadcasts)
+    .where(and(eq(broadcasts.id, c.req.param("id")), eq(broadcasts.workspaceId, workspaceId)))
+    .limit(1);
+  if (!broadcast) return c.json({ error: "Not found" }, 404);
+
+  const { getResend } = await import("../lib/resend.js");
+  const resend = getResend();
+  if (!resend) return c.json({ error: "Email sending not configured" }, 503);
+
+  const htmlContent = broadcast.htmlContent ?? "<p>No content</p>";
+  await resend.emails.send({
+    from: broadcast.fromEmail ? `${broadcast.fromName ?? ""} <${broadcast.fromEmail}>`.trim() : "OpenMail <onboarding@resend.dev>",
+    to: [email],
+    subject: `[TEST] ${broadcast.subject}`,
+    html: htmlContent,
+  });
+
   return c.json({ success: true });
 });
 
