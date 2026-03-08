@@ -79,6 +79,9 @@ apiKeyApi.route("/analytics", analyticsRouter);
 
 app.route("/api/v1", apiKeyApi);
 
+// Exported for integration tests — same app instance used in production
+export { app };
+
 const port = Number(process.env.PORT ?? 3001);
 logger.info({ port }, "API server starting");
 

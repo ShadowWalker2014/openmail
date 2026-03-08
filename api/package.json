@@ -7,7 +7,9 @@
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --target bun --outdir dist",
     "test": "bun test src/routes/domains.test.ts",
-    "test:verbose": "bun test --verbose src/routes/domains.test.ts"
+    "test:verbose": "bun test --verbose src/routes/domains.test.ts",
+    "test:integration": "bun test src/integration/domains.integration.test.ts",
+    "test:all": "bun test src/routes/domains.test.ts && bun test src/integration/domains.integration.test.ts"
   },
   "dependencies": {
     "@openmail/shared": "workspace:*",
