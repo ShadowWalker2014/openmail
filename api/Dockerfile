@@ -2,17 +2,21 @@ FROM node:22-alpine
 RUN npm install -g bun
 WORKDIR /app
 
-# Copy root workspace manifest first (bun needs this to resolve @openmail/shared)
+# Root workspace manifest + lockfile
 COPY package.json ./package.json
 COPY bun.lock* ./
 
-# Copy per-service and shared package manifests for install layer caching
+# All workspace package.json stubs (bun validates all workspaces on install)
 COPY api/package.json ./api/package.json
+COPY mcp/package.json ./mcp/package.json
+COPY worker/package.json ./worker/package.json
+COPY tracker/package.json ./tracker/package.json
+COPY web/package.json ./web/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
 RUN bun install --frozen-lockfile
 
-# Copy source files
+# Source files for this service + shared
 COPY packages/shared ./packages/shared
 COPY api/src ./api/src
 COPY api/tsconfig.json ./api/tsconfig.json
