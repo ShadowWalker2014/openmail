@@ -1,6 +1,6 @@
 ---
 title: Segments API
-description: Create and manage rule-based contact segments.
+description: Create and manage rule-based dynamic contact segments with flexible filter conditions.
 ---
 
 # Segments API
@@ -41,7 +41,7 @@ Creates a new segment with filter conditions.
 |-------|------|-------------|
 | `field` | string | Field to evaluate, e.g. `"attributes.plan"`, `"email"` |
 | `operator` | string | Comparison operator (see below) |
-| `value` | string, number, or boolean | Value to compare against (not required for `exists` / `not_exists`) |
+| `value` | string, number, or boolean | Value to compare against (not used with `exists`/`not_exists`) |
 
 ### Operators
 
@@ -90,13 +90,55 @@ curl -X POST https://your-api/api/v1/segments \
   }'
 ```
 
-**Any contact with a company attribute (any value):**
+## Update Segment
+
+<EndpointBadge method="PATCH" path="/api/v1/segments/:id" />
+
+Updates a segment's name, description, conditions, or conditionLogic. All fields are optional.
 
 ```bash
+curl -X PATCH https://your-api/api/v1/segments/seg_abc123 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro and Enterprise Users",
+    "conditionLogic": "or",
+    "conditions": [
+      { "field": "attributes.plan", "operator": "eq", "value": "pro" },
+      { "field": "attributes.plan", "operator": "eq", "value": "enterprise" }
+    ]
+  }'
+```
+
+## List Segment Members
+
+<EndpointBadge method="GET" path="/api/v1/segments/:id/people" />
+
+Returns the contacts that currently match this segment's conditions, with pagination.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/segments/seg_abc123/people?page=1&pageSize=50"
+```
+
+## Segment Usage
+
+<EndpointBadge method="GET" path="/api/v1/segments/:id/usage" />
+
+Returns which broadcasts and campaigns are using this segment. Useful before deleting a segment.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/segments/seg_abc123/usage
+```
+
+```json
 {
-  "name": "Contacts with Company",
-  "conditions": [
-    { "field": "attributes.company", "operator": "exists" }
+  "broadcasts": [
+    { "id": "brd_xxx", "name": "March Newsletter" }
+  ],
+  "campaigns": [
+    { "id": "cmp_yyy", "name": "Welcome Series" }
   ]
 }
 ```
@@ -105,7 +147,9 @@ curl -X POST https://your-api/api/v1/segments \
 
 <EndpointBadge method="DELETE" path="/api/v1/segments/:id" />
 
-Permanently deletes a segment. Broadcasts and campaigns using this segment will lose their reference.
+Permanently deletes a segment. Broadcasts and campaigns referencing it will lose the segment reference. Use the `usage` endpoint first to check dependencies.
+
+Returns `204 No Content`.
 
 ## Segment Object
 

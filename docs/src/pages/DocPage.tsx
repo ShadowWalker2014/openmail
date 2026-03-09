@@ -53,14 +53,61 @@ export default function DocPage() {
       });
   }, [slug]);
 
-  // Update document title
+  // Update document title + meta tags for SEO
   useEffect(() => {
-    if (mod?.frontmatter?.title) {
-      document.title = `${mod.frontmatter.title} — OpenMail Docs`;
-    } else {
-      document.title = "OpenMail Docs";
+    const title = mod?.frontmatter?.title
+      ? `${mod.frontmatter.title} — OpenMail Docs`
+      : "OpenMail Docs";
+    const description =
+      mod?.frontmatter?.description ??
+      "OpenMail documentation — open-source Customer.io alternative with full REST API and native MCP server for AI agents.";
+    const canonical = `https://docs.openmail.win${href}`;
+
+    document.title = title;
+
+    const setMeta = (sel: string, attr: string, val: string) => {
+      let el = document.querySelector<HTMLMetaElement>(sel);
+      if (!el) {
+        el = document.createElement("meta");
+        document.head.appendChild(el);
+      }
+      el.setAttribute(attr, val);
+    };
+
+    setMeta('meta[name="description"]', "content", description);
+    setMeta('meta[name="description"]', "name", "description");
+
+    // Open Graph
+    setMeta('meta[property="og:title"]', "content", title);
+    setMeta('meta[property="og:title"]', "property", "og:title");
+    setMeta('meta[property="og:description"]', "content", description);
+    setMeta('meta[property="og:description"]', "property", "og:description");
+    setMeta('meta[property="og:url"]', "content", canonical);
+    setMeta('meta[property="og:url"]', "property", "og:url");
+    setMeta('meta[property="og:type"]', "content", "article");
+    setMeta('meta[property="og:type"]', "property", "og:type");
+    setMeta('meta[property="og:site_name"]', "content", "OpenMail Docs");
+    setMeta('meta[property="og:site_name"]', "property", "og:site_name");
+    setMeta('meta[property="og:image"]', "content", "https://docs.openmail.win/og-image.png");
+    setMeta('meta[property="og:image"]', "property", "og:image");
+
+    // Twitter Card
+    setMeta('meta[name="twitter:card"]', "content", "summary_large_image");
+    setMeta('meta[name="twitter:card"]', "name", "twitter:card");
+    setMeta('meta[name="twitter:title"]', "content", title);
+    setMeta('meta[name="twitter:title"]', "name", "twitter:title");
+    setMeta('meta[name="twitter:description"]', "content", description);
+    setMeta('meta[name="twitter:description"]', "name", "twitter:description");
+
+    // Canonical
+    let link = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "canonical";
+      document.head.appendChild(link);
     }
-  }, [mod]);
+    link.href = canonical;
+  }, [mod, href]);
 
   if (notFound) {
     return <Navigate to="/getting-started/introduction" replace />;
@@ -87,15 +134,55 @@ export default function DocPage() {
               dangerouslySetInnerHTML={{
                 __html: JSON.stringify({
                   "@context": "https://schema.org",
-                  "@type": "TechArticle",
-                  headline: fm.title,
-                  description: fm.description,
-                  url: `https://docs.openmail.win${href}`,
-                  publisher: {
-                    "@type": "Organization",
-                    name: "OpenMail",
-                    url: "https://openmail.win",
-                  },
+                  "@graph": [
+                    {
+                      "@type": "TechArticle",
+                      headline: fm.title,
+                      description: fm.description ?? "",
+                      url: `https://docs.openmail.win${href}`,
+                      inLanguage: "en-US",
+                      isPartOf: {
+                        "@type": "WebSite",
+                        name: "OpenMail Docs",
+                        url: "https://docs.openmail.win",
+                      },
+                      publisher: {
+                        "@type": "Organization",
+                        name: "OpenMail",
+                        url: "https://openmail.win",
+                        logo: {
+                          "@type": "ImageObject",
+                          url: "https://docs.openmail.win/og-image.png",
+                        },
+                      },
+                    },
+                    {
+                      "@type": "BreadcrumbList",
+                      itemListElement: [
+                        {
+                          "@type": "ListItem",
+                          position: 1,
+                          name: "Docs",
+                          item: "https://docs.openmail.win",
+                        },
+                        ...(section
+                          ? [
+                              {
+                                "@type": "ListItem",
+                                position: 2,
+                                name: section,
+                              },
+                            ]
+                          : []),
+                        {
+                          "@type": "ListItem",
+                          position: section ? 3 : 2,
+                          name: fm.title,
+                          item: `https://docs.openmail.win${href}`,
+                        },
+                      ],
+                    },
+                  ],
                 }),
               }}
             />

@@ -86,7 +86,7 @@ Update a broadcast that is still in draft status.
 
 ## schedule_broadcast
 
-Schedule a draft broadcast to send at a specific future time.
+Schedule a draft broadcast to send at a specific future time. Internally calls `PATCH /broadcasts/:id` with `scheduledAt`.
 
 **Parameters:**
 

@@ -43,6 +43,10 @@ curl -H "Authorization: Bearer om_..." \
 
 Returns a single asset by ID including its `proxyUrl`.
 
+<EndpointBadge method="GET" path="/api/v1/assets/:id/url" />
+
+Backwards-compatible alias — also returns the asset with `proxyUrl`. Equivalent to `GET /:id`.
+
 ## Upload from URL
 
 <EndpointBadge method="POST" path="/api/v1/assets/upload-from-url" />

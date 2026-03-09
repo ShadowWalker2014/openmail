@@ -1,6 +1,6 @@
 ---
 title: Campaigns API
-description: Create and manage event-triggered automation flows.
+description: Create and manage event-triggered automation flows with multi-step email sequences.
 ---
 
 # Campaigns API
@@ -15,16 +15,11 @@ Campaigns are automated email sequences triggered by customer events or segment 
 
 Returns all campaigns in the workspace.
 
-```bash
-curl -H "Authorization: Bearer om_..." \
-  https://your-api/api/v1/campaigns
-```
-
 ## Get Campaign
 
 <EndpointBadge method="GET" path="/api/v1/campaigns/:id" />
 
-Returns a campaign with its steps.
+Returns a campaign with its steps included.
 
 ```json
 {
@@ -36,10 +31,17 @@ Returns a campaign with its steps.
   "steps": [
     {
       "id": "stp_xxx",
-      "order": 1,
-      "type": "email",
-      "delaySeconds": 0,
-      "config": { "templateId": "tpl_welcome" }
+      "campaignId": "cmp_abc123def456",
+      "stepType": "email",
+      "position": 0,
+      "config": { "templateId": "tpl_welcome", "subject": "Welcome!" }
+    },
+    {
+      "id": "stp_yyy",
+      "campaignId": "cmp_abc123def456",
+      "stepType": "wait",
+      "position": 1,
+      "config": { "delaySeconds": 259200 }
     }
   ]
 }
@@ -49,7 +51,7 @@ Returns a campaign with its steps.
 
 <EndpointBadge method="POST" path="/api/v1/campaigns" />
 
-Creates a new campaign in `draft` status.
+Creates a new campaign in `draft` status. A campaign cannot be activated until it has at least one step.
 
 ### Request Body
 
@@ -92,12 +94,12 @@ Updates a campaign's name, description, or status.
 Campaigns follow a strict state machine:
 
 ```
-draft → active → paused → active (can cycle)
+draft → active ⇄ paused
      ↘          ↘
-      archived   archived
+      archived   archived (terminal — cannot undo)
 ```
 
-- `draft → active`: Activates the campaign
+- `draft → active`: Activates the campaign (**requires at least one step**)
 - `active → paused`: Stops enrolling new contacts
 - `paused → active`: Resumes the campaign
 - Any → `archived`: Terminal state — cannot be reactivated
@@ -110,16 +112,74 @@ curl -X PATCH https://your-api/api/v1/campaigns/cmp_abc123def456 \
   -d '{ "status": "active" }'
 ```
 
-## Pause Campaign
+## Delete Campaign
 
-<EndpointBadge method="POST" path="/api/v1/campaigns/:id/pause" />
+<EndpointBadge method="DELETE" path="/api/v1/campaigns/:id" />
 
-Pauses an active campaign. Contacts already enrolled continue processing, but no new contacts are enrolled until reactivated.
+Permanently deletes a campaign and all its steps. Returns `204 No Content`.
+
+## Campaign Steps
+
+Campaign steps define what happens to an enrolled contact. Steps execute in order by `position`.
+
+### Step Types
+
+| `stepType` | Description | Config fields |
+|------------|-------------|---------------|
+| `email` | Send an email | `{ "templateId": "tpl_xxx", "subject": "...", "fromEmail": "...", "fromName": "..." }` |
+| `wait` | Delay before next step | `{ "delaySeconds": 259200 }` (e.g. 259200 = 3 days) |
+
+### Add Step
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/steps" />
+
+Adds a step to a campaign. **Campaign must be in `draft` status.**
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `stepType` | `"email"` or `"wait"` | ✓ | Type of step |
+| `config` | object | — | Step configuration (see step types above) |
+| `position` | integer | — | Zero-based position (appended to end if omitted) |
 
 ```bash
-curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/pause \
-  -H "Authorization: Bearer om_..."
+# Add an email step
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/steps \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stepType": "email",
+    "config": {
+      "templateId": "tpl_welcome",
+      "subject": "Welcome to Acme!"
+    }
+  }'
+
+# Add a 3-day wait step
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/steps \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stepType": "wait",
+    "config": { "delaySeconds": 259200 }
+  }'
 ```
+
+### Update Step
+
+<EndpointBadge method="PATCH" path="/api/v1/campaigns/:id/steps/:stepId" />
+
+Updates a step's config or position.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `config` | object | New step configuration |
+| `position` | integer | New zero-based position |
+
+### Delete Step
+
+<EndpointBadge method="DELETE" path="/api/v1/campaigns/:id/steps/:stepId" />
+
+Permanently deletes a step from the campaign. Returns `204 No Content`.
 
 ## Campaign Object
 
@@ -131,6 +191,6 @@ curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/pause \
 | `status` | string | `draft`, `active`, `paused`, or `archived` |
 | `triggerType` | string | Event or segment-based trigger |
 | `triggerConfig` | object | Trigger-specific configuration |
-| `steps` | array | Campaign steps (when fetched by ID) |
+| `steps` | array | Included when fetching by ID |
 | `createdAt` | timestamp | Creation time |
 | `updatedAt` | timestamp | Last update time |

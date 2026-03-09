@@ -22,6 +22,7 @@ Records a customer event and triggers any matching active campaigns.
 | `email` | string | ✓ | Contact email address. The contact is created if it doesn't exist. |
 | `name` | string | ✓ | Event name (e.g. `user_signed_up`, `plan_upgraded`) |
 | `properties` | object | — | Event-specific data (any JSON object) |
+| `occurredAt` | ISO datetime | — | When the event actually occurred. Defaults to the current time if omitted. Useful for backfilling historical events. |
 
 ```bash
 curl -X POST https://your-api/api/v1/events/track \
