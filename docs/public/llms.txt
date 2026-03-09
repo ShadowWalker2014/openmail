@@ -28,8 +28,9 @@ Base URL: `https://your-api.railway.app/api/v1/`
 
 MCP URL: `https://mcp.openmail.win/mcp` (POST)
 Auth: `Authorization: Bearer om_your_workspace_api_key`
+Total tools: 29 (Contacts×5, Broadcasts×7, Campaigns×4, Segments×2, Templates×4, Analytics×2, Assets×5)
 
-- [Overview](https://docs.openmail.win/mcp/overview): What the MCP server is, available tools, and example use cases
+- [Overview](https://docs.openmail.win/mcp/overview): What the MCP server is, 29 available tools, and example use cases
 - [Quick Connect](https://docs.openmail.win/mcp/quickstart): Connect Claude, Cursor, or any AI agent in 2 minutes
 - [Contacts](https://docs.openmail.win/mcp/contacts): list_contacts, create_contact, update_contact, delete_contact, track_event
 - [Broadcasts](https://docs.openmail.win/mcp/broadcasts): list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast
@@ -63,4 +64,4 @@ Package: `@openmail/sdk` — TypeScript SDK compatible with Segment Analytics 2.
 - Stack: React + Vite + TanStack (web), Hono + Better Auth + Drizzle (api), BullMQ + Resend (worker), MCP SDK (mcp)
 - Databases: PostgreSQL + Redis
 - ID format: {prefix}_{12chars} — e.g. ws_, usr_, con_, seg_, evt_, cmp_, brd_, tpl_, snd_, ast_, key_
-- MCP tools count: 27 total
+- MCP tools count: 29 total

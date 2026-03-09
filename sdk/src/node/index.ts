@@ -63,7 +63,11 @@ class ContactsAPI {
     return this.http.post<Contact>("/api/v1/contacts", input);
   }
 
-  /** Upsert: create or update by email. Returns the contact and a flag indicating if it was new. */
+  /**
+   * Upsert: create or update by email.
+   * Note: the API replaces the `attributes` column entirely on conflict.
+   * Use `identify()` or `setUserProperties()` for attribute-merging semantics.
+   */
   async upsert(input: CreateContactInput): Promise<Contact> {
     return this.http.post<Contact>("/api/v1/contacts", input);
   }
@@ -176,6 +180,18 @@ class CampaignsAPI {
     await this.http.delete(`/api/v1/campaigns/${id}`);
   }
 
+  async listSteps(campaignId: string): Promise<CampaignStep[]> {
+    const campaign = await this.get(campaignId);
+    return campaign.steps ?? [];
+  }
+
+  async getStep(campaignId: string, stepId: string): Promise<CampaignStep> {
+    const steps = await this.listSteps(campaignId);
+    const step = steps.find((s) => s.id === stepId);
+    if (!step) throw OpenMailError.notFound(`Step ${stepId}`);
+    return step;
+  }
+
   async addStep(campaignId: string, input: CreateStepInput): Promise<CampaignStep> {
     return this.http.post<CampaignStep>(`/api/v1/campaigns/${campaignId}/steps`, input);
   }
@@ -200,6 +216,14 @@ class SegmentsAPI {
 
   async create(input: CreateSegmentInput): Promise<Segment> {
     return this.http.post<Segment>("/api/v1/segments", input);
+  }
+
+  async get(id: string): Promise<Segment> {
+    // No direct GET /segments/:id endpoint — list and find by ID
+    const all = await this.list();
+    const found = all.find((s) => s.id === id);
+    if (!found) throw OpenMailError.notFound(`Segment ${id}`);
+    return found;
   }
 
   async update(id: string, input: UpdateSegmentInput): Promise<Segment> {
@@ -227,6 +251,10 @@ class TemplatesAPI {
 
   async list(): Promise<EmailTemplate[]> {
     return this.http.get<EmailTemplate[]>("/api/v1/templates");
+  }
+
+  async get(id: string): Promise<EmailTemplate> {
+    return this.http.get<EmailTemplate>(`/api/v1/templates/${id}`);
   }
 
   async create(input: CreateTemplateInput): Promise<EmailTemplate> {
@@ -389,7 +417,9 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
   async identify(userId: string, traits: Traits = {}): Promise<Contact> {
     if (this.disabled || this._optedOut) {
       this.logger.log("identify() skipped (disabled/opted-out)");
-      return {} as Contact;
+      // Return null cast — callers should handle disabled state.
+      // The return type is Contact for API compatibility but will be null at runtime.
+      return null as unknown as Contact;
     }
 
     this._userId = userId;
@@ -401,13 +431,29 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
       );
     }
 
-    // Build the upsert payload — include attributes only if there are any
+    const hasNewAttributes = Object.keys(normalized.attributes).length > 0;
+
+    // If new attributes are provided, we must fetch-then-merge because the API
+    // replaces the attributes column entirely on upsert — not a deep merge.
+    let existingAttributes: Record<string, unknown> = {};
+    if (hasNewAttributes) {
+      try {
+        const { data } = await this.contacts.list({ search: normalized.email, pageSize: 1 });
+        const existing = data.find((c) => c.email === normalized.email);
+        if (existing) existingAttributes = existing.attributes ?? {};
+      } catch {
+        // Contact doesn't exist yet — existingAttributes stays empty
+      }
+    }
+
     const payload: CreateContactInput = {
       email: normalized.email,
       ...(normalized.firstName && { firstName: normalized.firstName }),
       ...(normalized.lastName && { lastName: normalized.lastName }),
       ...(normalized.phone && { phone: normalized.phone }),
-      ...(Object.keys(normalized.attributes).length > 0 && { attributes: normalized.attributes }),
+      ...(hasNewAttributes && {
+        attributes: mergeAttributes(existingAttributes, normalized.attributes),
+      }),
     };
 
     this.logger.log("identify()", payload);
@@ -549,17 +595,25 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
    * Fetches the existing contact to merge attributes properly.
    */
   async setUserProperties(email: string, properties: Properties): Promise<Contact> {
-    // Fetch first to merge (API replaces attributes entirely)
+    // Fetch first to merge — API replaces entire attributes column on upsert.
+    // We preserve existing scalar fields (firstName, lastName, phone) by using PATCH
+    // instead of the full upsert POST.
     let existing: Contact | undefined;
     try {
       const result = await this.contacts.list({ search: email, pageSize: 1 });
       existing = result.data.find((c) => c.email === email);
     } catch {
-      // Contact might not exist yet
+      // Contact might not exist yet — will be created on upsert below
     }
 
-    const merged = mergeAttributes(existing?.attributes ?? {}, properties);
-    return this.contacts.upsert({ email, attributes: merged });
+    if (existing) {
+      // PATCH only the attributes (merged) — preserves firstName, lastName, phone
+      const merged = mergeAttributes(existing.attributes ?? {}, properties);
+      return this.contacts.update(existing.id, { attributes: merged });
+    }
+
+    // Contact doesn't exist — create it with the attributes
+    return this.contacts.upsert({ email, attributes: properties });
   }
 
   /**

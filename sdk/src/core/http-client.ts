@@ -4,12 +4,14 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_RETRIES = 3;
 
 // Jitter + exponential: 200ms * 2^attempt + up to 100ms random
-function retryDelay(attempt: number): number {
+function retryDelay(attempt: number, retryAfterSeconds?: number): number {
+  if (retryAfterSeconds) return retryAfterSeconds * 1000;
   return Math.min(200 * Math.pow(2, attempt) + Math.random() * 100, 30_000);
 }
 
 function isRetryable(status: number): boolean {
-  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  // 408 Request Timeout is transient; 429 rate-limited; 5xx server errors
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 export interface HttpClientConfig {
@@ -42,23 +44,29 @@ export class HttpClient {
     attempt = 0,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const hasBody = body !== undefined;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
 
     if (this.debug) {
-      console.debug(`[OpenMail] ${method} ${url}`, body ?? "");
+      console.debug(`[OpenMail] ${method} ${url}`);
     }
 
     let response: Response;
     try {
+      const headers: Record<string, string> = {
+        "Authorization": `Bearer ${this.apiKey}`,
+        "User-Agent": "openmail-sdk/1.0.0",
+      };
+      // Only set Content-Type when there is actually a request body
+      if (hasBody) {
+        headers["Content-Type"] = "application/json";
+      }
+
       response = await fetch(url, {
         method,
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-          "User-Agent": "openmail-sdk/1.0.0",
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        headers,
+        body: hasBody ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
     } catch (err: unknown) {
@@ -71,11 +79,15 @@ export class HttpClient {
       clearTimeout(timer);
     }
 
+    // Respect Retry-After header on 429 rate limits
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined;
+
     // Retry on transient errors
     if (isRetryable(response.status) && attempt < this.maxRetries) {
-      const delay = retryDelay(attempt);
+      const delay = retryDelay(attempt, retryAfterSeconds);
       if (this.debug) {
-        console.debug(`[OpenMail] HTTP ${response.status} — retry ${attempt + 1}/${this.maxRetries} in ${delay}ms`);
+        console.debug(`[OpenMail] HTTP ${response.status} — retry ${attempt + 1}/${this.maxRetries} in ${Math.round(delay)}ms`);
       }
       await new Promise((r) => setTimeout(r, delay));
       return this.request<T>(method, path, body, attempt + 1);
@@ -94,10 +106,6 @@ export class HttpClient {
 
     if (!response.ok) {
       throw OpenMailError.fromResponse(response.status, json);
-    }
-
-    if (this.debug) {
-      console.debug(`[OpenMail] ${response.status} ←`, json);
     }
 
     return json as T;

@@ -25,7 +25,8 @@ export class BatchQueue<T> {
   private readonly onError?: (err: Error, items: T[]) => void;
   private queue: QueueItem<T>[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private flushing = false;
+  // Track the in-flight flush so concurrent flush() calls wait for it
+  private _inflight: Promise<void> | null = null;
 
   constructor(config: QueueConfig<T>) {
     this.flushAt = config.flushAt ?? 20;
@@ -51,38 +52,56 @@ export class BatchQueue<T> {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    this.timer = setTimeout(() => this._flush(), delay);
+    this.timer = setTimeout(() => {
+      // CRITICAL FIX: null the timer BEFORE _flush() so subsequent pushes
+      // can schedule a new interval timer after this batch is drained.
+      this.timer = null;
+      this._flush();
+    }, delay);
   }
 
+  /**
+   * Flush all buffered items.
+   * If a flush is already in-flight, waits for it to complete before
+   * initiating a second pass for any items that accumulated meanwhile.
+   */
   async flush(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    await this._flush();
+    // Wait for any in-flight flush to settle first
+    if (this._inflight) await this._inflight;
+    // Then flush whatever remains
+    if (this.queue.length > 0) await this._flush();
   }
 
-  private async _flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0) return;
-    this.flushing = true;
+  private _flush(): Promise<void> {
+    if (this.queue.length === 0) return Promise.resolve();
+    // Return existing in-flight promise to avoid concurrent sends
+    if (this._inflight) return this._inflight;
 
     const batch = this.queue.splice(0, this.flushAt);
     const items = batch.map((q) => q.data);
 
-    try {
-      const results = await this.flushFn(items);
-      batch.forEach((q, i) => q.resolve(results[i] ?? null));
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      batch.forEach((q) => q.reject(error));
-      this.onError?.(error, items);
-    } finally {
-      this.flushing = false;
-      // Flush again if items accumulated while we were flushing
-      if (this.queue.length > 0) {
-        this._scheduleFlush(0);
-      }
-    }
+    this._inflight = this.flushFn(items)
+      .then((results) => {
+        batch.forEach((q, i) => q.resolve(results[i] ?? null));
+      })
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err : new Error(String(err));
+        batch.forEach((q) => q.reject(error));
+        this.onError?.(error, items);
+      })
+      .finally(() => {
+        this._inflight = null;
+        // Flush again if items accumulated while we were flushing
+        if (this.queue.length > 0) {
+          this._scheduleFlush(0);
+        }
+      });
+
+    return this._inflight;
   }
 
   get pending(): number {

@@ -98,10 +98,10 @@ describe("identify()", () => {
     await sdk.identify("user_123", { email: "alice@example.com", plan: "pro" });
   });
 
-  it("returns empty contact when disabled", async () => {
+  it("returns null when disabled", async () => {
     const sdk = createSDK({ disabled: true });
     const result = await sdk.identify("alice@example.com", {});
-    expect(result).toEqual({});
+    expect(result).toBeNull();
   });
 });
 
@@ -521,17 +521,19 @@ describe("templates API", () => {
 // ─── Analytics API ────────────────────────────────────────────────────────────
 
 describe("analytics API", () => {
-  it("returns overview stats", async () => {
+  it("returns overview stats with correct field names", async () => {
     const sdk = createSDK();
     const stats = await sdk.analytics.overview();
-    expect(stats.totalContacts).toBe(1000);
-    expect(stats.openRate).toBe(0.25);
+    // Field names match actual API: contacts (not totalContacts), sends (not totalSends)
+    expect((stats as unknown as Record<string, unknown>).contacts).toBe(1000);
+    expect((stats as unknown as Record<string, unknown>).openRate).toBe(25.0); // percent, not fraction
+    expect((stats as unknown as Record<string, unknown>).period).toBe("30d");
   });
 
-  it("returns broadcast analytics", async () => {
+  it("returns broadcast analytics with percentage openRate", async () => {
     const sdk = createSDK();
     const stats = await sdk.analytics.broadcast("brd_abc123def456");
-    expect(stats.openRate).toBe(0.25);
+    expect(stats.openRate).toBe(24.3); // percent, not fraction
   });
 });
 

@@ -322,31 +322,38 @@ export interface UpdateTemplateInput {
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
+/** Workspace analytics overview — last 30 days. Rates are percentages (0–100). */
 export interface WorkspaceAnalytics {
-  totalContacts: number;
-  newContactsLast30Days: number;
-  totalSends: number;
+  /** Total contacts in the workspace */
+  contacts: number;
+  /** Email sends in the last 30 days */
+  sends: number;
+  /** Open events in the last 30 days */
+  opens: number;
+  /** Click events in the last 30 days */
+  clicks: number;
+  /** Unsubscribe events in the last 30 days */
+  unsubscribes: number;
+  /** Open rate as a percentage, e.g. 24.3 means 24.3% */
   openRate: number;
+  /** Click rate as a percentage, e.g. 5.1 means 5.1% */
   clickRate: number;
-  unsubscribeRate: number;
-  periodStart: string;
-  periodEnd: string;
+  /** Period identifier, e.g. "30d" */
+  period: string;
 }
 
+/** Broadcast performance analytics. Rates are percentages (0–100). */
 export interface BroadcastAnalytics {
   broadcastId: string;
-  name: string;
-  subject: string;
-  sentAt: string | null;
-  recipientCount: number;
   sentCount: number;
   openCount: number;
   clickCount: number;
-  unsubscribeCount: number;
-  bounceCount: number;
+  /** Open rate as a percentage, e.g. 24.3 means 24.3% */
   openRate: number;
+  /** Click rate as a percentage, e.g. 5.1 means 5.1% */
   clickRate: number;
-  unsubscribeRate: number;
+  /** Additional dynamic keys: one count per email event type (open, click, bounce, etc.) */
+  [key: string]: number | string;
 }
 
 // ─── Assets ───────────────────────────────────────────────────────────────────

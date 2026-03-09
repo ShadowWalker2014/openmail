@@ -122,7 +122,7 @@ curl -X POST https://your-api/api/v1/broadcasts/brd_abc123def456/send \
   -H "Authorization: Bearer om_..."
 ```
 
-Status transitions to `queued` → `sending` → `sent`.
+Status immediately transitions to `sending`, then to `sent` once all emails are queued. Send progress is tracked via `sentCount` / `recipientCount`.
 
 ## Test Send
 
@@ -179,9 +179,9 @@ Response:
 
 <EndpointBadge method="DELETE" path="/api/v1/broadcasts/:id" />
 
-Permanently deletes a draft broadcast. Cannot delete a broadcast that is currently sending or has been sent.
+Permanently deletes a draft or scheduled broadcast. Cannot delete a broadcast in `sending` or `sent` status.
 
-Returns `204 No Content` on success.
+Returns `200 { "success": true }` on success.
 
 ## Broadcast Statuses
 
@@ -210,4 +210,4 @@ Returns `204 No Content` on success.
 | `recipientCount` | integer | Total unique recipients |
 | `sentCount` | integer | Emails sent so far |
 | `scheduledAt` | timestamp or null | Scheduled send time |
-| `sentAt` | timestamp or null | When sending completed |
+| `sentAt` | timestamp or null | When the broadcast finished sending |

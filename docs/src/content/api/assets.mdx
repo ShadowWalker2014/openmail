@@ -53,12 +53,16 @@ Backwards-compatible alias — also returns the asset with `proxyUrl`. Equivalen
 
 Uploads a file from any public URL. The API fetches the file server-side and stores it in S3.
 
+<Callout type="note">
+Private and internal addresses are blocked for security (RFC-1918 ranges, `localhost`, `*.internal`, AWS metadata endpoint). Only public internet URLs are accepted — returns `422` otherwise.
+</Callout>
+
 ### Request Body
 
 | Field | Type | Required | Description |
 |-------|------|:--------:|-------------|
-| `url` | string | ✓ | Public URL of the image or file |
-| `name` | string | — | Display name in the asset library |
+| `url` | string | ✓ | Public internet URL of the image or file |
+| `name` | string | — | Display name in the asset library (defaults to filename) |
 
 ```bash
 curl -X POST https://your-api/api/v1/assets/upload-from-url \
@@ -79,7 +83,8 @@ curl -X POST https://your-api/api/v1/assets/upload-from-url \
   "proxyUrl": "https://your-api/api/public/assets/ws_xyz789/ast_abc123def456",
   "fileName": "banner.png",
   "mimeType": "image/png",
-  "size": 148320
+  "fileSize": 148320,
+  "createdAt": "2025-01-15T10:00:00.000Z"
 }
 ```
 
@@ -112,6 +117,16 @@ Max file size: **25 MB**
 
 Returns a presigned S3 PUT URL for direct browser upload (5-minute expiry). The client uploads the file directly to S3 without going through the API server.
 
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `fileName` | string | ✓ | File name with extension (e.g. `banner.png`) |
+| `mimeType` | string | ✓ | MIME type (e.g. `image/png`) |
+| `fileSize` | integer | ✓ | File size in bytes (max 25 MB) |
+| `width` | integer | — | Image width in pixels (optional) |
+| `height` | integer | — | Image height in pixels (optional) |
+
 ```bash
 curl -X POST https://your-api/api/v1/assets/upload-url \
   -H "Authorization: Bearer om_..." \
@@ -119,18 +134,25 @@ curl -X POST https://your-api/api/v1/assets/upload-url \
   -d '{
     "fileName": "banner.png",
     "mimeType": "image/png",
-    "size": 148320,
-    "name": "Product Banner"
+    "fileSize": 148320
   }'
 ```
 
 Response:
 ```json
 {
-  "assetId": "ast_abc123def456",
-  "uploadUrl": "https://...(presigned S3 URL)...",
+  "id": "ast_abc123def456",
+  "uploadUrl": "https://...(presigned S3 PUT URL, 5 min expiry)...",
+  "s3Key": "ws_xyz789/ast_abc123def456.png",
   "proxyUrl": "https://your-api/api/public/assets/ws_xyz789/ast_abc123def456"
 }
+```
+
+After receiving the `uploadUrl`, PUT the file bytes directly:
+```bash
+curl -X PUT "https://...(uploadUrl)..." \
+  -H "Content-Type: image/png" \
+  --data-binary @banner.png
 ```
 
 ## Delete Asset
@@ -166,9 +188,12 @@ When building emails with images:
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Unique ID (`ast_` prefix) |
+| `workspaceId` | string | Workspace the asset belongs to |
 | `name` | string or null | Display name |
 | `fileName` | string | Original filename with extension |
 | `mimeType` | string | File MIME type |
-| `size` | integer | File size in bytes |
+| `fileSize` | integer | File size in bytes |
+| `width` | integer or null | Image width in pixels (if set at upload) |
+| `height` | integer or null | Image height in pixels (if set at upload) |
 | `proxyUrl` | string | Stable public URL for embedding in emails |
 | `createdAt` | timestamp | Upload time |

@@ -5,6 +5,14 @@
   "license": "ELv2",
   "type": "module",
   "sideEffects": false,
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=18.0.0" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShadowWalker2014/openmail.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/ShadowWalker2014/openmail/tree/main/sdk",
   "exports": {
     ".": {
       "import": "./dist/index.js",

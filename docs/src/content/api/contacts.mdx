@@ -102,7 +102,8 @@ Updates a contact's fields. Only provided fields are updated. For `attributes`, 
 | `firstName` | string | Updated first name |
 | `lastName` | string | Updated last name |
 | `phone` | string | Updated phone number |
-| `attributes` | object | Attributes to merge (not replace) |
+| `attributes` | object | Replaces the entire attributes object (not merged). Omit to leave unchanged. |
+| `unsubscribed` | boolean | `true` to unsubscribe (sets `unsubscribedAt`), `false` to re-subscribe (clears `unsubscribedAt`) |
 
 ```bash
 curl -X PATCH https://your-api/api/v1/contacts/con_abc123def456 \
@@ -117,13 +118,13 @@ curl -X PATCH https://your-api/api/v1/contacts/con_abc123def456 \
 
 <EndpointBadge method="DELETE" path="/api/v1/contacts/:id" />
 
-Permanently deletes a contact and all associated data. Returns `204 No Content`.
+Permanently deletes a contact and all associated data. Returns `200 { "success": true }`.
 
 ## Contact Events
 
 <EndpointBadge method="GET" path="/api/v1/contacts/:id/events" />
 
-Returns the event history for a contact — all tracked events in reverse chronological order.
+Returns the event history for a contact — all tracked events ordered by `occurredAt` descending.
 
 ```bash
 curl -H "Authorization: Bearer om_..." \
@@ -132,20 +133,20 @@ curl -H "Authorization: Bearer om_..." \
 
 ### Response
 
+Returns a **plain array** (no pagination wrapper):
+
 ```json
-{
-  "data": [
-    {
-      "id": "evt_xyz789",
-      "name": "plan_upgraded",
-      "properties": { "from_plan": "starter", "to_plan": "pro" },
-      "createdAt": "2025-02-10T14:22:00.000Z"
-    }
-  ],
-  "total": 12,
-  "page": 1,
-  "pageSize": 50
-}
+[
+  {
+    "id": "evt_xyz789",
+    "contactId": "con_abc123def456",
+    "contactEmail": "alice@example.com",
+    "name": "plan_upgraded",
+    "properties": { "from_plan": "starter", "to_plan": "pro" },
+    "occurredAt": "2025-02-10T14:22:00.000Z",
+    "createdAt": "2025-02-10T14:22:00.000Z"
+  }
+]
 ```
 
 ## Contact Email Sends
@@ -158,6 +159,8 @@ Returns the email send history for a contact — every email sent to them across
 curl -H "Authorization: Bearer om_..." \
   "https://your-api/api/v1/contacts/con_abc123def456/sends?page=1&pageSize=50"
 ```
+
+Returns a **plain array** (no pagination wrapper).
 
 ### Query Parameters
 

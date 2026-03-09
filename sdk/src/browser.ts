@@ -106,6 +106,12 @@ function storageRemove(key: string, persistence: Persistence, domain?: string): 
  * openmail.reset();
  * ```
  */
+type EventQueueItem = {
+  name: string;
+  properties: Properties;
+  occurredAt?: string;
+};
+
 export class OpenMailBrowser {
   private readonly http: HttpClient;
   private readonly queue: BatchQueue<{
@@ -122,6 +128,9 @@ export class OpenMailBrowser {
   private _memAnonymousId: string | null = null;
   private _memUserId: string | null = null;
   private _memOptOut = false;
+
+  // Pre-identify queue: events tracked before identify() is called
+  private _preQueue: EventQueueItem[] = [];
 
   private _cleanupHistory: (() => void) | null = null;
 
@@ -237,8 +246,8 @@ export class OpenMailBrowser {
    * ```
    */
   async identify(userId: string, traits: Traits = {}): Promise<Contact> {
-    if (this.isOptedOut || (this._read(OPT_OUT_KEY) === "1")) {
-      return {} as Contact;
+    if (this.isOptedOut) {
+      return null as unknown as Contact;
     }
 
     const normalized = normalizeTraits(userId, traits);
@@ -248,11 +257,9 @@ export class OpenMailBrowser {
       throw new Error("OpenMail identify(): email is required");
     }
 
-    // Track $identify event to link anonymous → user
     const anonId = this.anonymousId;
     this._write(USER_ID_KEY, email);
 
-    // Upsert the contact
     const payload = {
       email,
       ...(normalized.firstName && { firstName: normalized.firstName }),
@@ -265,7 +272,16 @@ export class OpenMailBrowser {
 
     // Fire alias event to link anonymous ID to identified user
     if (anonId) {
-      this.queue.push({ email, name: "$identify", properties: { anonymousId: anonId } });
+      this.queue.push({ email, name: "$identify", properties: { anonymousId: anonId } }).catch(() => {});
+    }
+
+    // Replay events that were tracked before identify() was called
+    if (this._preQueue.length > 0) {
+      const pending = this._preQueue.splice(0);
+      for (const item of pending) {
+        this.queue.push({ email, ...item }).catch(() => {});
+      }
+      this.logger.log(`Replayed ${pending.length} pre-identify events for ${email}`);
     }
 
     return this.http.post<Contact>("/api/v1/contacts", payload);
@@ -285,12 +301,8 @@ export class OpenMailBrowser {
     }
 
     const email = options.userId ?? this.userId ?? undefined;
-    if (!email) {
-      // Store event locally — will be flushed after identify()
-      this.logger.warn(`track("${event}"): no userId yet, queuing for after identify()`);
-    }
 
-    const enriched = {
+    const enriched: Properties = {
       ...properties,
       $anonymousId: this.anonymousId,
       $url: typeof window !== "undefined" ? window.location.href : undefined,
@@ -298,16 +310,22 @@ export class OpenMailBrowser {
       $referrer: typeof document !== "undefined" ? document.referrer : undefined,
     };
 
-    const item = {
-      email: email ?? this.anonymousId, // Use anonId as placeholder email
+    const item: EventQueueItem = {
       name: event,
       properties: enriched,
-      ...(options.timestamp && { occurredAt: options.timestamp }),
+      ...(options.timestamp ? { occurredAt: options.timestamp } : {}),
     };
 
-    this.logger.log("track()", item);
+    if (!email) {
+      // No identified user yet — hold in pre-queue; replayed after identify()
+      this.logger.log(`track("${event}"): queued (no userId yet, will replay after identify())`);
+      this._preQueue.push(item);
+      return Promise.resolve({ id: "" });
+    }
+
+    this.logger.log("track()", { email, ...item });
     // Fire and forget — non-blocking. Use flush() before page unload.
-    this.queue.push(item).catch((err: Error) => {
+    this.queue.push({ email, ...item }).catch((err: Error) => {
       this.logger.error(`Event "${event}" failed:`, err.message);
     });
     return Promise.resolve({ id: "" });
@@ -371,7 +389,11 @@ export class OpenMailBrowser {
     // Regenerate anonymous ID
     const newId = generateAnonymousId();
     this._write(ANON_ID_KEY, newId);
+    // Clear in-memory state regardless of persistence mode
     this._memUserId = null;
+    this._memAnonymousId = newId;
+    // Discard pre-identify queued events from the previous session
+    this._preQueue = [];
     this.logger.log("reset() — new anonymous ID:", newId);
   }
 
@@ -433,25 +455,37 @@ export class OpenMailBrowser {
     this._lastPath = window.location.pathname;
     setTimeout(() => this.page(), 0); // defer so identify() can run first
 
-    // Listen for history changes (SPA navigation)
-    const pushState = history.pushState.bind(history);
-    const replaceState = history.replaceState.bind(history);
-
-    history.pushState = (...args) => {
-      pushState(...args);
-      this._onRouteChange();
-    };
-    history.replaceState = (...args) => {
-      replaceState(...args);
-      this._onRouteChange();
-    };
-
+    // Guard against double-patching when multiple instances are created
+    // (e.g. React StrictMode double-render, HMR). Attach listeners to the
+    // dispatch event pattern instead of wrapping history methods.
     const onPopState = () => this._onRouteChange();
     window.addEventListener("popstate", onPopState);
 
+    // Patch pushState/replaceState using a unique symbol per-instance
+    // to detect our own patches and avoid stacking wrappers.
+    const PATCHED_KEY = "__openmail_patched__";
+    const origPush = (history.pushState as unknown as { [PATCHED_KEY]?: Function })[PATCHED_KEY]
+      ? history.pushState
+      : history.pushState;
+    const origReplace = history.replaceState;
+
+    const patchedPush = (...args: Parameters<typeof history.pushState>) => {
+      origPush.apply(history, args);
+      this._onRouteChange();
+    };
+    (patchedPush as unknown as Record<string, unknown>)[PATCHED_KEY] = true;
+
+    const patchedReplace = (...args: Parameters<typeof history.replaceState>) => {
+      origReplace.apply(history, args);
+      this._onRouteChange();
+    };
+
+    history.pushState = patchedPush;
+    history.replaceState = patchedReplace;
+
     this._cleanupHistory = () => {
-      history.pushState = pushState;
-      history.replaceState = replaceState;
+      history.pushState = origPush;
+      history.replaceState = origReplace;
       window.removeEventListener("popstate", onPopState);
     };
   }

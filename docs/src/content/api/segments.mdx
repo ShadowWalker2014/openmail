@@ -45,18 +45,18 @@ Creates a new segment with filter conditions.
 
 ### Operators
 
-| Operator | Description |
-|----------|-------------|
-| `eq` | Equals |
-| `ne` | Not equals |
-| `gt` | Greater than |
-| `gte` | Greater than or equal |
-| `lt` | Less than |
-| `lte` | Less than or equal |
-| `contains` | String contains |
-| `not_contains` | String does not contain |
-| `exists` | Field exists (has any value) |
-| `not_exists` | Field does not exist |
+| Operator | Aliases | Description |
+|----------|---------|-------------|
+| `eq` | `equals` | Equals |
+| `ne` | `not_equals` | Not equals |
+| `contains` | — | String contains (case-insensitive) |
+| `not_contains` | — | String does not contain |
+| `exists` | `is_set` | Field exists (has any value) |
+| `not_exists` | `is_not_set` | Field does not exist |
+
+<Callout type="warning">
+The operators `gt`, `gte`, `lt`, and `lte` are accepted by the API schema but are **not yet implemented** — conditions using them are silently ignored. Use `eq`/`ne` for now.
+</Callout>
 
 ### Examples
 
@@ -147,9 +147,13 @@ curl -H "Authorization: Bearer om_..." \
 
 <EndpointBadge method="DELETE" path="/api/v1/segments/:id" />
 
-Permanently deletes a segment. Broadcasts and campaigns referencing it will lose the segment reference. Use the `usage` endpoint first to check dependencies.
+Permanently deletes a segment.
 
-Returns `204 No Content`.
+<Callout type="warning">
+Deletion is **blocked** if any broadcast or campaign references this segment. Returns `400` with an error message. Use the `usage` endpoint first to find and remove all references before deleting.
+</Callout>
+
+Returns `200 { "success": true }` on success.
 
 ## Segment Object
 

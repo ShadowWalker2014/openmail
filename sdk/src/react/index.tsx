@@ -213,14 +213,18 @@ export function useAutoIdentify(
 
   useEffect(() => {
     if (userId) {
-      openmail.identify(userId, traits ?? {}).catch((err) => {
-        console.error("[OpenMail] useAutoIdentify error:", err);
+      openmail.identify(userId, traits ?? {}).catch(() => {
+        // Silently suppress identify errors in the hook.
+        // Handle errors by calling openmail.identify() directly if you need them.
       });
-    } else {
+    } else if (userId === null) {
+      // Only reset on explicit null — not on undefined (unloaded state)
       openmail.reset();
     }
+  // Re-run whenever userId OR any trait value changes.
+  // JSON.stringify gives stable deep comparison without a deep-equal dep.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, JSON.stringify(traits)]);
 }
 
 // ─── Re-exports ───────────────────────────────────────────────────────────────

@@ -41,8 +41,10 @@ curl -X POST https://your-api/api/v1/events/track \
 
 ### Response
 
+Returns HTTP **201 Created** with the event ID:
+
 ```json
-{ "ok": true }
+{ "id": "evt_abc123def456" }
 ```
 
 ## How Event Triggering Works
@@ -84,7 +86,9 @@ Events are stored and accessible via the workspace (for automation and analytics
 |-------|------|-------------|
 | `id` | string | Unique ID (`evt_` prefix) |
 | `workspaceId` | string | Workspace |
-| `contactId` | string | Associated contact |
+| `contactId` | string or null | Associated contact ID (null if email not yet in workspace) |
+| `contactEmail` | string or null | Email address at the time of tracking (denormalized) |
 | `name` | string | Event name |
 | `properties` | object | Event properties |
-| `createdAt` | timestamp | When the event was tracked |
+| `occurredAt` | timestamp | When the event actually occurred (may differ from `createdAt` if `occurredAt` was passed) |
+| `createdAt` | timestamp | When the event record was created in the database |

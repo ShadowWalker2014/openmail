@@ -1,6 +1,6 @@
 ---
 title: Analytics API
-description: Get workspace-level and broadcast-level performance metrics.
+description: Get workspace-level and broadcast-level email performance metrics.
 ---
 
 # Analytics API
@@ -8,6 +8,10 @@ description: Get workspace-level and broadcast-level performance metrics.
 The Analytics API provides aggregate performance metrics for your workspace and individual broadcasts.
 
 **Base URL:** `/api/v1/analytics`
+
+<Callout type="note">
+Open and click rates are returned as **percentages** (e.g. `24.3` means 24.3%), not fractions. This is different from some other analytics APIs.
+</Callout>
 
 ## Workspace Overview
 
@@ -24,14 +28,14 @@ curl -H "Authorization: Bearer om_..." \
 
 ```json
 {
-  "totalContacts": 12453,
-  "newContactsLast30Days": 847,
-  "totalSends": 58920,
-  "openRate": 0.243,
-  "clickRate": 0.051,
-  "unsubscribeRate": 0.008,
-  "periodStart": "2025-01-15T00:00:00.000Z",
-  "periodEnd": "2025-02-14T23:59:59.000Z"
+  "contacts": 12453,
+  "sends": 58920,
+  "opens": 14317,
+  "clicks": 3002,
+  "unsubscribes": 118,
+  "openRate": 24.3,
+  "clickRate": 5.1,
+  "period": "30d"
 }
 ```
 
@@ -39,20 +43,20 @@ curl -H "Authorization: Bearer om_..." \
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `totalContacts` | integer | Total contacts in workspace |
-| `newContactsLast30Days` | integer | Contacts created in the last 30 days |
-| `totalSends` | integer | Emails sent in the last 30 days |
-| `openRate` | float | Open rate as a decimal (0–1) |
-| `clickRate` | float | Click-through rate as a decimal (0–1) |
-| `unsubscribeRate` | float | Unsubscribe rate as a decimal (0–1) |
-| `periodStart` | timestamp | Start of the 30-day window |
-| `periodEnd` | timestamp | End of the 30-day window |
+| `contacts` | integer | Total contacts in workspace |
+| `sends` | integer | Emails sent in the last 30 days |
+| `opens` | integer | Unique opens tracked in the last 30 days |
+| `clicks` | integer | Unique clicks tracked in the last 30 days |
+| `unsubscribes` | integer | Unsubscribes in the last 30 days |
+| `openRate` | float | Open percentage, e.g. `24.3` = 24.3% |
+| `clickRate` | float | Click percentage, e.g. `5.1` = 5.1% |
+| `period` | string | Period covered: `"30d"` |
 
 ## Broadcast Analytics
 
 <EndpointBadge method="GET" path="/api/v1/analytics/broadcasts/:id" />
 
-Returns detailed performance metrics for a specific broadcast.
+Returns performance metrics for a specific broadcast.
 
 ```bash
 curl -H "Authorization: Bearer om_..." \
@@ -64,18 +68,15 @@ curl -H "Authorization: Bearer om_..." \
 ```json
 {
   "broadcastId": "brd_abc123def456",
-  "name": "March Newsletter",
-  "subject": "What's new in March 🌱",
-  "sentAt": "2025-03-01T09:00:00.000Z",
-  "recipientCount": 4821,
   "sentCount": 4812,
   "openCount": 1169,
   "clickCount": 245,
-  "unsubscribeCount": 12,
-  "bounceCount": 9,
-  "openRate": 0.243,
-  "clickRate": 0.051,
-  "unsubscribeRate": 0.0025
+  "openRate": 24.3,
+  "clickRate": 5.1,
+  "open": 1169,
+  "click": 245,
+  "unsubscribe": 12,
+  "bounce": 9
 }
 ```
 
@@ -84,20 +85,20 @@ curl -H "Authorization: Bearer om_..." \
 | Field | Type | Description |
 |-------|------|-------------|
 | `broadcastId` | string | Broadcast ID |
-| `recipientCount` | integer | Total intended recipients |
-| `sentCount` | integer | Emails actually sent |
-| `openCount` | integer | Unique opens tracked |
-| `clickCount` | integer | Unique clicks tracked |
-| `unsubscribeCount` | integer | Unsubscribes from this broadcast |
-| `bounceCount` | integer | Hard + soft bounces |
-| `openRate` | float | Opens / sentCount |
-| `clickRate` | float | Clicks / sentCount |
+| `sentCount` | integer | Emails sent |
+| `openCount` | integer | Total open events (from broadcast record) |
+| `clickCount` | integer | Total click events (from broadcast record) |
+| `openRate` | float | Open percentage, e.g. `24.3` = 24.3% |
+| `clickRate` | float | Click percentage, e.g. `5.1` = 5.1% |
+| `open`, `click`, `bounce`, etc. | integer | Live event counts by type from the tracker |
+
+The response also includes dynamic keys — one per email event type (`open`, `click`, `bounce`, `complaint`, `unsubscribe`) — aggregated from the tracker in real time.
 
 ## Tracking Notes
 
 Open and click tracking require the `tracker/` service to be deployed and `TRACKER_URL` set in the API environment. Without the tracker:
-- `openCount` and `clickCount` will be 0
-- `openRate` and `clickRate` will be 0
-- All other fields are accurate
+- `openCount` and `clickCount` will be `0`
+- `openRate` and `clickRate` will be `0`
+- All `sentCount` and send-level fields are always accurate
 
 Open tracking works by embedding a 1×1 transparent pixel in each email. Some email clients block pixels, so actual open rates may be higher than reported.

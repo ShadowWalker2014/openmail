@@ -74,14 +74,14 @@ export const fixtures = {
     updatedAt: "2025-01-01T00:00:00.000Z",
   },
   analytics: {
-    totalContacts: 1000,
-    newContactsLast30Days: 50,
-    totalSends: 5000,
-    openRate: 0.25,
-    clickRate: 0.05,
-    unsubscribeRate: 0.01,
-    periodStart: "2025-01-01T00:00:00.000Z",
-    periodEnd: "2025-01-31T23:59:59.000Z",
+    contacts: 1000,
+    sends: 5000,
+    opens: 1250,
+    clicks: 250,
+    unsubscribes: 50,
+    openRate: 25.0,
+    clickRate: 5.0,
+    period: "30d",
   },
 };
 
@@ -233,10 +233,19 @@ export const handlers = [
 
   // Analytics
   http.get(`${BASE}/api/v1/analytics/overview`, () =>
-    HttpResponse.json(fixtures.analytics)
+    HttpResponse.json(fixtures.analytics) // { contacts, sends, opens, clicks, unsubscribes, openRate, clickRate, period }
   ),
   http.get(`${BASE}/api/v1/analytics/broadcasts/:id`, () =>
-    HttpResponse.json({ broadcastId: "brd_abc123def456", openRate: 0.25, clickRate: 0.05, ...fixtures.analytics })
+    HttpResponse.json({
+      broadcastId: "brd_abc123def456",
+      sentCount: 4812,
+      openCount: 1169,
+      clickCount: 245,
+      openRate: 24.3,
+      clickRate: 5.1,
+      open: 1169,
+      click: 245,
+    })
   ),
 
   // Assets

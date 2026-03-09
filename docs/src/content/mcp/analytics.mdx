@@ -19,20 +19,24 @@ No parameters required.
 
 ```json
 {
-  "totalContacts": 12453,
-  "newContactsLast30Days": 847,
-  "totalSends": 58920,
-  "openRate": 0.243,
-  "clickRate": 0.051,
-  "unsubscribeRate": 0.008
+  "contacts": 12453,
+  "sends": 58920,
+  "opens": 14317,
+  "clicks": 3002,
+  "unsubscribes": 118,
+  "openRate": 24.3,
+  "clickRate": 5.1,
+  "period": "30d"
 }
 ```
 
+Note: `openRate` and `clickRate` are **percentages** (e.g. `24.3` = 24.3%), not fractions.
+
 **Useful questions to ask:**
 
-- "How many contacts do I have and how many are new this month?"
-- "What's my average open rate?"
-- "How many emails have I sent in the last 30 days?"
+- "How many contacts do I have?"
+- "What's my open rate over the last 30 days?"
+- "How many emails have I sent recently?"
 
 ---
 
@@ -58,16 +62,19 @@ Tool: get_broadcast_analytics
 ```json
 {
   "broadcastId": "brd_abc123def456",
-  "name": "March Newsletter",
-  "recipientCount": 4821,
   "sentCount": 4812,
   "openCount": 1169,
   "clickCount": 245,
-  "unsubscribeCount": 12,
-  "openRate": 0.243,
-  "clickRate": 0.051
+  "openRate": 24.3,
+  "clickRate": 5.1,
+  "open": 1169,
+  "click": 245,
+  "unsubscribe": 12,
+  "bounce": 9
 }
 ```
+
+Note: `openRate` and `clickRate` are **percentages** (e.g. `24.3` = 24.3%).
 
 **Tip:** Combine with `list_broadcasts` to find a broadcast by name:
 
