@@ -16,9 +16,13 @@ RUN bun install --frozen-lockfile
 
 # ── Build docs site with base='/docs/' so it is served at /docs/ by nginx ─────
 COPY docs/package.json ./docs/package.json
+COPY docs/bun.lock* ./docs/
 RUN cd docs && bun install --frozen-lockfile
 
-COPY docs/ ./docs/
+COPY docs/src ./docs/src
+COPY docs/index.html ./docs/index.html
+COPY docs/vite.config.ts docs/tailwind.config.ts docs/postcss.config.js docs/tsconfig.json ./docs/
+COPY docs/public ./docs/public
 WORKDIR /app/docs
 RUN bun run build
 # docs/dist now contains the built SPA with all assets referencing /docs/...
