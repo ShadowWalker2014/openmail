@@ -14,4 +14,4 @@ Allow: /
 User-agent: PerplexityBot
 Allow: /
 
-Sitemap: https://docs.openmail.win/sitemap.xml
+Sitemap: https://openmail.win/docs/sitemap.xml

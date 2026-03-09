@@ -41,6 +41,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "dompurify": "^3.3.2",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

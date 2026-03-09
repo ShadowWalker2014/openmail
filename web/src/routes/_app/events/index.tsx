@@ -6,7 +6,6 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { format, isToday, isYesterday, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import hljs from "highlight.js/lib/common";
+import "highlight.js/styles/atom-one-dark.css";
 
 export const Route = createFileRoute("/_app/events/")({ component: EventsPage });
 
@@ -53,7 +54,13 @@ interface ApiKey {
 }
 
 const PAGE_SIZE = 50;
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+// VITE_PUBLIC_API_URL is the branded production URL shown in code snippets
+// (e.g. https://openmail.win). Defaults to the actual API URL for local dev.
+const PUBLIC_API_URL =
+  import.meta.env.VITE_PUBLIC_API_URL ||
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
 
 // ── Copy button ───────────────────────────────────────────────────────────────
 
@@ -88,6 +95,19 @@ function CopyBtn({ text, label }: { text: string; label?: string }) {
 // ── Code snippets ─────────────────────────────────────────────────────────────
 
 type Lang = "sdk" | "curl" | "python" | "posthog" | "cio";
+
+const HLJS_LANG: Record<Lang, string> = {
+  sdk: "typescript",
+  curl: "bash",
+  python: "python",
+  posthog: "typescript",
+  cio: "javascript",
+};
+
+function highlightCode(code: string, lang: string): string {
+  const language = hljs.getLanguage(lang) ? lang : "plaintext";
+  return hljs.highlight(code, { language }).value;
+}
 
 function getCodeSnippet(lang: Lang, apiUrl: string, apiKeyPlaceholder: string): string {
   const trackUrl = `${apiUrl}/api/v1/events/track`;
@@ -255,8 +275,7 @@ function EventsPage() {
   const events = eventsData?.data ?? [];
   const total = eventsData?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const trackUrl = `${API_URL}/api/v1/events/track`;
-  const ingestBaseUrl = `${API_URL}/api/ingest`;
+  const trackUrl = `${PUBLIC_API_URL}/api/v1/events/track`;
 
   const LANG_TABS: { id: Lang; label: string; icon: React.ElementType }[] = [
     { id: "sdk", label: "Node.js SDK", icon: Code2 },
@@ -266,7 +285,8 @@ function EventsPage() {
     { id: "cio", label: "Customer.io", icon: Globe },
   ];
 
-  const snippet = getCodeSnippet(activeLang, API_URL, apiKeyDisplay);
+  const snippet = getCodeSnippet(activeLang, PUBLIC_API_URL, apiKeyDisplay);
+  const highlightedSnippet = highlightCode(snippet, HLJS_LANG[activeLang]);
 
   return (
     <div className="px-8 py-7 w-full max-w-6xl mx-auto space-y-8">
@@ -284,8 +304,8 @@ function EventsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="https://docs.openmail.win/sdk/event-ingestion"
+          <Link
+            to="/docs/sdk/event-ingestion" 
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground
@@ -294,7 +314,7 @@ function EventsPage() {
             <BookOpen className="h-3.5 w-3.5" />
             <span>Docs</span>
             <ExternalLink className="h-3 w-3 opacity-50" />
-          </a>
+          </Link>
           <Button size="sm" onClick={() => setTestOpen(true)} className="gap-1.5">
             <Send className="h-3.5 w-3.5" />
             Send Test Event
@@ -403,8 +423,8 @@ function EventsPage() {
           ))}
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <a
-              href="https://docs.openmail.win/sdk/event-ingestion"
+            <Link
+              to="/docs/sdk/event-ingestion"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
@@ -412,15 +432,18 @@ function EventsPage() {
               <BookOpen className="h-3.5 w-3.5" />
               <span>Full docs</span>
               <ExternalLink className="h-3 w-3 opacity-50" />
-            </a>
+            </Link>
             <CopyBtn text={snippet} label="Copy" />
           </div>
         </div>
 
-        {/* Code */}
+        {/* Code — syntax highlighted via highlight.js (atom-one-dark theme) */}
         <div className="relative">
-          <pre className="overflow-x-auto p-5 text-[12.5px] leading-[1.75] font-mono text-muted-foreground bg-[#0f0f0f]">
-            <code>{snippet}</code>
+          <pre className="hljs overflow-x-auto p-5 text-[12.5px] leading-[1.75] font-mono !bg-[#282c34] rounded-none">
+            <code
+              className={`language-${HLJS_LANG[activeLang]}`}
+              dangerouslySetInnerHTML={{ __html: highlightedSnippet }}
+            />
           </pre>
         </div>
 

@@ -61,7 +61,7 @@ export default function DocPage() {
     const description =
       mod?.frontmatter?.description ??
       "OpenMail documentation — open-source Customer.io alternative with full REST API and native MCP server for AI agents.";
-    const canonical = `https://docs.openmail.win${href}`;
+    const canonical = `https://openmail.win/docs${href}`;
 
     document.title = title;
 
@@ -88,7 +88,7 @@ export default function DocPage() {
     setMeta('meta[property="og:type"]', "property", "og:type");
     setMeta('meta[property="og:site_name"]', "content", "OpenMail Docs");
     setMeta('meta[property="og:site_name"]', "property", "og:site_name");
-    setMeta('meta[property="og:image"]', "content", "https://docs.openmail.win/og-image.png");
+    setMeta('meta[property="og:image"]', "content", "https://openmail.win/docs/og-image.png");
     setMeta('meta[property="og:image"]', "property", "og:image");
 
     // Twitter Card
@@ -139,12 +139,12 @@ export default function DocPage() {
                       "@type": "TechArticle",
                       headline: fm.title,
                       description: fm.description ?? "",
-                      url: `https://docs.openmail.win${href}`,
+                      url: `https://openmail.win/docs${href}`,
                       inLanguage: "en-US",
                       isPartOf: {
                         "@type": "WebSite",
                         name: "OpenMail Docs",
-                        url: "https://docs.openmail.win",
+                        url: "https://openmail.win/docs",
                       },
                       publisher: {
                         "@type": "Organization",
@@ -152,7 +152,7 @@ export default function DocPage() {
                         url: "https://openmail.win",
                         logo: {
                           "@type": "ImageObject",
-                          url: "https://docs.openmail.win/og-image.png",
+                          url: "https://openmail.win/docs/og-image.png",
                         },
                       },
                     },
@@ -163,7 +163,7 @@ export default function DocPage() {
                           "@type": "ListItem",
                           position: 1,
                           name: "Docs",
-                          item: "https://docs.openmail.win",
+                          item: "https://openmail.win/docs",
                         },
                         ...(section
                           ? [
@@ -178,7 +178,7 @@ export default function DocPage() {
                           "@type": "ListItem",
                           position: section ? 3 : 2,
                           name: fm.title,
-                          item: `https://docs.openmail.win${href}`,
+                          item: `https://openmail.win/docs${href}`,
                         },
                       ],
                     },

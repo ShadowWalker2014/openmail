@@ -9,6 +9,8 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import path from "path";
 
 export default defineConfig({
+  // When served as a subdirectory at /docs/ all asset URLs must be /docs/...
+  base: "/docs/",
   plugins: [
     {
       enforce: "pre",
@@ -37,5 +39,6 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    // Keep base as /docs/ during dev for accurate simulation
   },
 });
