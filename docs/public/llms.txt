@@ -1,0 +1,56 @@
+# OpenMail Documentation
+
+> OpenMail is a free, open-source alternative to Customer.io. A customer lifecycle email marketing platform with a full REST API and a native MCP server for AI agent automation. Self-hosted or cloud-hosted.
+
+## Getting Started
+
+- [Introduction](https://docs.openmail.win/getting-started/introduction): What OpenMail is, core concepts, and architecture overview
+- [Quick Start](https://docs.openmail.win/getting-started/quickstart): Get running in minutes with Docker Compose, Railway, or manual setup
+- [Configuration](https://docs.openmail.win/getting-started/configuration): Complete environment variable reference for all services
+- [Email Setup](https://docs.openmail.win/getting-started/email-setup): Configure Resend for platform and workspace email sending
+
+## REST API
+
+Authentication: Bearer token using workspace API keys (format: `om_{12chars}`)
+Base URL: `https://your-api.railway.app/api/v1/`
+
+- [Authentication](https://docs.openmail.win/api/authentication): API key creation, usage, and security best practices
+- [Contacts](https://docs.openmail.win/api/contacts): Create/upsert/update/delete contacts, list with pagination and search
+- [Broadcasts](https://docs.openmail.win/api/broadcasts): One-off email campaigns — create, send, schedule, track
+- [Campaigns](https://docs.openmail.win/api/campaigns): Event-triggered automation flows with status machine
+- [Segments](https://docs.openmail.win/api/segments): Rule-based dynamic contact groups with flexible operators
+- [Templates](https://docs.openmail.win/api/templates): Reusable HTML email templates
+- [Events](https://docs.openmail.win/api/events): Track customer activity to trigger campaigns
+- [Analytics](https://docs.openmail.win/api/analytics): Workspace and broadcast performance metrics
+- [Assets](https://docs.openmail.win/api/assets): Upload images and files for email embedding
+
+## MCP Server
+
+MCP URL: `https://mcp.openmail.win/mcp` (POST)
+Auth: `Authorization: Bearer om_your_workspace_api_key`
+
+- [Overview](https://docs.openmail.win/mcp/overview): What the MCP server is, available tools, and example use cases
+- [Quick Connect](https://docs.openmail.win/mcp/quickstart): Connect Claude, Cursor, or any AI agent in 2 minutes
+- [Contacts](https://docs.openmail.win/mcp/contacts): list_contacts, create_contact, update_contact, delete_contact, track_event
+- [Broadcasts](https://docs.openmail.win/mcp/broadcasts): list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast
+- [Campaigns](https://docs.openmail.win/mcp/campaigns): list_campaigns, create_campaign, update_campaign, pause_campaign
+- [Segments](https://docs.openmail.win/mcp/segments): list_segments, create_segment
+- [Templates](https://docs.openmail.win/mcp/templates): list_templates, create_template, update_template, delete_template
+- [Analytics](https://docs.openmail.win/mcp/analytics): get_analytics, get_broadcast_analytics
+- [Assets](https://docs.openmail.win/mcp/assets): list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
+
+## Self-Hosting
+
+- [Overview](https://docs.openmail.win/self-hosting/overview): Architecture overview, service matrix, and resource requirements
+- [Railway](https://docs.openmail.win/self-hosting/railway): Step-by-step Railway deployment guide
+- [Docker Compose](https://docs.openmail.win/self-hosting/docker): Local and single-server Docker deployment
+
+## Key Information
+
+- License: Elastic License 2.0 (ELv2) — free to self-host, no SaaS reselling
+- GitHub: https://github.com/ShadowWalker2014/openmail
+- Enterprise: kai@1flow.ai
+- Stack: React + Vite + TanStack (web), Hono + Better Auth + Drizzle (api), BullMQ + Resend (worker), MCP SDK (mcp)
+- Databases: PostgreSQL + Redis
+- ID format: {prefix}_{12chars} — e.g. ws_, usr_, con_, seg_, evt_, cmp_, brd_, tpl_, snd_, ast_, key_
+- MCP tools count: 27 total

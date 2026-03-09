@@ -1,0 +1,75 @@
+---
+title: MCP Server Overview
+description: OpenMail exposes a native MCP server so AI agents can autonomously create and run email campaigns.
+---
+
+# MCP Server Overview
+
+OpenMail includes a native **[Model Context Protocol (MCP)](https://modelcontextprotocol.io)** HTTP server. Any AI agent that supports MCP — Claude, Cursor, Windsurf, or a custom agent — can use it to create and manage entire email campaigns autonomously.
+
+## What is MCP?
+
+MCP is an open standard for connecting AI models to external tools and data sources. Instead of writing integration code, you register an MCP server and the AI model automatically discovers what it can do.
+
+With OpenMail's MCP server, your AI agent can:
+
+- Create and send email broadcasts to contact segments
+- Set up event-triggered automation campaigns
+- Upload images and compose HTML emails from scratch
+- Track customer events and manage contact attributes
+- Pull analytics to measure campaign performance
+
+## Server Details
+
+| Property | Value |
+|----------|-------|
+| **Public URL** | `https://mcp.openmail.win/mcp` |
+| **Protocol** | HTTP (Streamable HTTP transport) |
+| **Authentication** | Bearer token (workspace API key) |
+| **Method** | `POST /mcp` |
+
+## Available Tools (27 total)
+
+| Category | Tools |
+|----------|-------|
+| **Contacts** | `list_contacts`, `create_contact`, `update_contact`, `delete_contact`, `track_event` |
+| **Broadcasts** | `list_broadcasts`, `get_broadcast`, `create_broadcast`, `update_broadcast`, `schedule_broadcast`, `send_broadcast`, `delete_broadcast` |
+| **Campaigns** | `list_campaigns`, `create_campaign`, `update_campaign`, `pause_campaign` |
+| **Segments** | `list_segments`, `create_segment` |
+| **Templates** | `list_templates`, `create_template`, `update_template`, `delete_template` |
+| **Analytics** | `get_analytics`, `get_broadcast_analytics` |
+| **Assets** | `list_assets`, `get_asset`, `upload_asset_from_url`, `upload_asset_base64`, `delete_asset` |
+
+## How It Works
+
+The MCP server acts as a proxy to the REST API. Each tool call:
+
+1. Receives parameters from the AI model
+2. Calls the corresponding REST API endpoint with your workspace API key
+3. Returns the result as text for the AI to process
+
+The server is **stateless** — each request is independent. Authentication is passed via the `Authorization: Bearer` header.
+
+## Example: Autonomous Campaign Creation
+
+Prompt your AI agent:
+
+> "Create a welcome campaign for new users. When someone signs up (event: `user_signed_up`), send them a welcome email immediately with our standard welcome template, then follow up 3 days later with a tips email."
+
+The agent will:
+1. Call `list_templates` to find the welcome template
+2. Call `create_campaign` with `triggerType: "event"` and `eventName: "user_signed_up"`
+3. Add campaign steps for the two emails
+4. Call `update_campaign` to set status to `active`
+
+## Why MCP Instead of Direct API?
+
+The REST API requires you to write integration code. MCP lets your AI agent figure out what to call and in what order — no code needed. The agent reads the tool descriptions and parameters and handles everything automatically.
+
+This makes OpenMail the first email platform where a non-technical team member can build and launch campaigns just by describing what they want to an AI assistant.
+
+## Next Steps
+
+- [Quick Connect](/mcp/quickstart) — Add the MCP server to Claude, Cursor, or any agent in 2 minutes
+- [Contacts tools](/mcp/contacts) — Manage contacts and track events
+- [Broadcasts tools](/mcp/broadcasts) — Create and send email campaigns

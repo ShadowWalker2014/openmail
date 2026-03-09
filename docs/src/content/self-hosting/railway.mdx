@@ -1,0 +1,105 @@
+---
+title: Railway Deployment
+description: Deploy OpenMail to Railway with managed Postgres, Redis, and automatic builds.
+---
+
+# Railway Deployment
+
+[Railway](https://railway.app) is the recommended production deployment platform for OpenMail. Each service deploys independently from the same GitHub repo.
+
+## Step 1: Fork the Repository
+
+Fork [github.com/ShadowWalker2014/openmail](https://github.com/ShadowWalker2014/openmail) to your GitHub account.
+
+## Step 2: Create a Railway Project
+
+1. Go to [railway.app/new](https://railway.app/new)
+2. Select **Deploy from GitHub repo**
+3. Choose your fork
+
+## Step 3: Add Databases
+
+In the Railway project:
+
+1. Click **+ New** → **Database** → **Add PostgreSQL**
+2. Click **+ New** → **Database** → **Add Redis**
+
+Copy the `DATABASE_URL` and `REDIS_URL` connection strings — you'll need them for each service.
+
+## Step 4: Deploy Each Service
+
+Repeat for `api`, `web`, `worker`, and `tracker` (and optionally `mcp`):
+
+1. Click **+ New** → **GitHub Repo** → select your fork
+2. Set **Root Directory** to `/`
+3. Set **Dockerfile Path** to `api/Dockerfile` (or the relevant service)
+4. Add the environment variables (see [Configuration](/getting-started/configuration))
+
+## Step 5: Set Environment Variables
+
+### API Service
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+BETTER_AUTH_URL=https://<api-service>.railway.app
+WEB_URL=https://<web-service>.railway.app
+RESEND_API_KEY=re_xxx
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+TRACKER_URL=https://<tracker-service>.railway.app
+```
+
+### Worker Service
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+RESEND_API_KEY=re_xxx
+TRACKER_URL=https://<tracker-service>.railway.app
+```
+
+### Tracker Service
+
+```
+API_URL=https://<api-service>.railway.app
+```
+
+### Web Service (Build Arg)
+
+```
+VITE_API_URL=https://<api-service>.railway.app
+```
+
+## Step 6: Generate Public Domains
+
+For each service, click **Settings → Networking → Generate Domain** to get a public URL.
+
+Update `BETTER_AUTH_URL`, `WEB_URL`, and `TRACKER_URL` with the actual Railway domains.
+
+## Step 7: Run Database Migrations
+
+Open a Railway shell on the API service and run:
+
+```bash
+cd /app/packages/shared && bun db:migrate
+```
+
+Or trigger migrations automatically on first deploy by adding to the API Dockerfile's `CMD`.
+
+## Custom Domain
+
+1. In Railway, go to the service → **Settings → Networking**
+2. Click **Custom Domain** → enter your domain
+3. Add the provided CNAME record to your DNS provider
+4. Update environment variables to use the custom domain
+
+## Object Storage (Assets Feature)
+
+1. In Railway, create an **Object Storage** bucket
+2. Link it to the API service — Railway injects `AWS_*` env vars automatically
+3. No additional configuration needed
+
+## Monitoring
+
+Railway provides built-in metrics (CPU, memory, requests) per service. For more detailed monitoring, add a `LOG_LEVEL=debug` env var to see detailed logs.

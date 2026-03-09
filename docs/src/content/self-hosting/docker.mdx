@@ -1,0 +1,142 @@
+---
+title: Docker Compose
+description: Run the full OpenMail stack locally using Docker Compose.
+---
+
+# Docker Compose
+
+The quickest way to get OpenMail running locally or on a single server.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) 24+
+- [Docker Compose](https://docs.docker.com/compose/) v2
+
+## Quick Start
+
+```bash
+git clone https://github.com/ShadowWalker2014/openmail.git
+cd openmail
+cp .env.example .env
+```
+
+Edit `.env` with your settings (minimum required):
+
+```bash
+# .env
+RESEND_API_KEY=re_your_key_here
+BETTER_AUTH_SECRET=your-32-char-random-secret
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+WEB_URL=http://localhost:5173
+BETTER_AUTH_URL=http://localhost:3001
+```
+
+Start everything:
+
+```bash
+docker compose up -d
+```
+
+Services started:
+- `web` → http://localhost:5173 (dashboard)
+- `api` → http://localhost:3001
+- `mcp` → http://localhost:3002
+- `tracker` → http://localhost:3003
+- `postgres` → localhost:5432
+- `redis` → localhost:6379
+
+## What's in docker-compose.yml
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openmail
+      POSTGRES_PASSWORD: openmail_secret
+
+  redis:
+    image: redis:7-alpine
+
+  api:
+    build: { context: ., dockerfile: api/Dockerfile }
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql://postgres:openmail_secret@postgres:5432/openmail
+      REDIS_URL: redis://redis:6379
+      # ... other vars from .env
+
+  worker:
+    build: { context: ., dockerfile: worker/Dockerfile }
+    depends_on: [postgres, redis]
+
+  tracker:
+    build: { context: ., dockerfile: tracker/Dockerfile }
+    depends_on: [api]
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3001
+```
+
+## Running Migrations
+
+On first run, migrations are applied automatically. To run manually:
+
+```bash
+docker compose exec api bun db:migrate
+```
+
+## Updating
+
+```bash
+git pull origin main
+docker compose build
+docker compose up -d
+```
+
+## Production on a Single Server
+
+For a simple production deployment on a VPS:
+
+1. Set strong passwords in `.env`
+2. Use a reverse proxy (nginx, Caddy) to expose services on ports 80/443
+3. Configure SSL/TLS for all public-facing services
+4. Set `WEB_URL` and `BETTER_AUTH_URL` to your actual domain names
+
+Example nginx config snippet:
+
+```nginx
+server {
+    server_name api.yourdomain.com;
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## Stopping and Cleanup
+
+```bash
+# Stop (preserve data)
+docker compose down
+
+# Stop and remove volumes (destroys all data)
+docker compose down -v
+```
+
+## Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f api
+docker compose logs -f worker
+```

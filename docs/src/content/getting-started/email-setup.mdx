@@ -1,0 +1,91 @@
+---
+title: Email Setup
+description: Configure Resend for platform emails and per-workspace email sending with custom domains.
+---
+
+# Email Setup
+
+OpenMail uses [Resend](https://resend.com) for all email delivery. You need at least one Resend API key and a verified sending domain to send emails.
+
+## Two Categories of Emails
+
+| Category | Examples | Configuration |
+|----------|----------|---------------|
+| **Platform emails** | Password resets, workspace invites, notifications | `PLATFORM_FROM_EMAIL` env var |
+| **Campaign emails** | Broadcasts, automation sequences | Per-workspace settings in dashboard |
+
+## Step 1: Create a Resend Account
+
+1. Sign up at [resend.com](https://resend.com) (free tier: 3,000 emails/month)
+2. Go to **API Keys** → **Create API Key** (full access)
+3. Copy the key — you'll only see it once
+
+Set in `api/.env.local`:
+
+```bash
+RESEND_API_KEY=re_your_key_here
+```
+
+## Step 2: Add and Verify a Sending Domain
+
+You must verify a domain you own. You cannot send from `@gmail.com`, `@outlook.com`, or any domain you don't control.
+
+1. In Resend dashboard → **Domains** → **Add Domain**
+2. Enter your domain: `mail.yourdomain.com` (recommended) or `yourdomain.com`
+3. Add the DNS records Resend provides to your DNS provider:
+   - **SPF** TXT record
+   - **DKIM** CNAME records
+   - **DMARC** TXT record (optional but recommended)
+4. Click **Verify** — propagation usually takes 1–5 minutes
+
+Once verified, you can send from any address `@yourdomain.com`.
+
+## Step 3: Configure Environment Variables
+
+```bash
+# api/.env.local
+
+# Platform sender — for system emails (invites, password resets)
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+PLATFORM_FROM_NAME=YourApp
+
+# Default fallback for workspace campaigns
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+DEFAULT_FROM_NAME=YourApp
+```
+
+## Step 4: Per-Workspace Email Sending
+
+Each workspace can configure its **own** Resend API key and sending domain. This is the recommended setup for multi-tenant deployments.
+
+In the dashboard: **Settings → Email Sending**
+
+Set:
+- **Resend API Key** — workspace-specific key
+- **From Email** — verified sender for this workspace (e.g. `hello@acme.com`)
+- **From Name** — display name (e.g. `Acme Team`)
+
+If a workspace hasn't configured its own key, it falls back to the platform's `DEFAULT_FROM_EMAIL`.
+
+## Click and Open Tracking
+
+To enable open and click tracking in emails:
+
+1. Ensure the `tracker/` service is deployed and accessible
+2. Set `TRACKER_URL=https://tracker.yourdomain.com` in the `api/` environment
+3. The worker will automatically inject tracking pixels and wrap links in all outgoing emails
+
+## Cloud Hosted (openmail.win)
+
+On the cloud-hosted version, email is pre-configured. You only need to set your workspace's Resend API key and verified sender domain in Settings.
+
+## Troubleshooting
+
+**Emails not sending:** Check the worker logs — it will show Resend API errors. Common issues:
+- Resend API key not set in `worker/` env
+- Sending from an unverified domain
+- Resend daily send limit reached (free tier: 100/day)
+
+**Open tracking not working:** Ensure `TRACKER_URL` is set in the `api/` service and the tracker service is running. Some email clients block tracking pixels.
+
+**Emails going to spam:** Set up all three DNS records (SPF, DKIM, DMARC). Use a subdomain like `mail.yourdomain.com` dedicated to transactional email.

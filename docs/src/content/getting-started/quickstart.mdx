@@ -1,0 +1,138 @@
+---
+title: Quick Start
+description: Get OpenMail running in under 5 minutes using Docker Compose, Railway, or manual setup.
+---
+
+# Quick Start
+
+Get OpenMail running in under 5 minutes. Choose the deployment method that fits your needs.
+
+## Option 1: Docker Compose (Recommended)
+
+The fastest way to run the full OpenMail stack locally or on a server.
+
+**Prerequisites:** Docker and Docker Compose installed.
+
+```bash
+git clone https://github.com/ShadowWalker2014/openmail.git
+cd openmail
+cp .env.example .env
+```
+
+Edit `.env` and set:
+- `RESEND_API_KEY` — your Resend API key ([get one free](https://resend.com))
+- `BETTER_AUTH_SECRET` — generate with `openssl rand -base64 32`
+- `PLATFORM_FROM_EMAIL` — your verified Resend sender address
+
+Then start all services:
+
+```bash
+docker compose up -d
+```
+
+Open `http://localhost:5173` to access the dashboard. Sign up, create a workspace, and start sending.
+
+## Option 2: Deploy to Railway
+
+Deploy each service independently on [Railway](https://railway.app). Each subfolder is a separate Railway service.
+
+1. Fork the repo on GitHub
+2. Create a new Railway project
+3. Add services for `api`, `web`, `worker`, `tracker`, and `mcp`
+4. For each service, set **Root Directory** to `/` and **Dockerfile Path** to `<service>/Dockerfile`
+5. Add a PostgreSQL and Redis database
+6. Set environment variables per service
+
+See the [Railway deployment guide](/self-hosting/railway) for step-by-step instructions.
+
+## Option 3: Manual Setup
+
+Run each service locally for development.
+
+**Prerequisites:** [Bun](https://bun.sh), PostgreSQL, Redis
+
+### 1. Install dependencies
+
+```bash
+git clone https://github.com/ShadowWalker2014/openmail.git
+cd openmail
+bun install
+```
+
+### 2. Configure environment
+
+```bash
+cp api/.env.example api/.env.local
+cp worker/.env.example worker/.env.local
+cp tracker/.env.example tracker/.env.local
+```
+
+Edit each `.env.local` file with your credentials. The minimum required for `api/`:
+
+```bash
+DATABASE_URL=postgresql://user:pass@localhost:5432/openmail
+REDIS_URL=redis://localhost:6379
+BETTER_AUTH_SECRET=your-32-char-secret-here
+BETTER_AUTH_URL=http://localhost:3001
+WEB_URL=http://localhost:5173
+RESEND_API_KEY=re_your_key
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+```
+
+### 3. Run database migrations
+
+```bash
+bun db:generate
+bun db:migrate
+```
+
+### 4. Start services
+
+Open separate terminal windows for each service:
+
+```bash
+bun dev:api      # REST API on :3001
+bun dev:mcp      # MCP server on :3002  
+bun dev:tracker  # Pixel tracker on :3003
+bun dev:worker   # Background workers
+bun dev:web      # Dashboard on :5173
+```
+
+## First Steps
+
+Once running:
+
+1. **Sign up** at the dashboard URL
+2. **Create a workspace** — this is your tenant (e.g. "Acme Corp")
+3. **Configure email sending** — Settings → Email Sending → add your Resend API key and verified sender domain
+4. **Create your first segment** — e.g. all contacts
+5. **Create a template** — write your welcome email HTML
+6. **Send a broadcast** — pick a segment, pick a template, send
+
+## Using the API
+
+Get your workspace API key from **Settings → API Keys**.
+
+```bash
+curl -H "Authorization: Bearer om_your_api_key" \
+  https://your-api.railway.app/api/v1/contacts
+```
+
+## Connecting AI Agents (MCP)
+
+Add OpenMail to your AI agent's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "openmail": {
+      "url": "https://mcp.openmail.win/mcp",
+      "headers": {
+        "Authorization": "Bearer om_your_workspace_api_key"
+      }
+    }
+  }
+}
+```
+
+Your AI agent can now autonomously create campaigns, send broadcasts, and track events. See the [MCP Server overview](/mcp/overview) for all 27 available tools.

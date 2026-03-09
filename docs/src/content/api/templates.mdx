@@ -1,0 +1,101 @@
+---
+title: Templates API
+description: Create and manage reusable email templates for broadcasts and campaigns.
+---
+
+# Templates API
+
+Templates are reusable HTML email designs that can be referenced by broadcasts and campaigns. Create a template once, reuse it everywhere.
+
+**Base URL:** `/api/v1/templates`
+
+## List Templates
+
+<EndpointBadge method="GET" path="/api/v1/templates" />
+
+Returns all templates in the workspace.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/templates
+```
+
+## Get Template
+
+<EndpointBadge method="GET" path="/api/v1/templates/:id" />
+
+Returns a single template by ID.
+
+## Create Template
+
+<EndpointBadge method="POST" path="/api/v1/templates" />
+
+Creates a new reusable email template.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `name` | string | ✓ | Template name shown in the dashboard |
+| `subject` | string | ✓ | Default email subject line |
+| `htmlContent` | string | ✓ | Full HTML email body |
+| `previewText` | string | — | Preview text shown in email clients before opening |
+
+```bash
+curl -X POST https://your-api/api/v1/templates \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Welcome Email",
+    "subject": "Welcome to {{company}}! 👋",
+    "previewText": "We are so excited to have you.",
+    "htmlContent": "<!DOCTYPE html><html><body><h1>Welcome!</h1><p>Thanks for joining.</p></body></html>"
+  }'
+```
+
+### Using Images in Templates
+
+To embed images reliably in emails:
+
+1. Upload the image using the [Assets API](/api/assets) to get a stable `proxyUrl`
+2. Use the `proxyUrl` as the `src` in your HTML:
+
+```html
+<img src="https://your-api/api/public/assets/ws_xxx/ast_xxx" 
+     alt="Banner" 
+     style="max-width:100%;display:block" />
+```
+
+## Update Template
+
+<EndpointBadge method="PATCH" path="/api/v1/templates/:id" />
+
+Updates a template's name, subject, preview text, or HTML content.
+
+```bash
+curl -X PATCH https://your-api/api/v1/templates/tpl_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "Welcome to Acme! 🎉",
+    "previewText": "Your account is ready."
+  }'
+```
+
+## Delete Template
+
+<EndpointBadge method="DELETE" path="/api/v1/templates/:id" />
+
+Permanently deletes a template. Broadcasts referencing this template will lose their template association.
+
+## Template Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`tpl_` prefix) |
+| `name` | string | Template name |
+| `subject` | string | Default subject line |
+| `previewText` | string or null | Preview text |
+| `htmlContent` | string | Full HTML email body |
+| `createdAt` | timestamp | Creation time |
+| `updatedAt` | timestamp | Last update time |

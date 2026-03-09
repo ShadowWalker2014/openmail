@@ -1,0 +1,167 @@
+---
+title: Contacts API
+description: Create, update, search, and delete contacts in your workspace.
+---
+
+# Contacts API
+
+Contacts are people you want to email. Each contact belongs to a workspace and has an email address plus flexible key-value attributes.
+
+**Base URL:** `/api/v1/contacts`
+
+## List Contacts
+
+<EndpointBadge method="GET" path="/api/v1/contacts" />
+
+Returns a paginated list of contacts. Supports search by email.
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | integer | `1` | Page number |
+| `pageSize` | integer | `50` | Results per page (max 500) |
+| `search` | string | — | Filter contacts by email (partial match) |
+
+### Example Request
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/contacts?page=1&pageSize=50&search=acme.com"
+```
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "con_abc123def456",
+      "workspaceId": "ws_xyz789",
+      "email": "alice@acme.com",
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "attributes": { "plan": "pro", "company": "Acme" },
+      "unsubscribed": false,
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 50
+}
+```
+
+## Create / Upsert Contact
+
+<EndpointBadge method="POST" path="/api/v1/contacts" />
+
+Creates a new contact or updates an existing one. Deduplication is based on `email` within the workspace — if a contact with that email already exists, it is updated and a `200` is returned. A new contact returns `201`.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address |
+| `firstName` | string | — | First name |
+| `lastName` | string | — | Last name |
+| `phone` | string | — | Phone number |
+| `attributes` | object | — | Custom key-value traits (any JSON object) |
+
+### Example Request
+
+```bash
+curl -X POST https://your-api/api/v1/contacts \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@acme.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "attributes": {
+      "plan": "pro",
+      "company": "Acme Corp",
+      "mrr": 99
+    }
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "con_abc123def456",
+  "workspaceId": "ws_xyz789",
+  "email": "alice@acme.com",
+  "firstName": "Alice",
+  "lastName": "Smith",
+  "attributes": { "plan": "pro", "company": "Acme Corp", "mrr": 99 },
+  "unsubscribed": false,
+  "createdAt": "2025-01-15T10:00:00.000Z",
+  "updatedAt": "2025-01-15T10:00:00.000Z"
+}
+```
+
+## Get Contact
+
+<EndpointBadge method="GET" path="/api/v1/contacts/:id" />
+
+Returns a single contact by ID.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/contacts/con_abc123def456
+```
+
+## Update Contact
+
+<EndpointBadge method="PATCH" path="/api/v1/contacts/:id" />
+
+Updates a contact's fields. Only provided fields are updated — others are left unchanged. For `attributes`, the provided object is **merged** into existing attributes (existing keys not listed are preserved).
+
+### Request Body
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `firstName` | string | Updated first name |
+| `lastName` | string | Updated last name |
+| `phone` | string | Updated phone number |
+| `attributes` | object | Attributes to merge (not replace) |
+
+```bash
+curl -X PATCH https://your-api/api/v1/contacts/con_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attributes": { "plan": "enterprise", "seats": 50 }
+  }'
+```
+
+## Delete Contact
+
+<EndpointBadge method="DELETE" path="/api/v1/contacts/:id" />
+
+Permanently deletes a contact and all associated data. This action is irreversible.
+
+```bash
+curl -X DELETE https://your-api/api/v1/contacts/con_abc123def456 \
+  -H "Authorization: Bearer om_..."
+```
+
+Returns `204 No Content` on success.
+
+## Contact Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`con_` prefix) |
+| `workspaceId` | string | Workspace this contact belongs to |
+| `email` | string | Email address (unique per workspace) |
+| `firstName` | string or null | First name |
+| `lastName` | string or null | Last name |
+| `phone` | string or null | Phone number |
+| `attributes` | object | Custom key-value attributes |
+| `unsubscribed` | boolean | Whether the contact has unsubscribed |
+| `createdAt` | ISO timestamp | When the contact was created |
+| `updatedAt` | ISO timestamp | When the contact was last updated |

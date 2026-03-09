@@ -1,0 +1,134 @@
+---
+title: Quick Connect
+description: Connect your AI agent to OpenMail's MCP server in under 2 minutes.
+---
+
+# Quick Connect
+
+Add OpenMail to any MCP-compatible AI agent in under 2 minutes.
+
+## Step 1: Get Your API Key
+
+1. Open your OpenMail dashboard
+2. Go to **Settings → API Keys**
+3. Click **Create API Key**
+4. Copy the key (starts with `om_`)
+
+## Connect to Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "openmail": {
+      "url": "https://mcp.openmail.win/mcp",
+      "headers": {
+        "Authorization": "Bearer om_your_workspace_api_key"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. You'll see "openmail" appear in the MCP tools panel.
+
+## Connect to Cursor
+
+In Cursor, open **Settings → MCP** and add:
+
+```json
+{
+  "openmail": {
+    "url": "https://mcp.openmail.win/mcp",
+    "headers": {
+      "Authorization": "Bearer om_your_workspace_api_key"
+    }
+  }
+}
+```
+
+## Connect via OpenAI Agents SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI()
+
+# Register the MCP server
+response = client.responses.create(
+    model="gpt-4o",
+    tools=[{
+        "type": "mcp",
+        "server_label": "openmail",
+        "server_url": "https://mcp.openmail.win/mcp",
+        "headers": {
+            "Authorization": "Bearer om_your_workspace_api_key"
+        }
+    }],
+    input="List my contact segments and create a broadcast to the 'Pro Users' segment"
+)
+```
+
+## Connect via Anthropic SDK
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.beta.messages.create(
+    model="claude-opus-4-5",
+    max_tokens=1024,
+    tools=[{
+        "type": "mcp",
+        "name": "openmail",
+        "url": "https://mcp.openmail.win/mcp",
+        "authorization_token": "Bearer om_your_workspace_api_key"
+    }],
+    messages=[{
+        "role": "user", 
+        "content": "What is my open rate over the last 30 days?"
+    }]
+)
+```
+
+## Self-Hosted MCP URL
+
+If you're self-hosting OpenMail, the MCP server runs at `POST /mcp` on the `mcp/` service. Replace the URL:
+
+```json
+{
+  "url": "https://your-mcp.railway.app/mcp",
+  "headers": {
+    "Authorization": "Bearer om_your_workspace_api_key"
+  }
+}
+```
+
+## Verify the Connection
+
+Once connected, ask your AI agent:
+
+> "Use OpenMail to list my contact segments."
+
+The agent should call `list_segments` and return your workspace segments. If it fails with a 401, double-check your API key.
+
+## What Can I Ask My Agent?
+
+Here are effective prompts to get started:
+
+**Analytics:**
+> "What is my overall email open rate and how many contacts do I have?"
+
+**Broadcasts:**
+> "Create a broadcast to the 'Pro Users' segment announcing our new dashboard feature. Use a clean, professional HTML email."
+
+**Campaigns:**
+> "Set up a welcome campaign that triggers when `user_signed_up` fires, sends a welcome email immediately, then a product tips email after 3 days."
+
+**Contact Management:**
+> "Find all contacts with a `plan` attribute of `trial` and create a segment for them."
+
+**Event Tracking:**
+> "Track a `feature_used` event for alice@example.com with property `feature: 'analytics_dashboard'`."

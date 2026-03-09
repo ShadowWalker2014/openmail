@@ -1,0 +1,114 @@
+---
+title: Asset Tools
+description: MCP tools for uploading and managing images and files in your workspace.
+---
+
+# Asset Tools
+
+5 tools for uploading and managing files in the workspace asset library.
+
+## list_assets
+
+List all uploaded assets (images, videos, PDFs). Each asset includes a `proxyUrl` that can be embedded directly in email HTML.
+
+> "Show me all my uploaded images"
+
+---
+
+## get_asset
+
+Get details of a single asset including its stable `proxyUrl`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `assetId` | string | ✓ | Asset ID (`ast_xxx`) |
+
+---
+
+## upload_asset_from_url
+
+Upload an image or file from any public URL into the workspace asset library. The API fetches the file server-side and stores it.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `url` | string | ✓ | Public URL of the file |
+| `name` | string | — | Display name in the asset library |
+
+**Supported formats:** JPEG, PNG, GIF, WebP, SVG, MP4, WebM, PDF (max 25MB)
+
+**Example:**
+
+> "Upload our company logo from https://example.com/logo.png and use it in the next broadcast"
+
+```
+Tool: upload_asset_from_url
+{ "url": "https://example.com/logo.png", "name": "Company Logo" }
+→ { "proxyUrl": "https://api.openmail.win/api/public/assets/ws_xxx/ast_xxx", ... }
+```
+
+Then use `proxyUrl` in email HTML:
+```html
+<img src="{proxyUrl}" alt="Company Logo" style="max-width:200px;display:block" />
+```
+
+---
+
+## upload_asset_base64
+
+Upload a file from base64-encoded content. Use this when the file is generated in memory (e.g. AI-generated images, charts).
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `content` | string | ✓ | Base64-encoded file content |
+| `fileName` | string | ✓ | Filename with extension (e.g. `chart.png`) |
+| `mimeType` | string | ✓ | MIME type (e.g. `image/png`) |
+| `name` | string | — | Display name |
+
+---
+
+## delete_asset
+
+Permanently delete an asset from storage. Any emails using the asset's URL will show a broken image after deletion.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `assetId` | string | ✓ | Asset ID (`ast_xxx`) |
+
+## Full Workflow: Email with Image
+
+This is the recommended workflow when creating emails with images:
+
+1. Upload the image → get `proxyUrl`
+2. Create a template using the `proxyUrl` in `<img src="...">`
+3. Create a broadcast referencing the template
+4. Send the broadcast
+
+```
+1. upload_asset_from_url({ url: "...", name: "Banner" })
+   → proxyUrl: "https://api.openmail.win/api/public/assets/ws_xxx/ast_xxx"
+
+2. create_template({
+     name: "Product Launch",
+     subject: "Announcing our new feature",
+     htmlContent: "<img src='[proxyUrl]' /><p>Big news...</p>"
+   })
+   → templateId: "tpl_xxx"
+
+3. create_broadcast({
+     name: "Product Launch Email",
+     subject: "Announcing our new feature",
+     templateId: "tpl_xxx",
+     segmentIds: ["seg_xxx"]
+   })
+   → broadcastId: "brd_xxx"
+
+4. send_broadcast({ broadcastId: "brd_xxx" })
+```

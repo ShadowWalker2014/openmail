@@ -1,0 +1,136 @@
+---
+title: Campaigns API
+description: Create and manage event-triggered automation flows.
+---
+
+# Campaigns API
+
+Campaigns are automated email sequences triggered by customer events or segment membership changes. When a trigger fires, enrolled contacts move through the campaign's steps.
+
+**Base URL:** `/api/v1/campaigns`
+
+## List Campaigns
+
+<EndpointBadge method="GET" path="/api/v1/campaigns" />
+
+Returns all campaigns in the workspace.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/campaigns
+```
+
+## Get Campaign
+
+<EndpointBadge method="GET" path="/api/v1/campaigns/:id" />
+
+Returns a campaign with its steps.
+
+```json
+{
+  "id": "cmp_abc123def456",
+  "name": "Welcome Series",
+  "status": "active",
+  "triggerType": "event",
+  "triggerConfig": { "eventName": "user_signed_up" },
+  "steps": [
+    {
+      "id": "stp_xxx",
+      "order": 1,
+      "type": "email",
+      "delaySeconds": 0,
+      "config": { "templateId": "tpl_welcome" }
+    }
+  ]
+}
+```
+
+## Create Campaign
+
+<EndpointBadge method="POST" path="/api/v1/campaigns" />
+
+Creates a new campaign in `draft` status.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `name` | string | ✓ | Campaign name |
+| `triggerType` | enum | ✓ | What triggers this campaign (see below) |
+| `triggerConfig` | object | * | Trigger configuration — required fields depend on trigger type |
+| `description` | string | — | Optional description |
+
+### Trigger Types
+
+| `triggerType` | Description | Required `triggerConfig` |
+|---------------|-------------|--------------------------|
+| `event` | Fires when a contact triggers a named event | `{ "eventName": "user_signed_up" }` |
+| `segment_enter` | Fires when a contact joins a segment | `{ "segmentId": "seg_xxx" }` |
+| `segment_exit` | Fires when a contact leaves a segment | `{ "segmentId": "seg_xxx" }` |
+| `manual` | Triggered via API only | `{}` |
+
+```bash
+curl -X POST https://your-api/api/v1/campaigns \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Welcome Series",
+    "triggerType": "event",
+    "triggerConfig": { "eventName": "user_signed_up" },
+    "description": "Onboard new users"
+  }'
+```
+
+## Update Campaign
+
+<EndpointBadge method="PATCH" path="/api/v1/campaigns/:id" />
+
+Updates a campaign's name, description, or status.
+
+### Status Transitions
+
+Campaigns follow a strict state machine:
+
+```
+draft → active → paused → active (can cycle)
+     ↘          ↘
+      archived   archived
+```
+
+- `draft → active`: Activates the campaign
+- `active → paused`: Stops enrolling new contacts
+- `paused → active`: Resumes the campaign
+- Any → `archived`: Terminal state — cannot be reactivated
+
+```bash
+# Activate a campaign
+curl -X PATCH https://your-api/api/v1/campaigns/cmp_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "active" }'
+```
+
+## Pause Campaign
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/pause" />
+
+Pauses an active campaign. Contacts already enrolled continue processing, but no new contacts are enrolled until reactivated.
+
+```bash
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/pause \
+  -H "Authorization: Bearer om_..."
+```
+
+## Campaign Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`cmp_` prefix) |
+| `name` | string | Campaign name |
+| `description` | string or null | Optional description |
+| `status` | string | `draft`, `active`, `paused`, or `archived` |
+| `triggerType` | string | Event or segment-based trigger |
+| `triggerConfig` | object | Trigger-specific configuration |
+| `steps` | array | Campaign steps (when fetched by ID) |
+| `createdAt` | timestamp | Creation time |
+| `updatedAt` | timestamp | Last update time |

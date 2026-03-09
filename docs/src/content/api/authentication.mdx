@@ -1,0 +1,76 @@
+---
+title: Authentication
+description: Authenticate with OpenMail using workspace API keys or session-based auth.
+---
+
+# Authentication
+
+OpenMail has two authentication methods depending on your use case.
+
+## API Key Authentication
+
+Use workspace-scoped API keys for server-to-server requests and AI agent access. All keys start with `om_`.
+
+### Getting an API Key
+
+1. Open the dashboard
+2. Go to **Settings → API Keys**
+3. Click **Create API Key**
+4. Copy the key — it's only shown once
+
+### Using the Key
+
+Pass the key as a `Bearer` token in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer om_your_api_key" \
+  https://your-api.railway.app/api/v1/contacts
+```
+
+All API key requests are authenticated against `/api/v1/` routes.
+
+### Key Format
+
+```
+om_{12_random_chars}
+```
+
+Example: `om_abc123def456`
+
+### Key Scoping
+
+API keys are scoped to a single workspace. All requests made with a key operate on data within that workspace only. There is no cross-workspace access via API keys.
+
+### Revoking Keys
+
+Delete a key from **Settings → API Keys**. The key is immediately invalidated — any requests using it will receive `401 Unauthorized`.
+
+## Session Authentication
+
+Used by the web dashboard for browser-based requests. Session auth uses `better-auth` under the hood with cookie-based sessions.
+
+Session-based API routes are prefixed with `/api/session/ws/:workspaceId/`.
+
+You typically don't need session auth unless you're building a custom dashboard or integrating with the web UI.
+
+## Errors
+
+| Code | Meaning |
+|------|---------|
+| `401 Unauthorized` | Missing or invalid API key |
+| `403 Forbidden` | Valid key but insufficient permissions |
+
+### Error Response Format
+
+```json
+{
+  "error": "Missing or invalid Authorization header. Use: Bearer <workspace-api-key>"
+}
+```
+
+## Security Best Practices
+
+- Store API keys in environment variables, never in code
+- Use one key per service/integration — never share keys
+- Rotate keys regularly and immediately if compromised
+- The MCP server uses the same workspace API keys — see [MCP Quick Connect](/mcp/quickstart)

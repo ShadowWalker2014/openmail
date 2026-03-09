@@ -1,0 +1,120 @@
+---
+title: Contact Tools
+description: MCP tools for managing contacts and tracking customer events.
+---
+
+# Contact Tools
+
+5 tools for managing your contact database and tracking customer activity.
+
+## list_contacts
+
+List contacts with optional search and pagination.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `page` | number | — | Page number (default: 1) |
+| `pageSize` | number | — | Results per page (default: 50) |
+| `search` | string | — | Filter by email (partial match) |
+
+**Example:**
+
+> "List all contacts whose email contains `@acme.com`"
+
+```
+Tool: list_contacts
+{ "search": "@acme.com" }
+```
+
+---
+
+## create_contact
+
+Create or update a contact by email (upsert). If a contact with the email already exists, it is updated.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address |
+| `firstName` | string | — | First name |
+| `lastName` | string | — | Last name |
+| `attributes` | object | — | Custom key-value traits |
+
+**Example:**
+
+> "Create a contact for bob@example.com with plan: pro and company: Acme"
+
+```
+Tool: create_contact
+{
+  "email": "bob@example.com",
+  "firstName": "Bob",
+  "attributes": { "plan": "pro", "company": "Acme" }
+}
+```
+
+---
+
+## update_contact
+
+Update contact attributes by contact ID. Attributes are merged — existing keys not listed are preserved.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `contactId` | string | ✓ | Contact ID (`con_xxx`) |
+| `firstName` | string | — | Updated first name |
+| `lastName` | string | — | Updated last name |
+| `attributes` | object | — | Attributes to merge |
+
+---
+
+## delete_contact
+
+Permanently delete a contact and all associated data.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `contactId` | string | ✓ | Contact ID (`con_xxx`) |
+
+---
+
+## track_event
+
+Track a customer event. This creates or upserts the contact and fires any active campaigns listening for this event name.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address |
+| `name` | string | ✓ | Event name in snake_case |
+| `properties` | object | — | Event-specific data |
+
+**Example:**
+
+> "Track a plan_upgraded event for alice@example.com with to_plan: enterprise and mrr: 499"
+
+```
+Tool: track_event
+{
+  "email": "alice@example.com",
+  "name": "plan_upgraded",
+  "properties": {
+    "from_plan": "pro",
+    "to_plan": "enterprise",
+    "mrr": 499
+  }
+}
+```
+
+This call will:
+1. Create the contact if it doesn't exist
+2. Record the event
+3. Fire any active campaigns with `triggerType: "event"` and `eventName: "plan_upgraded"`

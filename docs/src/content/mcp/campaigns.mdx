@@ -1,0 +1,89 @@
+---
+title: Campaign Tools
+description: MCP tools for creating and managing automation campaigns.
+---
+
+# Campaign Tools
+
+4 tools for creating and managing event-triggered automation campaigns.
+
+## list_campaigns
+
+List all automation campaigns in the workspace.
+
+> "Show me all my campaigns and their status"
+
+---
+
+## create_campaign
+
+Create a new automation campaign.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | string | ✓ | Campaign name |
+| `triggerType` | string | ✓ | `event`, `segment_enter`, `segment_exit`, or `manual` |
+| `triggerConfig` | object | * | Trigger configuration (see below) |
+| `description` | string | — | Optional description |
+
+**`triggerConfig` by type:**
+
+- `event`: `{ "eventName": "user_signed_up" }`
+- `segment_enter`: `{ "segmentId": "seg_xxx" }`
+- `segment_exit`: `{ "segmentId": "seg_xxx" }`
+- `manual`: `{}`
+
+**Example — event-triggered welcome campaign:**
+
+> "Create a welcome campaign that fires when someone signs up. Make it active."
+
+```
+Tool: create_campaign
+{
+  "name": "Welcome Series",
+  "triggerType": "event",
+  "triggerConfig": { "eventName": "user_signed_up" },
+  "description": "Onboard new users with welcome sequence"
+}
+→ returns campaign with id: cmp_xxx (status: draft)
+
+Tool: update_campaign  
+{ "campaignId": "cmp_xxx", "status": "active" }
+```
+
+---
+
+## update_campaign
+
+Update a campaign's name, description, or status.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
+| `name` | string | — | New campaign name |
+| `description` | string | — | New description |
+| `status` | string | — | `active`, `paused`, or `archived` |
+
+**Status machine:**
+- `draft → active` — start the campaign
+- `active → paused` — pause (no new enrollments)  
+- `paused → active` — resume
+- Any → `archived` — permanent, cannot undo
+
+---
+
+## pause_campaign
+
+Shortcut to pause an active campaign. Equivalent to `update_campaign` with `status: "paused"`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
+
+> "Pause the welcome campaign while I update the email templates"

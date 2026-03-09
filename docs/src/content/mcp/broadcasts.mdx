@@ -1,0 +1,120 @@
+---
+title: Broadcast Tools
+description: MCP tools for creating and sending one-off email campaigns.
+---
+
+# Broadcast Tools
+
+7 tools for creating, updating, scheduling, and sending email broadcasts.
+
+## list_broadcasts
+
+List all broadcasts in the workspace.
+
+> "Show me all my broadcasts and their status"
+
+---
+
+## get_broadcast
+
+Get a single broadcast including status, subject, and recipient count.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `broadcastId` | string | ✓ | Broadcast ID (`brd_xxx`) |
+
+---
+
+## create_broadcast
+
+Create a new broadcast in draft status. Either `htmlContent` or `templateId` must be provided.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | string | ✓ | Internal name (not shown to recipients) |
+| `subject` | string | ✓ | Email subject line |
+| `segmentIds` | string[] | ✓ | One or more segment IDs to send to |
+| `htmlContent` | string | * | Full HTML email body |
+| `templateId` | string | * | Saved template ID instead of inline HTML |
+| `fromEmail` | string | — | Sender address (falls back to workspace default) |
+| `fromName` | string | — | Sender display name |
+| `scheduledAt` | string | — | ISO 8601 datetime to schedule |
+
+\* Either `htmlContent` or `templateId` required.
+
+**Example — create and immediately send:**
+
+> "Create a broadcast called 'Q1 Update' with subject 'Big news from our team' to the 'All Contacts' segment. Use clean HTML with our logo. Then send it."
+
+The agent will:
+1. Call `list_segments` to find the `All Contacts` segment ID
+2. Call `list_assets` or `upload_asset_from_url` for the logo
+3. Call `create_broadcast` with the HTML and segment ID
+4. Call `send_broadcast` with the resulting broadcast ID
+
+### Embedding Images
+
+To embed images reliably, use the asset proxy URL workflow:
+
+```
+Tool: upload_asset_from_url
+{ "url": "https://example.com/logo.png", "name": "Logo" }
+→ returns proxyUrl
+
+Tool: create_broadcast
+{
+  "name": "Product Update",
+  "subject": "New features this month",
+  "segmentIds": ["seg_xxx"],
+  "htmlContent": "<img src=\"{proxyUrl}\" ...><p>Check out what's new...</p>"
+}
+```
+
+---
+
+## update_broadcast
+
+Update a broadcast that is still in draft status.
+
+**Parameters:** Same as `create_broadcast` plus `broadcastId`. All fields optional except `broadcastId`.
+
+---
+
+## schedule_broadcast
+
+Schedule a draft broadcast to send at a specific future time.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `broadcastId` | string | ✓ | Broadcast ID |
+| `scheduledAt` | string | ✓ | ISO 8601 datetime (e.g. `2025-03-15T09:00:00Z`) |
+
+---
+
+## send_broadcast
+
+Immediately send a draft broadcast. This action is irreversible.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `broadcastId` | string | ✓ | Broadcast ID |
+
+---
+
+## delete_broadcast
+
+Delete a draft or scheduled broadcast. Cannot delete sent broadcasts.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `broadcastId` | string | ✓ | Broadcast ID |

@@ -1,0 +1,79 @@
+---
+title: Segment Tools
+description: MCP tools for listing and creating contact segments.
+---
+
+# Segment Tools
+
+2 tools for working with contact segments.
+
+## list_segments
+
+List all contact segments in the workspace.
+
+> "What segments do I have? I need to find the ID for my 'Pro Users' segment."
+
+Returns all segments with their IDs, names, conditions, and creation timestamps.
+
+---
+
+## create_segment
+
+Create a new contact segment with filter conditions.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | string | ✓ | Segment name |
+| `conditions` | array | ✓ | List of filter conditions |
+| `conditionLogic` | string | — | `"and"` or `"or"` (default: `"and"`) |
+| `description` | string | — | Optional description |
+
+**Condition object:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `field` | string | e.g. `"attributes.plan"`, `"email"`, `"attributes.mrr"` |
+| `operator` | string | `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `contains`, `not_contains`, `exists`, `not_exists` |
+| `value` | string, number, boolean | Comparison value |
+
+**Examples:**
+
+> "Create a segment for all Pro plan users"
+
+```
+Tool: create_segment
+{
+  "name": "Pro Users",
+  "conditions": [
+    { "field": "attributes.plan", "operator": "eq", "value": "pro" }
+  ]
+}
+```
+
+> "Create a segment for high-value customers — Enterprise plan with MRR over $200"
+
+```
+Tool: create_segment
+{
+  "name": "High-Value Enterprise",
+  "conditionLogic": "and",
+  "conditions": [
+    { "field": "attributes.plan", "operator": "eq", "value": "enterprise" },
+    { "field": "attributes.mrr", "operator": "gt", "value": 200 }
+  ]
+}
+```
+
+> "Create a segment for contacts that have a company attribute set"
+
+```
+Tool: create_segment
+{
+  "name": "B2B Contacts",
+  "conditions": [
+    { "field": "attributes.company", "operator": "exists" }
+  ]
+}
+```
