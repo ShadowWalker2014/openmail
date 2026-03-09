@@ -50,9 +50,7 @@ function SidebarHeaderRow() {
   const ref = useRef<HTMLDivElement>(null);
 
   const LogoMark = () => (
-    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-sidebar-foreground">
-      <Mail className="h-3 w-3 text-sidebar" />
-    </div>
+    <img src="/icons/favicon-48x48.png" alt="OpenMail" className="h-5 w-5 shrink-0 rounded-[4px]" />
   );
 
   return (

@@ -83,9 +83,7 @@ function InviteAcceptPage() {
       <div className="relative w-full max-w-[360px]">
         {/* Logo */}
         <div className="mb-6 flex justify-center">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-border bg-muted">
-            <Mail className="h-4 w-4 text-foreground/80" />
-          </div>
+          <img src="/icons/apple-touch-icon.png" alt="OpenMail" className="h-8 w-8 rounded-[7px]" />
         </div>
 
         {isLoading && (
