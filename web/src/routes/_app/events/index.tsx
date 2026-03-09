@@ -59,7 +59,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 function CopyBtn({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function copy() {
     navigator.clipboard.writeText(text);
@@ -274,7 +274,7 @@ function EventsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/10 border border-violet-500/20">
-            <Activity className="h-4.5 w-4.5 text-violet-400" />
+            <Activity className="h-[18px] w-[18px] text-violet-400" />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Event Tracking</h1>
@@ -353,8 +353,15 @@ function EventsPage() {
           <div className="rounded-lg bg-muted/40 border border-border px-3 py-2 font-mono text-[12.5px] flex items-center gap-2">
             <span className="text-muted-foreground">Authorization: Bearer</span>
             <span className="text-foreground flex-1 truncate">{apiKeyDisplay}</span>
-            {firstKey && <CopyBtn text={firstKey.keyPrefix} />}
           </div>
+          {firstKey && (
+            <p className="text-[11.5px] text-muted-foreground/60 mt-1.5 italic">
+              Full key shown once at creation — copy from{" "}
+              <Link to="/settings/api-keys" className="underline hover:text-muted-foreground transition-colors">
+                Settings → API Keys
+              </Link>
+            </p>
+          )}
           {apiKeys.length === 0 ? (
             <Link
               to="/settings/api-keys"
@@ -449,7 +456,10 @@ function EventsPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { setAppliedFilter(nameFilter); setPage(1); }
                 }}
-                className="h-8 text-sm w-52 pr-8"
+                className={cn(
+                  "h-8 text-sm w-52 pr-8 transition-all",
+                  nameFilter !== appliedFilter && nameFilter && "ring-1 ring-violet-500/40"
+                )}
               />
               {appliedFilter && (
                 <button
@@ -546,12 +556,14 @@ function EventsPage() {
                   <div className="text-[12px] text-muted-foreground font-mono truncate">
                     {Object.keys(ev.properties).length === 0 ? (
                       <span className="opacity-40">{"{}"}</span>
-                    ) : (
-                      <span className="text-foreground/60">
-                        {JSON.stringify(ev.properties).slice(0, 60)}
-                        {JSON.stringify(ev.properties).length > 60 && "…"}
-                      </span>
-                    )}
+                    ) : (() => {
+                      const s = JSON.stringify(ev.properties);
+                      return (
+                        <span className="text-foreground/60">
+                          {s.slice(0, 60)}{s.length > 60 && "…"}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Time */}

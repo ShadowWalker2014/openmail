@@ -23,11 +23,11 @@ Get your API key from **Settings → API Keys** in the dashboard.
 
 | Endpoint | Format | Description |
 |----------|--------|-------------|
-| `POST /api/v1/events/track` | OpenMail native | Track a single event |
+| `POST /api/v1/events/track` | OpenMail native | Track a single event (API key auth) |
 | `POST /api/ingest/capture` | PostHog | Single event (PostHog format) |
-| `POST /api/ingest/batch` | PostHog | Multiple events in one request |
+| `POST /api/ingest/batch` | PostHog | Multiple events (up to 100 per call) |
 | `POST /api/ingest/identify` | PostHog / Segment | Create or update a contact |
-| `POST /api/ingest/track` | Generic | OpenMail native via ingest base |
+| `POST /api/ingest/track` | OpenMail native | Native format via ingest base URL |
 | `POST /api/ingest/cio/v1/customers/:id` | Customer.io | Identify user |
 | `POST /api/ingest/cio/v1/customers/:id/events` | Customer.io | Track event |
 
@@ -100,6 +100,25 @@ See the full [Node.js SDK docs](/sdk/node) for all available methods.
 
 ---
 
+## Ingest Track Endpoint
+
+<EndpointBadge method="POST" path="/api/ingest/track" />
+
+An alias for the native format accessible via the ingest base URL. Accepts the same request body as `POST /api/v1/events/track` and returns `{ "id": "evt_xxx" }` with HTTP 201. Useful when you want a single base URL for all event types.
+
+```bash
+curl -X POST https://api.openmail.win/api/ingest/track \
+  -H "Authorization: Bearer om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "name": "plan_upgraded",
+    "properties": { "plan": "pro" }
+  }'
+```
+
+---
+
 ## PostHog Compatible
 
 Replace your PostHog host with your OpenMail ingest URL. All standard PostHog SDK calls work without code changes.
@@ -108,6 +127,10 @@ Replace your PostHog host with your OpenMail ingest URL. All standard PostHog SD
 
 <EndpointBadge method="POST" path="/api/ingest/capture" />
 
+<Callout type="note">
+`distinct_id` should be the user's **email address**. If your PostHog setup uses UUIDs or numeric IDs, pass the email in `properties.$email` so OpenMail can link the event to a contact.
+</Callout>
+
 ```json
 {
   "api_key": "om_your_key",
@@ -115,7 +138,8 @@ Replace your PostHog host with your OpenMail ingest URL. All standard PostHog SD
   "distinct_id": "alice@example.com",
   "properties": {
     "from_plan": "starter",
-    "to_plan": "pro"
+    "to_plan": "pro",
+    "$email": "alice@example.com"
   },
   "timestamp": "2025-03-01T10:00:00Z"
 }
@@ -126,6 +150,10 @@ Response: `{ "status": 1 }` — HTTP 200 (PostHog format)
 ### Batch Events
 
 <EndpointBadge method="POST" path="/api/ingest/batch" />
+
+<Callout type="note">
+Maximum **100 events** per batch request. Split larger volumes into multiple calls.
+</Callout>
 
 ```json
 {
@@ -228,7 +256,7 @@ cio.track("alice@example.com", {
 
 ### Customer.io REST Format
 
-**Identify:** `POST /api/ingest/cio/v1/customers/:customer_id`
+**Identify:** `POST /api/ingest/cio/v1/customers/:id`
 
 Uses Basic Auth: `Authorization: Basic base64(workspace_id:om_api_key)`
 
@@ -244,7 +272,7 @@ curl -X POST https://api.openmail.win/api/ingest/cio/v1/customers/alice@example.
   }'
 ```
 
-**Track event:** `POST /api/ingest/cio/v1/customers/:customer_id/events`
+**Track event:** `POST /api/ingest/cio/v1/customers/:id/events`
 
 ```bash
 curl -X POST https://api.openmail.win/api/ingest/cio/v1/customers/alice@example.com/events \
@@ -411,9 +439,13 @@ func trackEvent(email, name string, properties map[string]any) error {
 
 When you track an event, OpenMail automatically:
 
-1. **Creates or links a contact** — the `email` is used to look up or create a contact in your workspace
+1. **Links to an existing contact** — the `email` is used to look up the contact in your workspace. If the contact doesn't exist yet, the event is still stored with `contactId: null`. **Call `/identify` (or `openmail.identify()`) before tracking events** to ensure the contact profile exists and all events are linked.
 2. **Fires campaign triggers** — any active campaign with `triggerType: "event"` and a matching `eventName` will enroll the contact into that campaign's email sequence
 3. **Stores the event** — available in the Events page and via the API for analytics and debugging
+
+<Callout type="warning">
+Events **do not automatically create contacts**. Call `identify()` first to create the contact, then `track()` for events.
+</Callout>
 
 ---
 

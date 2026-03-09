@@ -29,6 +29,18 @@ import type { ApiVariables } from "./types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
+// /api/ingest/* is called from external customer apps (browser/server SDKs).
+// MUST be registered BEFORE the global dashboard cors — Hono's cors middleware
+// short-circuits OPTIONS without calling next(), so the global cors would block
+// all ingest preflights from external origins if it ran first.
+app.use("/api/ingest/*", cors({
+  origin: "*",
+  credentials: false,
+  allowHeaders: ["Content-Type", "Authorization"],
+  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+}));
+
+// Dashboard cors — scoped to the configured WEB_URL origin only
 app.use("*", cors({
   origin: (origin) => {
     const allowed = [process.env.WEB_URL ?? "http://localhost:5173"];

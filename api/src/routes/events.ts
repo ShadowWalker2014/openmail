@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
 import { events, contacts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and, count, desc, ilike } from "drizzle-orm";
+import { eq, and, count, desc, ilike, isNotNull } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
@@ -33,7 +33,10 @@ app.get("/", async (c) => {
 
   const conditions = [eq(events.workspaceId, workspaceId)];
   if (nameFilter) conditions.push(ilike(events.name, `%${nameFilter}%`));
-  if (emailFilter) conditions.push(ilike(events.contactEmail as any, `%${emailFilter}%`));
+  if (emailFilter) {
+    conditions.push(isNotNull(events.contactEmail));
+    conditions.push(ilike(events.contactEmail!, `%${emailFilter}%`));
+  }
 
   const [{ total }] = await db
     .select({ total: count() })

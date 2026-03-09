@@ -15,7 +15,6 @@
  *   POST /api/ingest/cio/v1/customers/:id/events  — Customer.io track
  */
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { z } from "zod";
 import { createHash } from "crypto";
 import { getDb } from "@openmail/shared/db";
@@ -24,16 +23,17 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
+import type { Context } from "hono";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
-// Allow any origin — ingest is called from customer apps
-app.use("*", cors({ origin: "*", allowMethods: ["POST", "OPTIONS"], allowHeaders: ["Content-Type", "Authorization"] }));
+// CORS for this router is configured at the app level in index.ts (before the global cors).
+// No need for a duplicate cors() call here.
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
-async function resolveWorkspace(c: any): Promise<string | null> {
+async function resolveWorkspace(c: Context): Promise<string | null> {
   let rawKey: string | null = null;
 
   const authHeader = c.req.header("Authorization") as string | undefined;
@@ -297,7 +297,8 @@ app.post("/cio/v1/customers/:id", async (c) => {
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
 
   const customerId = c.req.param("id");
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch(() => null);
+  if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
 
   const email = (body.email as string | undefined) ??
     (customerId.includes("@") ? customerId : undefined);
@@ -346,7 +347,8 @@ app.post("/cio/v1/customers/:id/events", async (c) => {
 
 // POST /cio/v1/metrics — Customer.io metrics endpoint (no-op for compat)
 app.post("/cio/v1/metrics", async (c) => {
-  await resolveWorkspace(c); // still validate key
+  const workspaceId = await resolveWorkspace(c);
+  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
   return new Response(null, { status: 200 });
 });
 

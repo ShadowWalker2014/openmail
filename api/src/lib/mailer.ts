@@ -20,7 +20,9 @@ function platformFrom(): string {
 }
 
 export async function sendPasswordResetEmail({ to, resetUrl }: { to: string; resetUrl: string }) {
-  await getResend().emails.send({
+  const resend = getResend();
+  if (!resend) throw new Error("RESEND_API_KEY is not configured — cannot send email");
+  await resend.emails.send({
     from:    platformFrom(),
     to,
     subject: "Reset your OpenMail password",
@@ -39,7 +41,9 @@ export async function sendWorkspaceInviteEmail({
   workspaceName: string;
   role: string;
 }) {
-  await getResend().emails.send({
+  const resend = getResend();
+  if (!resend) throw new Error("RESEND_API_KEY is not configured — cannot send email");
+  await resend.emails.send({
     from:    platformFrom(),
     to,
     subject: `You've been invited to join ${workspaceName} on OpenMail`,
