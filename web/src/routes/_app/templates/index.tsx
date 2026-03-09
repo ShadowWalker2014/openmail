@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +16,13 @@ import {
   Plus,
   FileText,
   Trash2,
-  Edit2,
   Monitor,
   Smartphone,
   Search,
   Copy,
   Code2,
   Eye,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -38,6 +38,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { EmailEditor } from "@/components/ui/email-editor";
+import { useSession } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_app/templates/")({
   component: TemplatesPage,
@@ -94,11 +95,22 @@ function TemplateEditor({
 }) {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
+  const { data: session } = useSession();
 
   const [mode, setMode] = useState<EditorMode>("visual");
   const [previewMobile, setPreviewMobile] = useState(false);
   const [content, setContent] = useState(template?.htmlContent ?? "");
   const [rawHtml, setRawHtml] = useState(template?.htmlContent ?? "");
+
+  // Test email state — fill from session once loaded
+  const [testEmail, setTestEmail] = useState("");
+  const [prependTest, setPrependTest] = useState(true);
+
+  useEffect(() => {
+    if (!testEmail && session?.user?.email) {
+      setTestEmail(session.user.email);
+    }
+  }, [session?.user?.email]);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -145,6 +157,23 @@ function TemplateEditor({
       toast.success("Template saved");
       onClose();
     },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const sendTestMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(activeWorkspaceId!, "/templates/send-test", {
+        method: "POST",
+        body: JSON.stringify({
+          to: testEmail,
+          subject: nameRef.current?.value
+            ? (subjectRef.current?.value || "Test email")
+            : "Test email",
+          htmlContent: activeHtml,
+          prependTest,
+        }),
+      }),
+    onSuccess: () => toast.success(`Test email sent to ${testEmail}`),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -303,6 +332,54 @@ function TemplateEditor({
                 </code>{" "}
                 for dynamic content substitution.
               </p>
+            </div>
+
+            {/* Send Test Email */}
+            <div className="space-y-2.5 rounded-lg border border-border bg-muted/20 p-4">
+              <p className="text-[12px] font-medium">Send Test Email</p>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Send to</Label>
+                <Input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={prependTest}
+                  onClick={() => setPrependTest((v) => !v)}
+                  className={cn(
+                    "relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none",
+                    prependTest ? "bg-foreground" : "bg-input"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none block h-3 w-3 rounded-full bg-background shadow-sm transition-transform",
+                      prependTest ? "translate-x-3.5" : "translate-x-0.5"
+                    )}
+                  />
+                </button>
+                <span className="text-[12px] text-muted-foreground">
+                  Prepend <code className="bg-muted px-1 rounded text-[11px]">[TEST]</code> to subject
+                </span>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={!testEmail || sendTestMutation.isPending}
+                onClick={() => sendTestMutation.mutate()}
+              >
+                <Send className="h-3.5 w-3.5" />
+                {sendTestMutation.isPending ? "Sending…" : "Send Test Email"}
+              </Button>
             </div>
           </div>
         </div>
