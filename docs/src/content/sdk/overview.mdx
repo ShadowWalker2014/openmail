@@ -1,0 +1,80 @@
+---
+title: SDK Overview
+description: Official TypeScript SDK for OpenMail — track events, identify users, and manage campaigns. Compatible with Segment and PostHog interfaces.
+---
+
+# SDK Overview
+
+The `@openmail/sdk` package is a production-ready TypeScript SDK for integrating OpenMail into your applications. It provides four entry points tailored to different environments.
+
+## Installation
+
+```bash
+npm install @openmail/sdk
+# or
+bun add @openmail/sdk
+# or
+pnpm add @openmail/sdk
+```
+
+## Entry Points
+
+| Import | Environment | Description |
+|--------|-------------|-------------|
+| `@openmail/sdk` | Node.js / Server | Full API, event batching, Segment + PostHog compatible |
+| `@openmail/sdk/browser` | Browser | Auto page tracking, anonymous IDs, opt-in/out |
+| `@openmail/sdk/react` | React 17+ | Provider + hooks (`useTrack`, `useIdentify`) |
+| `@openmail/sdk/nextjs` | Next.js 13+ | Server-side helpers + client provider |
+
+## Compatibility
+
+The SDK is designed as a drop-in replacement for Segment Analytics 2.0 and PostHog Node:
+
+| Segment | PostHog | OpenMail |
+|---------|---------|----------|
+| `analytics.identify()` | `posthog.identify()` | `openmail.identify()` |
+| `analytics.track()` | `posthog.capture()` | `openmail.track()` / `openmail.capture()` |
+| `analytics.page()` | — | `openmail.page()` |
+| `analytics.group()` | `posthog.group()` | `openmail.group()` |
+| `analytics.alias()` | — | `openmail.alias()` |
+| `analytics.reset()` | `posthog.reset()` | `openmail.reset()` |
+| — | `posthog.opt_in_capturing()` | `openmail.opt_in_capturing()` |
+| — | `posthog.opt_out_capturing()` | `openmail.opt_out_capturing()` |
+
+## Architecture
+
+- **Node SDK** — Full API coverage, event batching with configurable `flushAt`/`flushInterval`, automatic retry with exponential backoff
+- **Browser SDK** — Anonymous ID generation, localStorage/cookie/memory persistence, auto page tracking via History API patching
+- **React SDK** — Context + hooks, `useAutoIdentify()` for auth-driven identification
+- **Next.js SDK** — Server-side singleton (`OPENMAIL_API_KEY`), `serverTrack()` + `serverIdentify()` functions, client `OpenMailProvider` re-export
+
+## Environment Variables
+
+For Next.js and server-side usage:
+
+```bash
+# .env.local
+OPENMAIL_API_KEY=om_your_secret_key    # server-side only
+NEXT_PUBLIC_OPENMAIL_KEY=om_your_key   # browser (public)
+OPENMAIL_API_URL=https://api.openmail.win  # optional
+```
+
+## Error Handling
+
+All SDK methods throw `OpenMailError` with machine-readable codes:
+
+```ts
+import { OpenMailError } from "@openmail/sdk";
+
+try {
+  await openmail.identify("bad-input");
+} catch (err) {
+  if (err instanceof OpenMailError) {
+    console.log(err.code);    // "VALIDATION_ERROR" | "UNAUTHORIZED" | "NOT_FOUND" | ...
+    console.log(err.status);  // HTTP status code
+    console.log(err.message); // Human-readable message
+  }
+}
+```
+
+**Error codes:** `UNAUTHORIZED` · `NOT_FOUND` · `VALIDATION_ERROR` · `RATE_LIMITED` · `SERVER_ERROR` · `NETWORK_ERROR` · `TIMEOUT` · `DISABLED`

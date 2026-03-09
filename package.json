@@ -8,7 +8,8 @@
     "worker",
     "tracker",
     "web",
-    "docs"
+    "docs",
+    "sdk"
   ],
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --prefix-colors \"cyan,magenta,yellow,green\" --names \"api,web,worker,tracker\" \"bun --cwd api dev\" \"bun --cwd web dev\" \"bun --cwd worker dev\" \"bun --cwd tracker dev\"",

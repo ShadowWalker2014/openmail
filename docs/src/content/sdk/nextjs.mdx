@@ -1,0 +1,251 @@
+---
+title: Next.js SDK
+description: Server-side tracking helpers and client-side provider for Next.js App Router and Pages Router.
+---
+
+# Next.js SDK
+
+The Next.js SDK provides both server-side tracking (route handlers, server actions, server components) and client-side tracking via the browser provider.
+
+## Environment Variables
+
+```bash
+# .env.local
+OPENMAIL_API_KEY=om_your_secret_key        # server-side only (never exposed to browser)
+NEXT_PUBLIC_OPENMAIL_KEY=om_your_pub_key   # client-side (browser tracking)
+OPENMAIL_API_URL=https://api.openmail.win  # optional
+```
+
+## App Router Setup
+
+### Client-Side Provider
+
+Create a client component wrapper for the provider:
+
+```tsx
+// components/openmail-provider.tsx
+"use client";
+import { OpenMailProvider } from "@openmail/sdk/nextjs";
+
+export function OpenMailClientProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <OpenMailProvider
+      apiKey={process.env.NEXT_PUBLIC_OPENMAIL_KEY!}
+      autoPageView={true}
+    >
+      {children}
+    </OpenMailProvider>
+  );
+}
+```
+
+Use it in your root layout:
+
+```tsx
+// app/layout.tsx
+import { OpenMailClientProvider } from "@/components/openmail-provider";
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <OpenMailClientProvider>
+          {children}
+        </OpenMailClientProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### Auth Sync (Server → Client)
+
+```tsx
+// components/auth-sync.tsx
+"use client";
+import { useAutoIdentify } from "@openmail/sdk/nextjs";
+import { useSession } from "next-auth/react"; // or your auth lib
+
+export function AuthSync() {
+  const { data: session } = useSession();
+  useAutoIdentify(
+    session?.user?.email ?? null,
+    { name: session?.user?.name }
+  );
+  return null;
+}
+```
+
+## Server-Side Tracking
+
+### In Route Handlers
+
+```ts
+// app/api/webhooks/stripe/route.ts
+import { serverTrack, serverIdentify } from "@openmail/sdk/nextjs";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(req: NextRequest) {
+  const event = await req.json();
+
+  if (event.type === "invoice.paid") {
+    const email = event.data.object.customer_email;
+    const amount = event.data.object.amount_paid / 100;
+
+    await Promise.all([
+      serverTrack("invoice_paid", { amount, currency: "usd" }, { userId: email }),
+      serverIdentify(email, { paidAt: new Date().toISOString() }),
+    ]);
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+### In Server Actions
+
+```ts
+// app/actions/upgrade.ts
+"use server";
+import { serverTrack, serverIdentify } from "@openmail/sdk/nextjs";
+import { auth } from "@/lib/auth";
+
+export async function upgradeAction(plan: string) {
+  const session = await auth();
+  const email = session.user.email;
+
+  // Upgrade logic...
+  await performUpgrade(email, plan);
+
+  // Track asynchronously
+  await serverTrack("plan_upgraded", { plan }, { userId: email });
+  await serverIdentify(email, { plan });
+}
+```
+
+### In Server Components
+
+```tsx
+// app/dashboard/page.tsx
+import { serverTrack } from "@openmail/sdk/nextjs";
+import { auth } from "@/lib/auth";
+
+export default async function DashboardPage() {
+  const session = await auth();
+
+  // Server-side page view tracking
+  await serverTrack("dashboard_viewed", {}, { userId: session.user.email });
+
+  return <Dashboard />;
+}
+```
+
+### Per-Request Client (Edge-safe)
+
+For edge runtimes where singletons aren't reliable:
+
+```ts
+// app/api/track/route.ts
+import { createServerClient } from "@openmail/sdk/nextjs";
+
+export const runtime = "edge";
+
+export async function POST(req: Request) {
+  const { email, event, properties } = await req.json();
+
+  const openmail = createServerClient();
+  await openmail.track(event, properties, { userId: email });
+  await openmail.flush(); // flush before edge function exits
+
+  return Response.json({ ok: true });
+}
+```
+
+## Pages Router Setup
+
+### _app.tsx
+
+```tsx
+// pages/_app.tsx
+import { OpenMailProvider } from "@openmail/sdk/nextjs";
+import type { AppProps } from "next/app";
+
+export default function App({ Component, pageProps }: AppProps) {
+  return (
+    <OpenMailProvider
+      apiKey={process.env.NEXT_PUBLIC_OPENMAIL_KEY!}
+      autoPageView={true}
+    >
+      <Component {...pageProps} />
+    </OpenMailProvider>
+  );
+}
+```
+
+### API Routes
+
+```ts
+// pages/api/webhooks/stripe.ts
+import type { NextApiRequest, NextApiResponse } from "next";
+import { createServerClient } from "@openmail/sdk/nextjs";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const openmail = createServerClient();
+  await openmail.track("webhook_received", { type: req.body.type }, {
+    userId: req.body.customer_email,
+  });
+  await openmail.flush();
+  res.json({ ok: true });
+}
+```
+
+## Complete Auth Flow Example
+
+```tsx
+// auth callback → identify user + track sign-in
+import { identifyAndTrack } from "@openmail/sdk/nextjs";
+
+export async function POST(req: Request) {
+  const { email, provider } = await req.json();
+
+  // Create user account...
+  const user = await createUser(email);
+
+  // Identify + track in one call
+  await identifyAndTrack(
+    email,
+    { firstName: user.firstName, plan: "free", createdAt: new Date().toISOString() },
+    "user_signed_up",
+    { provider, source: "oauth" }
+  );
+
+  return Response.json({ user });
+}
+```
+
+## Available Exports
+
+```ts
+import {
+  // Server-side helpers
+  serverTrack,         // Track from server components/route handlers
+  serverIdentify,      // Identify from server
+  serverFlush,         // Flush pending server events
+  createServerClient,  // Per-request SDK instance
+  identifyAndTrack,    // Combined identify + track
+
+  // Client-side (re-exported from @openmail/sdk/react)
+  OpenMailProvider,
+  useOpenMail,
+  useIdentify,
+  useTrack,
+  usePage,
+  useGroup,
+  useAutoIdentify,
+
+  // Full Node SDK
+  OpenMail,
+  createOpenMail,
+  OpenMailError,
+} from "@openmail/sdk/nextjs";
+```

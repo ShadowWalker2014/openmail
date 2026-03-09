@@ -136,6 +136,36 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    group: "SDK",
+    items: [
+      {
+        title: "Overview",
+        href: "/sdk/overview",
+        description: "SDK entry points, Segment/PostHog compatibility, error handling",
+      },
+      {
+        title: "Node.js / Server",
+        href: "/sdk/node",
+        description: "Full API coverage, batching, retry, Segment-compatible",
+      },
+      {
+        title: "Browser",
+        href: "/sdk/browser",
+        description: "Auto page tracking, anonymous IDs, localStorage/cookie",
+      },
+      {
+        title: "React",
+        href: "/sdk/react",
+        description: "useTrack, useIdentify, useAutoIdentify, OpenMailProvider",
+      },
+      {
+        title: "Next.js",
+        href: "/sdk/nextjs",
+        description: "serverTrack, serverIdentify, App Router + Pages Router",
+      },
+    ],
+  },
+  {
     group: "Self-Hosting",
     items: [
       {

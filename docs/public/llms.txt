@@ -39,6 +39,16 @@ Auth: `Authorization: Bearer om_your_workspace_api_key`
 - [Analytics](https://docs.openmail.win/mcp/analytics): get_analytics, get_broadcast_analytics
 - [Assets](https://docs.openmail.win/mcp/assets): list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
 
+## SDK
+
+Package: `@openmail/sdk` — TypeScript SDK compatible with Segment Analytics 2.0 and PostHog Node interfaces.
+
+- [SDK Overview](https://docs.openmail.win/sdk/overview): Entry points, Segment/PostHog compatibility, error codes
+- [Node.js SDK](https://docs.openmail.win/sdk/node): Server-side tracking, full API coverage, batching, retry
+- [Browser SDK](https://docs.openmail.win/sdk/browser): Client-side tracking, anonymous IDs, auto page views
+- [React SDK](https://docs.openmail.win/sdk/react): OpenMailProvider, useTrack, useIdentify, useAutoIdentify hooks
+- [Next.js SDK](https://docs.openmail.win/sdk/nextjs): serverTrack, serverIdentify, App Router + Pages Router
+
 ## Self-Hosting
 
 - [Overview](https://docs.openmail.win/self-hosting/overview): Architecture overview, service matrix, and resource requirements

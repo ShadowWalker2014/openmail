@@ -1,0 +1,220 @@
+---
+title: Browser SDK
+description: Client-side SDK with anonymous ID tracking, auto page views, and localStorage/cookie persistence.
+---
+
+# Browser SDK
+
+The browser SDK handles client-side event tracking with anonymous user identification, persistent storage, and automatic page view tracking.
+
+## Setup
+
+```ts
+import { OpenMailBrowser } from "@openmail/sdk/browser";
+
+const openmail = new OpenMailBrowser({
+  apiKey: "om_your_workspace_api_key",
+  autoPageView: true, // auto-track page views
+});
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | `string` | **required** | Workspace API key |
+| `apiUrl` | `string` | `https://api.openmail.win` | API base URL |
+| `autoPageView` | `boolean` | `true` | Auto-track page views on route changes |
+| `persistence` | `"localStorage"` / `"cookie"` / `"memory"` | `"localStorage"` | Where to persist anonymous ID and user state |
+| `cookieDomain` | `string` | — | Cookie domain (e.g. `.example.com` for cross-subdomain) |
+| `cookieExpiry` | `number` | `365` | Cookie expiry in days |
+| `flushAt` | `number` | `20` | Events per batch |
+| `flushInterval` | `number` | `5000` | Max ms between flushes |
+
+## Anonymous Tracking
+
+Before a user is identified, the SDK generates a UUID anonymous ID and persists it. All events are attributed to this ID until `identify()` is called.
+
+```ts
+const openmail = new OpenMailBrowser({ apiKey: "om_..." });
+
+// Anonymous events are tracked immediately
+openmail.track("viewed_pricing", { plan: "pro" });
+
+// Anonymous ID is stable across page loads
+console.log(openmail.anonymousId); // "7f3a8b21-..."
+```
+
+## identify()
+
+Links the anonymous ID to a known user. Sends a `$identify` event to link pre-identify events.
+
+```ts
+// On user login
+await openmail.identify("alice@example.com", {
+  firstName: "Alice",
+  plan: "pro",
+});
+
+// Check current user
+console.log(openmail.userId); // "alice@example.com"
+```
+
+## track()
+
+Track custom events. Fire-and-forget — returns immediately.
+
+```ts
+openmail.track("button_clicked", {
+  button: "upgrade",
+  page: "/pricing",
+});
+
+openmail.track("form_submitted", {
+  form: "signup",
+  email_entered: true,
+});
+```
+
+## page()
+
+Manually track a page view. Called automatically when `autoPageView: true`.
+
+```ts
+// Manual page tracking (if autoPageView: false)
+openmail.page("Pricing", {
+  path: "/pricing",
+  referrer: document.referrer,
+});
+```
+
+## Auto Page View Tracking
+
+When `autoPageView: true`, the SDK patches `history.pushState` and `history.replaceState` to detect SPA navigation:
+
+```ts
+const openmail = new OpenMailBrowser({
+  apiKey: "om_...",
+  autoPageView: true, // tracks every route change
+});
+
+// Automatically tracks:
+// - Initial page load
+// - history.pushState() calls (React Router, Next.js, etc.)
+// - history.replaceState() calls
+// - popstate events (browser back/forward)
+```
+
+## group()
+
+Associate the current user with a group.
+
+```ts
+openmail.group("acme-corp", {
+  name: "Acme Corp",
+  plan: "enterprise",
+});
+```
+
+## alias()
+
+Alias anonymous to identified user (rarely needed — `identify()` handles this automatically).
+
+```ts
+openmail.alias("alice@example.com", openmail.anonymousId);
+```
+
+## reset()
+
+Clear user state on logout. Generates a new anonymous ID.
+
+```ts
+// On user logout
+openmail.reset();
+
+// New anonymous ID is assigned
+console.log(openmail.userId); // null
+console.log(openmail.anonymousId); // new UUID
+```
+
+## Opt-out
+
+Respect user privacy preferences:
+
+```ts
+// Opt out (silently drops all events)
+openmail.opt_out_capturing();
+console.log(openmail.isOptedOut); // true
+
+// Opt back in
+openmail.opt_in_capturing();
+console.log(openmail.isOptedOut); // false
+```
+
+## Cookie Persistence
+
+For cross-subdomain tracking:
+
+```ts
+const openmail = new OpenMailBrowser({
+  apiKey: "om_...",
+  persistence: "cookie",
+  cookieDomain: ".example.com", // shares ID across app.example.com, www.example.com
+  cookieExpiry: 365,
+});
+```
+
+## Framework Integration
+
+### Plain JavaScript (CDN)
+
+```html
+<script type="module">
+  import { OpenMailBrowser } from "https://unpkg.com/@openmail/sdk/dist/browser.js";
+
+  const openmail = new OpenMailBrowser({
+    apiKey: "om_...",
+    autoPageView: true,
+  });
+
+  // After login
+  openmail.identify(user.email, { plan: user.plan });
+</script>
+```
+
+### Vue 3
+
+```ts
+// plugins/openmail.ts
+import { createOpenMailBrowser } from "@openmail/sdk/browser";
+
+const openmail = createOpenMailBrowser({
+  apiKey: import.meta.env.VITE_OPENMAIL_KEY,
+  autoPageView: true,
+});
+
+// In component
+openmail.identify(user.email, { plan: user.plan });
+openmail.track("feature_used", { feature: "analytics" });
+```
+
+### Svelte
+
+```ts
+// lib/openmail.ts
+import { OpenMailBrowser } from "@openmail/sdk/browser";
+
+export const openmail = new OpenMailBrowser({
+  apiKey: import.meta.env.VITE_OPENMAIL_KEY,
+  autoPageView: true,
+});
+```
+
+## destroy()
+
+Clean up event listeners and flush pending events:
+
+```ts
+// On SPA unmount or hot reload
+await openmail.destroy();
+```
