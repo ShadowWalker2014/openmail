@@ -19,6 +19,7 @@ import invitesRouter from "./routes/invites.js";
 import inviteAcceptRouter from "./routes/invite-accept.js";
 import assetsRouter from "./routes/assets.js";
 import sendsRouter from "./routes/sends.js";
+import ingestRouter from "./routes/ingest.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -148,6 +149,10 @@ apiKeyApi.route("/analytics", analyticsRouter);
 apiKeyApi.route("/assets", assetsRouter);
 
 app.route("/api/v1", apiKeyApi);
+
+// Ingest API — public-facing, handles its own auth (Bearer / Basic / body api_key)
+// Compatible with PostHog and Customer.io SDK formats
+app.route("/api/ingest", ingestRouter);
 
 // Exported for integration tests — same app instance used in production
 export { app };

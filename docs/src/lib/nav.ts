@@ -144,6 +144,11 @@ export const navGroups: NavGroup[] = [
         description: "SDK entry points, Segment/PostHog compatibility, error handling",
       },
       {
+        title: "Event Ingestion",
+        href: "/sdk/event-ingestion",
+        description: "Track events from any language — PostHog & Customer.io compatible",
+      },
+      {
         title: "Node.js / Server",
         href: "/sdk/node",
         description: "Full API coverage, batching, retry, Segment-compatible",

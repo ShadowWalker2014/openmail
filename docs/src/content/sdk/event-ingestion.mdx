@@ -1,0 +1,426 @@
+---
+title: Event Ingestion API
+description: Send events to OpenMail from any language or framework — compatible with PostHog and Customer.io SDKs.
+---
+
+# Event Ingestion API
+
+OpenMail accepts events through multiple ingestion formats, letting you migrate from PostHog or Customer.io with a single URL change, or use any HTTP client.
+
+## Authentication
+
+All ingestion endpoints accept the API key in one of three ways:
+
+| Method | Example |
+|--------|---------|
+| `Authorization: Bearer` header | `Authorization: Bearer om_your_key` |
+| `api_key` field in JSON body | `{ "api_key": "om_your_key", ... }` |
+| HTTP Basic Auth (password field) | `Authorization: Basic base64(anything:om_your_key)` |
+
+Get your API key from **Settings → API Keys** in the dashboard.
+
+## Endpoints
+
+| Endpoint | Format | Description |
+|----------|--------|-------------|
+| `POST /api/v1/events/track` | OpenMail native | Track a single event |
+| `POST /api/ingest/capture` | PostHog | Single event (PostHog format) |
+| `POST /api/ingest/batch` | PostHog | Multiple events in one request |
+| `POST /api/ingest/identify` | PostHog / Segment | Create or update a contact |
+| `POST /api/ingest/track` | Generic | OpenMail native via ingest base |
+| `POST /api/ingest/cio/v1/customers/:id` | Customer.io | Identify user |
+| `POST /api/ingest/cio/v1/customers/:id/events` | Customer.io | Track event |
+
+---
+
+## OpenMail Native Format
+
+The simplest way to track events.
+
+<EndpointBadge method="POST" path="/api/v1/events/track" />
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address |
+| `name` | string | ✓ | Event name (snake_case recommended) |
+| `properties` | object | — | Arbitrary event data |
+| `occurredAt` | ISO datetime | — | When the event occurred (defaults to now) |
+
+```bash
+curl -X POST https://api.openmail.win/api/v1/events/track \
+  -H "Authorization: Bearer om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "name": "plan_upgraded",
+    "properties": {
+      "from_plan": "starter",
+      "to_plan": "pro",
+      "mrr": 99
+    }
+  }'
+```
+
+Response: `{ "id": "evt_xxx" }` — HTTP 201
+
+---
+
+## OpenMail SDK (Recommended)
+
+```bash
+npm install @openmail/sdk
+```
+
+```ts
+import { OpenMail } from "@openmail/sdk";
+
+const openmail = new OpenMail({ apiKey: "om_your_key" });
+
+// Identify the user first
+await openmail.identify("alice@example.com", {
+  firstName: "Alice",
+  plan: "pro",
+  company: "Acme Corp",
+});
+
+// Track an event
+await openmail.track("plan_upgraded", {
+  from_plan: "starter",
+  to_plan: "pro",
+  mrr: 99,
+}, { userId: "alice@example.com" });
+
+// Call before process exit
+await openmail.flush();
+```
+
+See the full [Node.js SDK docs](/sdk/node) for all available methods.
+
+---
+
+## PostHog Compatible
+
+Replace your PostHog host with your OpenMail ingest URL. All standard PostHog SDK calls work without code changes.
+
+### Single Event
+
+<EndpointBadge method="POST" path="/api/ingest/capture" />
+
+```json
+{
+  "api_key": "om_your_key",
+  "event": "plan_upgraded",
+  "distinct_id": "alice@example.com",
+  "properties": {
+    "from_plan": "starter",
+    "to_plan": "pro"
+  },
+  "timestamp": "2025-03-01T10:00:00Z"
+}
+```
+
+Response: `{ "status": 1 }` — HTTP 200 (PostHog format)
+
+### Batch Events
+
+<EndpointBadge method="POST" path="/api/ingest/batch" />
+
+```json
+{
+  "api_key": "om_your_key",
+  "batch": [
+    {
+      "event": "page_viewed",
+      "distinct_id": "alice@example.com",
+      "properties": { "path": "/pricing" }
+    },
+    {
+      "event": "cta_clicked",
+      "distinct_id": "alice@example.com",
+      "properties": { "button": "upgrade" },
+      "timestamp": "2025-03-01T10:00:05Z"
+    }
+  ]
+}
+```
+
+Response: `{ "status": 1, "ingested": 2, "total": 2 }` — HTTP 200
+
+### Using the PostHog Node SDK
+
+```ts
+import { PostHog } from "posthog-node";
+
+// Just change the host — no other code changes needed
+const posthog = new PostHog("om_your_key", {
+  host: "https://api.openmail.win/api/ingest",
+});
+
+posthog.capture({
+  distinctId: "alice@example.com",
+  event: "plan_upgraded",
+  properties: { plan: "pro" },
+});
+
+posthog.identify({
+  distinctId: "alice@example.com",
+  properties: {
+    $email: "alice@example.com",
+    name: "Alice Smith",
+    plan: "pro",
+  },
+});
+
+await posthog.shutdown();
+```
+
+### Using PostHog Python SDK
+
+```python
+from posthog import Posthog
+
+# Just change the host
+posthog = Posthog(
+    project_api_key="om_your_key",
+    host="https://api.openmail.win/api/ingest",
+)
+
+posthog.capture("alice@example.com", "plan_upgraded", {"plan": "pro"})
+```
+
+---
+
+## Customer.io Compatible
+
+Point your Customer.io SDK at `https://api.openmail.win/api/ingest/cio/v1` and use your OpenMail API key as the Customer.io API key.
+
+### Using the Customer.io Node SDK
+
+```ts
+const { TrackClient } = require("customerio-node");
+
+const cio = new TrackClient(
+  "your-workspace-id",    // site_id (any string)
+  "om_your_api_key",      // api_key = your OpenMail workspace API key
+  { url: "https://api.openmail.win/api/ingest/cio/v1" }
+);
+
+// Identify a customer
+cio.identify("alice@example.com", {
+  email: "alice@example.com",
+  first_name: "Alice",
+  last_name: "Smith",
+  plan: "pro",
+});
+
+// Track an event
+cio.track("alice@example.com", {
+  name: "plan_upgraded",
+  data: {
+    from_plan: "starter",
+    to_plan: "pro",
+    mrr: 99,
+  },
+});
+```
+
+### Customer.io REST Format
+
+**Identify:** `POST /api/ingest/cio/v1/customers/:customer_id`
+
+Uses Basic Auth: `Authorization: Basic base64(workspace_id:om_api_key)`
+
+```bash
+# Identify a user
+curl -X POST https://api.openmail.win/api/ingest/cio/v1/customers/alice@example.com \
+  -u "workspace_id:om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "first_name": "Alice",
+    "plan": "pro"
+  }'
+```
+
+**Track event:** `POST /api/ingest/cio/v1/customers/:customer_id/events`
+
+```bash
+curl -X POST https://api.openmail.win/api/ingest/cio/v1/customers/alice@example.com/events \
+  -u "workspace_id:om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "plan_upgraded",
+    "data": { "to_plan": "pro" }
+  }'
+```
+
+---
+
+## Identify Endpoint
+
+<EndpointBadge method="POST" path="/api/ingest/identify" />
+
+Create or update a contact. Accepts PostHog, Segment, and simplified formats.
+
+```json
+{
+  "api_key": "om_your_key",
+  "distinct_id": "alice@example.com",
+  "properties": {
+    "$email": "alice@example.com",
+    "$name": "Alice Smith",
+    "plan": "pro",
+    "company": "Acme"
+  }
+}
+```
+
+Segment-style also accepted:
+```json
+{
+  "api_key": "om_your_key",
+  "userId": "alice@example.com",
+  "traits": {
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "plan": "pro"
+  }
+}
+```
+
+Response: `{ "status": 1 }` — HTTP 200
+
+---
+
+## Language Examples
+
+### Python
+
+```python
+import requests
+
+BASE_URL = "https://api.openmail.win"
+API_KEY = "om_your_key"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+def track(email: str, event: str, properties: dict = {}):
+    requests.post(
+        f"{BASE_URL}/api/v1/events/track",
+        headers=HEADERS,
+        json={"email": email, "name": event, "properties": properties},
+    ).raise_for_status()
+
+def identify(email: str, traits: dict = {}):
+    requests.post(
+        f"{BASE_URL}/api/ingest/identify",
+        headers=HEADERS,
+        json={"distinct_id": email, "properties": traits},
+    ).raise_for_status()
+
+# Usage
+identify("alice@example.com", {"plan": "pro", "company": "Acme"})
+track("alice@example.com", "plan_upgraded", {"to_plan": "pro"})
+```
+
+### PHP
+
+```php
+<?php
+$apiKey = 'om_your_key';
+$baseUrl = 'https://api.openmail.win';
+
+function trackEvent(string $email, string $name, array $properties = []): void {
+    global $apiKey, $baseUrl;
+    $ch = curl_init("$baseUrl/api/v1/events/track");
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer $apiKey",
+            "Content-Type: application/json",
+        ],
+        CURLOPT_POSTFIELDS => json_encode([
+            'email' => $email,
+            'name' => $name,
+            'properties' => $properties,
+        ]),
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+}
+
+trackEvent('alice@example.com', 'plan_upgraded', ['to_plan' => 'pro']);
+```
+
+### Ruby
+
+```ruby
+require 'net/http'
+require 'json'
+require 'uri'
+
+API_KEY = 'om_your_key'
+BASE_URL = 'https://api.openmail.win'
+
+def track_event(email, name, properties = {})
+  uri = URI("#{BASE_URL}/api/v1/events/track")
+  req = Net::HTTP::Post.new(uri)
+  req['Authorization'] = "Bearer #{API_KEY}"
+  req['Content-Type'] = 'application/json'
+  req.body = { email: email, name: name, properties: properties }.to_json
+  Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+end
+
+track_event('alice@example.com', 'plan_upgraded', { to_plan: 'pro' })
+```
+
+### Go
+
+```go
+package main
+
+import (
+  "bytes"
+  "encoding/json"
+  "net/http"
+)
+
+const apiKey = "om_your_key"
+const baseURL = "https://api.openmail.win"
+
+func trackEvent(email, name string, properties map[string]any) error {
+  body, _ := json.Marshal(map[string]any{
+    "email":      email,
+    "name":       name,
+    "properties": properties,
+  })
+  req, _ := http.NewRequest("POST", baseURL+"/api/v1/events/track", bytes.NewReader(body))
+  req.Header.Set("Authorization", "Bearer "+apiKey)
+  req.Header.Set("Content-Type", "application/json")
+  resp, err := http.DefaultClient.Do(req)
+  if resp != nil { resp.Body.Close() }
+  return err
+}
+```
+
+---
+
+## What Events Trigger
+
+When you track an event, OpenMail automatically:
+
+1. **Creates or links a contact** — the `email` is used to look up or create a contact in your workspace
+2. **Fires campaign triggers** — any active campaign with `triggerType: "event"` and a matching `eventName` will enroll the contact into that campaign's email sequence
+3. **Stores the event** — available in the Events page and via the API for analytics and debugging
+
+---
+
+## Best Practices
+
+- **Use snake_case event names** — `plan_upgraded`, `invoice_paid`, `feature_used`
+- **Identify before tracking** — call `identify()` when a user signs up or logs in so future events are linked to their contact profile
+- **Batch for high volume** — use `POST /api/ingest/batch` or the SDK's built-in batching when tracking many events
+- **Include relevant properties** — event properties are stored and can be used for campaign conditions and personalization
+- **Use `occurredAt` for backfills** — pass the actual event time when importing historical data

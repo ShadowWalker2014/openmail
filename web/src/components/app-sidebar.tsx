@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   LayoutDashboard, Users, Mail, Zap, FileText, Settings,
   Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown, Plus,
-  Sun, Moon, Monitor, ImagePlay, Inbox,
+  Sun, Moon, Monitor, ImagePlay, Inbox, Activity,
 } from "lucide-react";
 import { LogoIcon } from "@/components/logo-icon";
 import type { ComponentType } from "react";
@@ -38,6 +38,7 @@ const NAV_ITEMS = [
   { to: "/broadcasts", icon: Mail,             label: "Broadcasts" },
   { to: "/campaigns",  icon: Zap,              label: "Campaigns" },
   { to: "/deliveries", icon: Inbox,            label: "Deliveries" },
+  { to: "/events",     icon: Activity,         label: "Events" },
   { to: "/templates",  icon: FileText,         label: "Templates" },
   { to: "/assets",     icon: ImagePlay,        label: "Assets" },
   { to: "/settings",   icon: Settings,         label: "Settings" },

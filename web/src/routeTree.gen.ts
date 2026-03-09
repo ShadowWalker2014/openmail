@@ -20,6 +20,7 @@ import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates/i
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
 import { Route as AppSegmentsIndexRouteImport } from './routes/_app/segments/index'
 import { Route as AppOnboardingIndexRouteImport } from './routes/_app/onboarding/index'
+import { Route as AppEventsIndexRouteImport } from './routes/_app/events/index'
 import { Route as AppDeliveriesIndexRouteImport } from './routes/_app/deliveries/index'
 import { Route as AppDashboardIndexRouteImport } from './routes/_app/dashboard/index'
 import { Route as AppContactsIndexRouteImport } from './routes/_app/contacts/index'
@@ -85,6 +86,11 @@ const AppSegmentsIndexRoute = AppSegmentsIndexRouteImport.update({
 const AppOnboardingIndexRoute = AppOnboardingIndexRouteImport.update({
   id: '/onboarding/',
   path: '/onboarding/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEventsIndexRoute = AppEventsIndexRouteImport.update({
+  id: '/events/',
+  path: '/events/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDeliveriesIndexRoute = AppDeliveriesIndexRouteImport.update({
@@ -167,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/contacts/': typeof AppContactsIndexRoute
   '/dashboard/': typeof AppDashboardIndexRoute
   '/deliveries/': typeof AppDeliveriesIndexRoute
+  '/events/': typeof AppEventsIndexRoute
   '/onboarding/': typeof AppOnboardingIndexRoute
   '/segments/': typeof AppSegmentsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof AppContactsIndexRoute
   '/dashboard': typeof AppDashboardIndexRoute
   '/deliveries': typeof AppDeliveriesIndexRoute
+  '/events': typeof AppEventsIndexRoute
   '/onboarding': typeof AppOnboardingIndexRoute
   '/segments': typeof AppSegmentsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/_app/contacts/': typeof AppContactsIndexRoute
   '/_app/dashboard/': typeof AppDashboardIndexRoute
   '/_app/deliveries/': typeof AppDeliveriesIndexRoute
+  '/_app/events/': typeof AppEventsIndexRoute
   '/_app/onboarding/': typeof AppOnboardingIndexRoute
   '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/contacts/'
     | '/dashboard/'
     | '/deliveries/'
+    | '/events/'
     | '/onboarding/'
     | '/segments/'
     | '/settings/'
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/deliveries'
+    | '/events'
     | '/onboarding'
     | '/segments'
     | '/settings'
@@ -290,6 +301,7 @@ export interface FileRouteTypes {
     | '/_app/contacts/'
     | '/_app/dashboard/'
     | '/_app/deliveries/'
+    | '/_app/events/'
     | '/_app/onboarding/'
     | '/_app/segments/'
     | '/_app/settings/'
@@ -382,6 +394,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding/'
       preLoaderRoute: typeof AppOnboardingIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/events/': {
+      id: '/_app/events/'
+      path: '/events'
+      fullPath: '/events/'
+      preLoaderRoute: typeof AppEventsIndexRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/deliveries/': {
@@ -503,6 +522,7 @@ interface AppRouteChildren {
   AppContactsIndexRoute: typeof AppContactsIndexRoute
   AppDashboardIndexRoute: typeof AppDashboardIndexRoute
   AppDeliveriesIndexRoute: typeof AppDeliveriesIndexRoute
+  AppEventsIndexRoute: typeof AppEventsIndexRoute
   AppOnboardingIndexRoute: typeof AppOnboardingIndexRoute
   AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
   AppTemplatesIndexRoute: typeof AppTemplatesIndexRoute
@@ -516,6 +536,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppContactsIndexRoute: AppContactsIndexRoute,
   AppDashboardIndexRoute: AppDashboardIndexRoute,
   AppDeliveriesIndexRoute: AppDeliveriesIndexRoute,
+  AppEventsIndexRoute: AppEventsIndexRoute,
   AppOnboardingIndexRoute: AppOnboardingIndexRoute,
   AppSegmentsIndexRoute: AppSegmentsIndexRoute,
   AppTemplatesIndexRoute: AppTemplatesIndexRoute,

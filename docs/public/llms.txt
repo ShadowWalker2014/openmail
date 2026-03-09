@@ -45,6 +45,7 @@ Total tools: 29 (Contacts×5, Broadcasts×7, Campaigns×4, Segments×2, Template
 Package: `@openmail/sdk` — TypeScript SDK compatible with Segment Analytics 2.0 and PostHog Node interfaces.
 
 - [SDK Overview](https://docs.openmail.win/sdk/overview): Entry points, Segment/PostHog compatibility, error codes
+- [Event Ingestion](https://docs.openmail.win/sdk/event-ingestion): Track events from any language — PostHog, Customer.io, cURL, Python, Ruby, Go compatible
 - [Node.js SDK](https://docs.openmail.win/sdk/node): Server-side tracking, full API coverage, batching, retry
 - [Browser SDK](https://docs.openmail.win/sdk/browser): Client-side tracking, anonymous IDs, auto page views
 - [React SDK](https://docs.openmail.win/sdk/react): OpenMailProvider, useTrack, useIdentify, useAutoIdentify hooks
