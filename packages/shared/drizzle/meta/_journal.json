@@ -15,6 +15,20 @@
       "when": 1741392000000,
       "tag": "0001_sending_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773033944630,
+      "tag": "0002_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773034800000,
+      "tag": "0003_workspace_logo",
+      "breakpoints": true
     }
   ]
 }

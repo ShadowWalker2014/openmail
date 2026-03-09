@@ -15,6 +15,7 @@ const SAFE_WORKSPACE_COLUMNS = {
   id: workspaces.id,
   name: workspaces.name,
   slug: workspaces.slug,
+  logoUrl: workspaces.logoUrl,
   plan: workspaces.plan,
   resendFromEmail: workspaces.resendFromEmail,
   resendFromName: workspaces.resendFromName,
@@ -70,6 +71,7 @@ app.patch(
   "/:id",
   zValidator("json", z.object({
     name: z.string().optional(),
+    logoUrl: z.string().url().nullable().optional(),
     resendApiKey: z.string().optional(),
     resendFromEmail: z.string().email().optional().nullable(),
     resendFromName: z.string().optional().nullable(),

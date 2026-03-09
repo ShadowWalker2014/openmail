@@ -152,7 +152,19 @@ app.route("/api/v1", apiKeyApi);
 // Exported for integration tests — same app instance used in production
 export { app };
 
+// Run idempotent migrations at startup
+async function runStartupMigrations() {
+  const db = getDb();
+  await db.execute(
+    // language=SQL
+    `ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS logo_url TEXT`
+  );
+  logger.info("Startup migrations OK");
+}
+
 const port = Number(process.env.PORT ?? 3001);
 logger.info({ port }, "API server starting");
+
+runStartupMigrations().catch((err) => logger.warn({ err }, "Startup migration failed (non-fatal)"));
 
 export default { port, fetch: app.fetch };

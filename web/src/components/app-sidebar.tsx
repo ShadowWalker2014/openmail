@@ -155,11 +155,13 @@ function WorkspaceSwitcher() {
         >
           <div
             className={cn(
-              "flex items-center justify-center h-7 w-7 rounded-md bg-violet-500/20 text-violet-300 text-xs font-bold shrink-0 uppercase select-none",
+              "flex items-center justify-center h-7 w-7 rounded-md bg-violet-500/20 text-violet-300 text-xs font-bold shrink-0 uppercase select-none overflow-hidden",
               collapsed && "group-hover/sidebar:hidden"
             )}
           >
-            {initial}
+            {activeWs?.logoUrl ? (
+              <img src={activeWs.logoUrl} alt={activeWs.name} className="h-full w-full object-cover" />
+            ) : initial}
           </div>
           {!collapsed && (
             <>
@@ -191,8 +193,10 @@ function WorkspaceSwitcher() {
               onClick={() => { setActiveWorkspaceId(ws.id); setOpen(false); }}
               className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-accent cursor-pointer text-left"
             >
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-violet-500/20 text-violet-300 text-[10px] font-bold uppercase">
-                {ws.name[0]}
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-violet-500/20 text-violet-300 text-[10px] font-bold uppercase overflow-hidden">
+                {ws.logoUrl ? (
+                  <img src={ws.logoUrl} alt={ws.name} className="h-full w-full object-cover" />
+                ) : ws.name[0]}
               </div>
               <span className="flex-1 min-w-0 truncate font-medium">{ws.name}</span>
               {ws.id === activeWorkspaceId && <Check className="h-3.5 w-3.5 shrink-0 text-foreground/50" />}

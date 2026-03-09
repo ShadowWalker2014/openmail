@@ -17,6 +17,7 @@ export interface Workspace {
   id: string;
   name: string;
   slug: string;
+  logoUrl: string | null;
   plan: string;
   resendFromEmail: string | null;
   resendFromName: string | null;

@@ -4,6 +4,7 @@ export const workspaces = pgTable("workspaces", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  logoUrl: text("logo_url"),
   resendApiKey: text("resend_api_key"),
   resendFromEmail: text("resend_from_email"),
   resendFromName: text("resend_from_name"),
