@@ -3,6 +3,8 @@
  * Design DNA: dark navy bg, open envelope, indigo flap, white body with M-fold, letter peeking out.
  * Use this everywhere instead of PNG/ICO files.
  */
+import { useId } from "react";
+
 export function LogoIcon({
   size = 20,
   className,
@@ -10,7 +12,9 @@ export function LogoIcon({
   size?: number;
   className?: string;
 }) {
-  const id = "om"; // stable prefix — all instances share identical gradient defs
+  // Each instance gets unique IDs so multiple logos on the same page don't share defs
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const id = `om${uid}`;
   return (
     <svg
       viewBox="0 0 100 100"
