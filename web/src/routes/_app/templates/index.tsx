@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, FileText, Trash2, Edit2, Monitor, Smartphone, Search, Copy } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Trash2,
+  Edit2,
+  Monitor,
+  Smartphone,
+  Search,
+  Copy,
+  Code2,
+  Eye,
+} from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -26,6 +37,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { EmailEditor } from "@/components/ui/email-editor";
 
 export const Route = createFileRoute("/_app/templates/")({
   component: TemplatesPage,
@@ -40,24 +52,73 @@ interface Template {
   updatedAt: string;
 }
 
-function TemplatesPage() {
+type EditorMode = "visual" | "html";
+
+function wrapForPreview(html: string): string {
+  if (!html) return "";
+  // If it's a full HTML document, use as-is
+  if (html.trimStart().startsWith("<!DOCTYPE") || html.trimStart().startsWith("<html")) {
+    return html;
+  }
+  // Otherwise wrap in a basic email shell
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#111;background:#f5f5f5;padding:24px 16px}
+    .wrapper{max-width:600px;margin:0 auto;background:#fff;border-radius:8px;padding:36px 40px;border:1px solid #e5e5e5}
+    h1{font-size:24px;font-weight:700;margin-bottom:16px;line-height:1.3}
+    h2{font-size:20px;font-weight:600;margin-bottom:12px;line-height:1.3}
+    h3{font-size:17px;font-weight:600;margin-bottom:10px;line-height:1.3}
+    p{margin-bottom:12px}
+    ul{list-style:disc;padding-left:24px;margin-bottom:12px}
+    ol{list-style:decimal;padding-left:24px;margin-bottom:12px}
+    li{margin-bottom:4px}
+    a{color:#0070f3;text-decoration:underline}
+    blockquote{border-left:3px solid #e5e5e5;padding-left:16px;color:#666;margin-bottom:12px;font-style:italic}
+    code{background:#f0f0f0;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:13px}
+    pre{background:#f0f0f0;padding:16px;border-radius:6px;overflow-x:auto;margin-bottom:12px}
+    pre code{background:none;padding:0}
+    img{max-width:100%;height:auto;border-radius:4px}
+    strong,b{font-weight:600}
+    em,i{font-style:italic}
+    u{text-decoration:underline}
+    s{text-decoration:line-through}
+  </style></head><body><div class="wrapper">${html}</div></body></html>`;
+}
+
+function TemplateEditor({
+  template,
+  onClose,
+}: {
+  template: Template | null;
+  onClose: () => void;
+}) {
   const { activeWorkspaceId } = useWorkspaceStore();
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [editTemplate, setEditTemplate] = useState<Template | null>(null);
-  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [htmlContent, setHtmlContent] = useState("");
+
+  const [mode, setMode] = useState<EditorMode>("visual");
   const [previewMobile, setPreviewMobile] = useState(false);
+  const [content, setContent] = useState(template?.htmlContent ?? "");
+  const [rawHtml, setRawHtml] = useState(template?.htmlContent ?? "");
+
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLInputElement>(null);
 
-  const { data: templates = [], isLoading, isError } = useQuery<Template[]>({
-    queryKey: ["templates", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
-    enabled: !!activeWorkspaceId,
-  });
+  // Sync between modes
+  const switchMode = useCallback((next: EditorMode) => {
+    if (next === mode) return;
+    if (mode === "visual") {
+      // visual → code: expose the current HTML
+      setRawHtml(content);
+    } else {
+      // code → visual: load raw HTML into the WYSIWYG editor
+      setContent(rawHtml);
+    }
+    setMode(next);
+  }, [mode, content, rawHtml]);
+
+  // The canonical HTML is whatever is active
+  const activeHtml = mode === "visual" ? content : rawHtml;
 
   const createMutation = useMutation({
     mutationFn: (body: object) =>
@@ -67,32 +128,237 @@ function TemplatesPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
-      setOpen(false);
-      setHtmlContent("");
-      if (nameRef.current) nameRef.current.value = "";
-      if (subjectRef.current) subjectRef.current.value = "";
-      if (previewRef.current) previewRef.current.value = "";
       toast.success("Template created");
+      onClose();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      ...body
-    }: { id: string } & Record<string, unknown>) =>
-      sessionFetch(activeWorkspaceId!, `/templates/${id}`, {
+    mutationFn: (body: object) =>
+      sessionFetch(activeWorkspaceId!, `/templates/${template!.id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
-      setEditTemplate(null);
-      setHtmlContent("");
       toast.success("Template saved");
+      onClose();
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const body = {
+      name: nameRef.current!.value,
+      subject: subjectRef.current!.value,
+      previewText: previewRef.current!.value || undefined,
+      htmlContent: activeHtml,
+    };
+    if (template) {
+      updateMutation.mutate(body);
+    } else {
+      createMutation.mutate(body);
+    }
+  }
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col w-full h-full"
+    >
+      {/* Top bar */}
+      <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-border">
+        <span className="text-[14px] font-semibold">
+          {template ? "Edit Template" : "New Template"}
+        </span>
+        <div className="flex items-center gap-3">
+          {/* Editor mode toggle */}
+          <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+            <button
+              type="button"
+              onClick={() => switchMode("visual")}
+              className={cn(
+                "flex items-center gap-1.5 rounded px-2.5 py-1 text-[12px] font-medium transition-colors cursor-pointer",
+                mode === "visual"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Eye className="h-3 w-3" />
+              Visual
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("html")}
+              className={cn(
+                "flex items-center gap-1.5 rounded px-2.5 py-1 text-[12px] font-medium transition-colors cursor-pointer",
+                mode === "html"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Code2 className="h-3 w-3" />
+              HTML
+            </button>
+          </div>
+          {/* Viewport toggle */}
+          <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
+            <button
+              type="button"
+              onClick={() => setPreviewMobile(false)}
+              className={cn(
+                "rounded px-2 py-1 transition-colors cursor-pointer",
+                !previewMobile
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Desktop preview"
+            >
+              <Monitor className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewMobile(true)}
+              className={cn(
+                "rounded px-2 py-1 transition-colors cursor-pointer",
+                previewMobile
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Mobile preview"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {/* Save button */}
+          <Button type="submit" size="sm" disabled={isPending}>
+            {isPending ? "Saving…" : "Save Template"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Body: editor | preview */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left — fields + editor */}
+        <div className="flex flex-col w-[440px] shrink-0 border-r border-border overflow-y-auto">
+          <div className="flex-1 space-y-4 p-5">
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Template Name *</Label>
+              <Input
+                ref={nameRef}
+                defaultValue={template?.name}
+                required
+                placeholder="Welcome email"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Subject Line *</Label>
+              <Input
+                ref={subjectRef}
+                defaultValue={template?.subject}
+                required
+                placeholder="Welcome to {{company}}!"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Preview Text</Label>
+              <Input
+                ref={previewRef}
+                defaultValue={template?.previewText ?? ""}
+                placeholder="Short preview shown in inbox…"
+                className="h-8 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[12px]">Email Body</Label>
+
+              {mode === "visual" ? (
+                <EmailEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Start writing your email…"
+                  className="min-h-[320px]"
+                />
+              ) : (
+                <textarea
+                  value={rawHtml}
+                  onChange={(e) => setRawHtml(e.target.value)}
+                  placeholder={"<p>Hello {{firstName}},</p>\n<p>Your content here…</p>"}
+                  spellCheck={false}
+                  className="w-full min-h-[340px] resize-y rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              )}
+
+              <p className="text-[11px] text-muted-foreground">
+                Use{" "}
+                <code className="bg-muted px-1 py-0.5 rounded text-[10px]">
+                  {"{{variable}}"}
+                </code>{" "}
+                for dynamic content substitution.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right — live preview */}
+        <div className="flex-1 flex flex-col min-w-0 bg-muted/20">
+          <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+              Preview
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {activeHtml ? "Live" : "Empty"}
+            </span>
+          </div>
+          <div className="flex-1 flex items-start justify-center overflow-auto p-6">
+            {activeHtml ? (
+              <div
+                className={cn(
+                  "h-full transition-all duration-200",
+                  previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
+                )}
+              >
+                <iframe
+                  srcDoc={wrapForPreview(activeHtml)}
+                  sandbox="allow-same-origin"
+                  className="w-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
+                  title="Email preview"
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40 mt-20">
+                <Monitor className="h-8 w-8 text-muted-foreground" />
+                <p className="text-[12px] text-muted-foreground">
+                  Start writing to see a live preview
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function TemplatesPage() {
+  const { activeWorkspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editTemplate, setEditTemplate] = useState<Template | null>(null);
+  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const { data: templates = [], isLoading, isError } = useQuery<Template[]>({
+    queryKey: ["templates", activeWorkspaceId],
+    queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
+    enabled: !!activeWorkspaceId,
   });
 
   const deleteMutation = useMutation({
@@ -108,39 +374,33 @@ function TemplatesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const body = {
-      name: nameRef.current!.value,
-      subject: subjectRef.current!.value,
-      previewText: previewRef.current!.value || undefined,
-      htmlContent,
-    };
-    if (editTemplate) {
-      updateMutation.mutate({ id: editTemplate.id, ...body });
-    } else {
-      createMutation.mutate(body);
-    }
+  const createMutation = useMutation({
+    mutationFn: (body: object) =>
+      sessionFetch(activeWorkspaceId!, "/templates", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["templates", activeWorkspaceId] });
+      toast.success("Template duplicated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function openNew() {
+    setEditTemplate(null);
+    setEditorOpen(true);
   }
 
   function openEdit(tmpl: Template) {
-    setHtmlContent(tmpl.htmlContent);
     setEditTemplate(tmpl);
+    setEditorOpen(true);
   }
 
-  function openNew() {
-    setHtmlContent("");
-    setOpen(true);
+  function closeEditor() {
+    setEditorOpen(false);
+    setEditTemplate(null);
   }
-
-  const dialogOpen = open || !!editTemplate;
-
-  const filteredTemplates = templates.filter(
-    (t) =>
-      !searchQuery ||
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.subject.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
 
   function duplicateTemplate(tmpl: Template) {
     createMutation.mutate({
@@ -150,6 +410,15 @@ function TemplatesPage() {
       htmlContent: tmpl.htmlContent,
     });
   }
+
+  const dialogOpen = editorOpen || !!editTemplate;
+
+  const filteredTemplates = templates.filter(
+    (t) =>
+      !searchQuery ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.subject.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="px-8 py-7 w-full">
@@ -167,144 +436,26 @@ function TemplatesPage() {
         </Button>
       </div>
 
-      {/* Editor dialog — full-screen two-column: editor left, live preview right */}
+      {/* Full-screen editor dialog */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(o) => {
-          if (!o) {
-            setOpen(false);
-            setEditTemplate(null);
-            setHtmlContent("");
-            setPreviewMobile(false);
-          }
+          if (!o) closeEditor();
         }}
       >
         <DialogContent
           key={editTemplate?.id ?? "new"}
           className="max-w-[96vw] w-[96vw] h-[92vh] p-0 gap-0 flex flex-col overflow-hidden"
         >
-          {/* Top bar */}
-          <DialogHeader className="shrink-0 flex flex-row items-center justify-between px-5 py-3 border-b border-border">
-            <DialogTitle className="text-[14px] font-semibold">
+          <DialogHeader className="sr-only">
+            <DialogTitle>
               {editTemplate ? "Edit Template" : "New Template"}
             </DialogTitle>
-            <div className="flex items-center gap-2 mr-8">
-              {/* Viewport toggle */}
-              <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => setPreviewMobile(false)}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors cursor-pointer",
-                    !previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Monitor className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewMobile(true)}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors cursor-pointer",
-                    previewMobile ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Smartphone className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
           </DialogHeader>
-
-          {/* Body: editor | preview */}
-          <div className="flex flex-1 min-h-0">
-            {/* Left — form */}
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col w-[400px] shrink-0 border-r border-border overflow-y-auto"
-            >
-              <div className="flex-1 space-y-4 p-5">
-                <div className="space-y-1.5">
-                  <Label>Name *</Label>
-                  <Input
-                    ref={nameRef}
-                    defaultValue={editTemplate?.name}
-                    required
-                    placeholder="Welcome email"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Subject *</Label>
-                  <Input
-                    ref={subjectRef}
-                    defaultValue={editTemplate?.subject}
-                    required
-                    placeholder="Welcome to {{company}}!"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Preview Text</Label>
-                  <Input
-                    ref={previewRef}
-                    defaultValue={editTemplate?.previewText ?? ""}
-                    placeholder="Short preview shown in inbox"
-                  />
-                </div>
-                <div className="space-y-1.5 flex flex-col flex-1">
-                  <Label>HTML Content *</Label>
-                  <textarea
-                    required
-                    value={htmlContent}
-                    onChange={(e) => setHtmlContent(e.target.value)}
-                    placeholder="<html>...</html>"
-                    className="flex-1 w-full min-h-[340px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  />
-                </div>
-              </div>
-              <div className="shrink-0 px-5 py-3 border-t border-border bg-card">
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {createMutation.isPending || updateMutation.isPending
-                    ? "Saving…"
-                    : "Save Template"}
-                </Button>
-              </div>
-            </form>
-
-            {/* Right — live preview */}
-            <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
-              <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
-                {htmlContent && (
-                  <span className="text-[10px] text-muted-foreground">Live</span>
-                )}
-              </div>
-              <div className="flex-1 flex items-start justify-center overflow-auto p-6">
-                {htmlContent ? (
-                  <div
-                    className={cn(
-                      "h-full transition-all duration-200",
-                      previewMobile ? "w-[375px]" : "w-full max-w-[680px]"
-                    )}
-                  >
-                    <iframe
-                      srcDoc={htmlContent}
-                      sandbox="allow-same-origin"
-                      className="w-full h-full min-h-[600px] rounded-lg border border-border bg-white shadow-sm"
-                      title="Email preview"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
-                    <Monitor className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-[12px] text-muted-foreground">Start typing HTML to see a live preview</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <TemplateEditor
+            template={editTemplate}
+            onClose={closeEditor}
+          />
         </DialogContent>
       </Dialog>
 
@@ -328,7 +479,7 @@ function TemplatesPage() {
       )}
 
       {/* Grid */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {isLoading &&
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-lg border border-border bg-card p-4">
@@ -342,7 +493,8 @@ function TemplatesPage() {
           filteredTemplates.map((tmpl) => (
             <div
               key={tmpl.id}
-              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50"
+              className="group rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-accent/50 cursor-pointer"
+              onClick={() => openEdit(tmpl)}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -353,22 +505,22 @@ function TemplatesPage() {
                 </div>
                 <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
-                    onClick={() => openEdit(tmpl)}
-                    className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
-                    title="Edit template"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); duplicateTemplate(tmpl); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      duplicateTemplate(tmpl);
+                    }}
                     className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
                     title="Duplicate template"
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => setDeleteTemplate(tmpl)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTemplate(tmpl);
+                    }}
                     className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                    title="Delete template"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -395,7 +547,7 @@ function TemplatesPage() {
             </div>
             <p className="text-[13px] font-medium">No templates yet</p>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              Create a reusable HTML email template
+              Create a reusable email template
             </p>
             <Button size="sm" className="mt-4" onClick={openNew}>
               <Plus className="h-3.5 w-3.5" />
@@ -417,14 +569,16 @@ function TemplatesPage() {
               <strong className="text-foreground font-medium">
                 {deleteTemplate?.name}
               </strong>{" "}
-              will be permanently deleted. Any broadcasts using this template will be unaffected.
+              will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleteMutation.isPending}
-              onClick={() => deleteTemplate && deleteMutation.mutate(deleteTemplate.id)}
+              onClick={() =>
+                deleteTemplate && deleteMutation.mutate(deleteTemplate.id)
+              }
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>

@@ -21,7 +21,7 @@ app.post(
     name: z.string().min(1),
     subject: z.string().min(1),
     previewText: z.string().optional(),
-    htmlContent: z.string().min(1),
+    htmlContent: z.string().default(""),
     jsonContent: z.unknown().optional(),
     isVisual: z.boolean().optional().default(false),
   })),
