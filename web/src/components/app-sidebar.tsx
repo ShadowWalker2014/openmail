@@ -5,6 +5,7 @@ import {
   Check, LogOut, Filter, Search, PanelLeftOpen, ChevronDown, Plus,
   Sun, Moon, Monitor, ImagePlay, Inbox,
 } from "lucide-react";
+import { LogoIcon } from "@/components/logo-icon";
 import type { ComponentType } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -49,9 +50,7 @@ function SidebarHeaderRow() {
   const [hovered, setHovered] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const LogoMark = () => (
-    <img src="/icons/favicon-48x48.png" alt="OpenMail" className="h-5 w-5 shrink-0 rounded-[4px]" />
-  );
+  const LogoMark = () => <LogoIcon size={20} className="shrink-0 rounded-[4px]" />;
 
   return (
     <div

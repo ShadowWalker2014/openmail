@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
+import { LogoIcon } from "@/components/logo-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,7 +103,7 @@ function LoginPage() {
 
         {/* Logo + heading */}
         <div className="mb-6">
-          <img src="/icons/apple-touch-icon.png" alt="OpenMail" className="mb-4 h-8 w-8 rounded-[7px]" />
+          <LogoIcon size={32} className="mb-4 rounded-[7px]" />
           <h1 className="text-[15px] font-semibold tracking-tight text-foreground">
             {mode === "login" ? "Welcome back" : "Create account"}
           </h1>

@@ -18,6 +18,7 @@ import {
   Terminal,
   Sparkles,
 } from "lucide-react";
+import { LogoIcon } from "@/components/logo-icon";
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
@@ -85,7 +86,7 @@ function DashboardMockup() {
           {/* Sidebar */}
           <div className="w-44 shrink-0 border-r border-border/40 bg-sidebar p-3">
             <div className="mb-3 flex items-center gap-2 px-1">
-              <img src="/icons/favicon-32x32.png" alt="OpenMail" className="h-5 w-5 rounded-[4px]" />
+              <LogoIcon size={20} className="rounded-[4px]" />
               <div className="h-2.5 w-16 rounded bg-foreground/50" />
             </div>
             <div className="mb-3 h-7 w-full rounded border border-border/40 bg-muted/30" />
@@ -172,7 +173,7 @@ function LandingPage() {
 
           {/* Logo */}
           <div className="flex items-center gap-2.5">
-            <img src="/icons/favicon-32x32.png" alt="OpenMail" className="h-7 w-7 rounded-lg" />
+            <LogoIcon size={28} className="rounded-lg" />
             <span className="text-[13px] font-semibold text-white" style={{ letterSpacing: "-0.02em" }}>
               OpenMail
             </span>
@@ -571,7 +572,7 @@ function LandingPage() {
       <footer className="border-t border-white/[0.06] px-6 py-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/icons/favicon-32x32.png" alt="OpenMail" className="h-6 w-6 rounded-md" />
+            <LogoIcon size={24} className="rounded-md" />
             <span className="text-[13px] font-semibold text-white/80">OpenMail</span>
           </div>
           <div className="flex items-center gap-5 text-xs text-white/30">
