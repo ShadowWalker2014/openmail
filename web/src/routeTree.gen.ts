@@ -15,6 +15,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
 import { Route as AppSegmentsIndexRouteImport } from './routes/_app/segments/index'
@@ -25,6 +26,12 @@ import { Route as AppContactsIndexRouteImport } from './routes/_app/contacts/ind
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns/index'
 import { Route as AppBroadcastsIndexRouteImport } from './routes/_app/broadcasts/index'
 import { Route as AppAssetsIndexRouteImport } from './routes/_app/assets/index'
+import { Route as AppSettingsTeamRouteImport } from './routes/_app/settings/team'
+import { Route as AppSettingsGeneralRouteImport } from './routes/_app/settings/general'
+import { Route as AppSettingsEmailRouteImport } from './routes/_app/settings/email'
+import { Route as AppSettingsDomainRouteImport } from './routes/_app/settings/domain'
+import { Route as AppSettingsApiKeysRouteImport } from './routes/_app/settings/api-keys'
+import { Route as AppSettingsAccountRouteImport } from './routes/_app/settings/account'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -55,15 +62,20 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTemplatesIndexRoute = AppTemplatesIndexRouteImport.update({
   id: '/templates/',
   path: '/templates/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
-  getParentRoute: () => AppRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSettingsRoute,
 } as any)
 const AppSegmentsIndexRoute = AppSegmentsIndexRouteImport.update({
   id: '/segments/',
@@ -105,13 +117,50 @@ const AppAssetsIndexRoute = AppAssetsIndexRouteImport.update({
   path: '/assets/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsTeamRoute = AppSettingsTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsGeneralRoute = AppSettingsGeneralRouteImport.update({
+  id: '/general',
+  path: '/general',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsEmailRoute = AppSettingsEmailRouteImport.update({
+  id: '/email',
+  path: '/email',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsDomainRoute = AppSettingsDomainRouteImport.update({
+  id: '/domain',
+  path: '/domain',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsApiKeysRoute = AppSettingsApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsAccountRoute = AppSettingsAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/settings': typeof AppSettingsRouteWithChildren
   '/invite/$token': typeof InviteTokenRoute
+  '/settings/account': typeof AppSettingsAccountRoute
+  '/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/settings/domain': typeof AppSettingsDomainRoute
+  '/settings/email': typeof AppSettingsEmailRoute
+  '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/team': typeof AppSettingsTeamRoute
   '/assets/': typeof AppAssetsIndexRoute
   '/broadcasts/': typeof AppBroadcastsIndexRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
@@ -129,6 +178,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/settings/account': typeof AppSettingsAccountRoute
+  '/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/settings/domain': typeof AppSettingsDomainRoute
+  '/settings/email': typeof AppSettingsEmailRoute
+  '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/team': typeof AppSettingsTeamRoute
   '/assets': typeof AppAssetsIndexRoute
   '/broadcasts': typeof AppBroadcastsIndexRoute
   '/campaigns': typeof AppCampaignsIndexRoute
@@ -147,7 +202,14 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_app/settings': typeof AppSettingsRouteWithChildren
   '/invite/$token': typeof InviteTokenRoute
+  '/_app/settings/account': typeof AppSettingsAccountRoute
+  '/_app/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/_app/settings/domain': typeof AppSettingsDomainRoute
+  '/_app/settings/email': typeof AppSettingsEmailRoute
+  '/_app/settings/general': typeof AppSettingsGeneralRoute
+  '/_app/settings/team': typeof AppSettingsTeamRoute
   '/_app/assets/': typeof AppAssetsIndexRoute
   '/_app/broadcasts/': typeof AppBroadcastsIndexRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
@@ -166,7 +228,14 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/reset-password'
+    | '/settings'
     | '/invite/$token'
+    | '/settings/account'
+    | '/settings/api-keys'
+    | '/settings/domain'
+    | '/settings/email'
+    | '/settings/general'
+    | '/settings/team'
     | '/assets/'
     | '/broadcasts/'
     | '/campaigns/'
@@ -184,6 +253,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/invite/$token'
+    | '/settings/account'
+    | '/settings/api-keys'
+    | '/settings/domain'
+    | '/settings/email'
+    | '/settings/general'
+    | '/settings/team'
     | '/assets'
     | '/broadcasts'
     | '/campaigns'
@@ -201,7 +276,14 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/reset-password'
+    | '/_app/settings'
     | '/invite/$token'
+    | '/_app/settings/account'
+    | '/_app/settings/api-keys'
+    | '/_app/settings/domain'
+    | '/_app/settings/email'
+    | '/_app/settings/general'
+    | '/_app/settings/team'
     | '/_app/assets/'
     | '/_app/broadcasts/'
     | '/_app/campaigns/'
@@ -267,6 +349,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/templates/': {
       id: '/_app/templates/'
       path: '/templates'
@@ -276,10 +365,10 @@ declare module '@tanstack/react-router' {
     }
     '/_app/settings/': {
       id: '/_app/settings/'
-      path: '/settings'
+      path: '/'
       fullPath: '/settings/'
       preLoaderRoute: typeof AppSettingsIndexRouteImport
-      parentRoute: typeof AppRoute
+      parentRoute: typeof AppSettingsRoute
     }
     '/_app/segments/': {
       id: '/_app/segments/'
@@ -337,10 +426,77 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssetsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings/team': {
+      id: '/_app/settings/team'
+      path: '/team'
+      fullPath: '/settings/team'
+      preLoaderRoute: typeof AppSettingsTeamRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/general': {
+      id: '/_app/settings/general'
+      path: '/general'
+      fullPath: '/settings/general'
+      preLoaderRoute: typeof AppSettingsGeneralRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/email': {
+      id: '/_app/settings/email'
+      path: '/email'
+      fullPath: '/settings/email'
+      preLoaderRoute: typeof AppSettingsEmailRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/domain': {
+      id: '/_app/settings/domain'
+      path: '/domain'
+      fullPath: '/settings/domain'
+      preLoaderRoute: typeof AppSettingsDomainRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/api-keys': {
+      id: '/_app/settings/api-keys'
+      path: '/api-keys'
+      fullPath: '/settings/api-keys'
+      preLoaderRoute: typeof AppSettingsApiKeysRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/account': {
+      id: '/_app/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof AppSettingsAccountRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
   }
 }
 
+interface AppSettingsRouteChildren {
+  AppSettingsAccountRoute: typeof AppSettingsAccountRoute
+  AppSettingsApiKeysRoute: typeof AppSettingsApiKeysRoute
+  AppSettingsDomainRoute: typeof AppSettingsDomainRoute
+  AppSettingsEmailRoute: typeof AppSettingsEmailRoute
+  AppSettingsGeneralRoute: typeof AppSettingsGeneralRoute
+  AppSettingsTeamRoute: typeof AppSettingsTeamRoute
+  AppSettingsIndexRoute: typeof AppSettingsIndexRoute
+}
+
+const AppSettingsRouteChildren: AppSettingsRouteChildren = {
+  AppSettingsAccountRoute: AppSettingsAccountRoute,
+  AppSettingsApiKeysRoute: AppSettingsApiKeysRoute,
+  AppSettingsDomainRoute: AppSettingsDomainRoute,
+  AppSettingsEmailRoute: AppSettingsEmailRoute,
+  AppSettingsGeneralRoute: AppSettingsGeneralRoute,
+  AppSettingsTeamRoute: AppSettingsTeamRoute,
+  AppSettingsIndexRoute: AppSettingsIndexRoute,
+}
+
+const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
+  AppSettingsRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppSettingsRoute: typeof AppSettingsRouteWithChildren
   AppAssetsIndexRoute: typeof AppAssetsIndexRoute
   AppBroadcastsIndexRoute: typeof AppBroadcastsIndexRoute
   AppCampaignsIndexRoute: typeof AppCampaignsIndexRoute
@@ -349,11 +505,11 @@ interface AppRouteChildren {
   AppDeliveriesIndexRoute: typeof AppDeliveriesIndexRoute
   AppOnboardingIndexRoute: typeof AppOnboardingIndexRoute
   AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
-  AppSettingsIndexRoute: typeof AppSettingsIndexRoute
   AppTemplatesIndexRoute: typeof AppTemplatesIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppSettingsRoute: AppSettingsRouteWithChildren,
   AppAssetsIndexRoute: AppAssetsIndexRoute,
   AppBroadcastsIndexRoute: AppBroadcastsIndexRoute,
   AppCampaignsIndexRoute: AppCampaignsIndexRoute,
@@ -362,7 +518,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppDeliveriesIndexRoute: AppDeliveriesIndexRoute,
   AppOnboardingIndexRoute: AppOnboardingIndexRoute,
   AppSegmentsIndexRoute: AppSegmentsIndexRoute,
-  AppSettingsIndexRoute: AppSettingsIndexRoute,
   AppTemplatesIndexRoute: AppTemplatesIndexRoute,
 }
 
