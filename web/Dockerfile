@@ -24,7 +24,8 @@ RUN bun run build
 
 FROM nginx:alpine
 COPY --from=builder /app/web/dist /usr/share/nginx/html
-# Use template so nginx substitutes $PORT at container start
-COPY web/nginx.conf /etc/nginx/templates/default.conf.template
+# Copy directly to conf.d — NOT to templates/ — so envsubst never runs and
+# nginx's own $uri / $uri/ variables are preserved correctly.
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
