@@ -1,0 +1,72 @@
+---
+title: Self-Hosting Overview
+description: Deploy OpenMail on your own infrastructure with full control.
+---
+
+# Self-Hosting Overview
+
+OpenMail is designed to be self-hosted. Every component is open-source and deploys via Docker or standard Node.js processes.
+
+## Architecture
+
+OpenMail consists of 5 independent services that communicate via Postgres, Redis, and HTTP:
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────────┐
+│   web/      │    │   api/      │    │    mcp/         │
+│  React Vite │───▶│  Hono REST  │◀───│  MCP HTTP       │
+│  Dashboard  │    │  API + Auth │    │  (optional)     │
+└─────────────┘    └──────┬──────┘    └─────────────────┘
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+       ┌────────────┐  ┌──────────┐  ┌───────────┐
+       │  worker/   │  │ Postgres │  │ tracker/  │
+       │  BullMQ    │  │ + Redis  │  │ (optional)│
+       └────────────┘  └──────────┘  └───────────┘
+```
+
+## Required Infrastructure
+
+| Component | Description | Minimum |
+|-----------|-------------|---------|
+| PostgreSQL | Primary database | 14+ |
+| Redis | Queue and cache | 6+ |
+| Node.js / Bun | Runtime | Node 22 / Bun 1.x |
+
+## Services
+
+| Service | Required | Description |
+|---------|:--------:|-------------|
+| `api/` | ✓ | REST API + auth + admin |
+| `web/` | ✓ | Dashboard UI |
+| `worker/` | ✓ | Email sending, event processing |
+| `tracker/` | — | Open/click tracking (recommended) |
+| `mcp/` | — | AI agent interface (optional) |
+
+## Deployment Options
+
+**[Railway](/self-hosting/railway)** — Recommended for production. Deploy each service from the same GitHub repo with automatic builds and managed Postgres + Redis.
+
+**[Docker Compose](/self-hosting/docker)** — Great for local development, testing, or simple single-server deployments.
+
+**Kubernetes** — Supported but not officially documented. Each service has a Dockerfile and can be containerized independently.
+
+## Single-Tenant vs Multi-Tenant
+
+OpenMail supports both:
+
+**Single-tenant (most self-hosters):** One installation, one company. All users belong to one or a few workspaces. Use the same Resend API key for everything.
+
+**Multi-tenant (hosted SaaS):** Multiple independent customers. Each workspace gets its own Resend API key and sender domain configured in the dashboard.
+
+## Resource Requirements
+
+For a small team (< 50k contacts, < 100k emails/month):
+
+- API: 256MB RAM, 0.25 vCPU
+- Worker: 256MB RAM, 0.25 vCPU  
+- Tracker: 128MB RAM, 0.1 vCPU
+- Web: Nginx serving static files, minimal
+
+Scale horizontally by adding more worker instances for higher email throughput.

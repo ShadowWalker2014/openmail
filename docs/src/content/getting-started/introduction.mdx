@@ -1,0 +1,79 @@
+---
+title: Introduction
+description: OpenMail is an open-source, self-hosted alternative to Customer.io — built for the AI era with a native MCP server.
+---
+
+# Introduction
+
+**OpenMail** is a free, open-source alternative to Customer.io. It gives your team a full customer lifecycle email platform — broadcasts, automation campaigns, contact segments, and analytics — without per-seat pricing or vendor lock-in.
+
+Every feature is exposed through a complete REST API and a native [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server, so AI agents like Claude and Cursor can autonomously create and run email campaigns.
+
+## Why OpenMail?
+
+Customer.io costs **$1,000+/month** for growing teams, has limited API access that blocks automation, and has no support for AI agents. OpenMail solves all three.
+
+| Feature | OpenMail | Customer.io |
+|---------|----------|-------------|
+| Self-hosted | ✓ | ✗ |
+| Full REST API | ✓ Everything | Limited |
+| MCP Server for AI agents | ✓ Native | ✗ |
+| Multi-workspace | ✓ | ✓ |
+| Event-triggered campaigns | ✓ | ✓ |
+| Broadcasts | ✓ | ✓ |
+| Contact segments | ✓ | ✓ |
+| Per-seat pricing | ✗ Never | ✓ $1k–$10k+/mo |
+| Vendor lock-in | ✗ Never | ✓ |
+
+## Core Concepts
+
+**Workspaces** are the top-level unit of organization. Each workspace has its own contacts, campaigns, broadcasts, and settings. Users can belong to multiple workspaces with different roles (owner, admin, member).
+
+**Contacts** are people you want to email. Each contact has an email address and flexible key-value attributes (e.g. `plan: "pro"`, `company: "Acme"`) that drive personalization and segmentation.
+
+**Segments** are dynamic groups of contacts, filtered by rules. Example: contacts where `attributes.plan = "pro"` and `createdAt > 30 days ago`. When a contact's attributes change, they automatically enter or leave segments.
+
+**Broadcasts** are one-off email blasts sent to one or more segments. Use them for newsletters, product announcements, or one-time campaigns.
+
+**Campaigns** are automated email sequences triggered by events or segment membership changes. Example: send a welcome email immediately when `user_signed_up` fires, then a tips email 3 days later.
+
+**Events** track customer activity in your app. When you call `POST /api/v1/events/track`, it fires any active campaign that's listening for that event name.
+
+## Architecture
+
+OpenMail is a monorepo with five independent services:
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────────┐
+│   web/      │    │   api/      │    │    mcp/         │
+│  React Vite │───▶│  Hono REST  │◀───│  MCP HTTP       │
+│  Dashboard  │    │  API + Auth │    │  AI Agent API   │
+└─────────────┘    └──────┬──────┘    └─────────────────┘
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+       ┌────────────┐  ┌──────────┐  ┌───────────┐
+       │  worker/   │  │ Postgres │  │ tracker/  │
+       │  BullMQ    │  │ + Redis  │  │ Pixels &  │
+       │  Workers   │  └──────────┘  │ Clicks    │
+       └────────────┘                └───────────┘
+```
+
+| Service | Technology | Purpose |
+|---------|------------|---------|
+| `web/` | React + Vite + TanStack | Dashboard UI |
+| `api/` | Hono + Better Auth + Drizzle | REST API + auth |
+| `mcp/` | Hono + MCP SDK | AI agent interface |
+| `worker/` | BullMQ + Resend | Email sending + events |
+| `tracker/` | Hono | Open/click pixel tracking |
+
+## License
+
+OpenMail is licensed under the **[Elastic License 2.0 (ELv2)](https://www.elastic.co/licensing/elastic-license)**.
+
+- ✓ Free to use, self-host, and modify
+- ✓ Free for internal business use
+- ✗ Cannot offer OpenMail as a hosted/managed service to third parties
+- ✗ Cannot remove or bypass license protections
+
+For commercial use → [Enterprise License](mailto:kai@1flow.ai)

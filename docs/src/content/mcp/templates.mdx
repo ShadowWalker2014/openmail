@@ -1,0 +1,80 @@
+---
+title: Template Tools
+description: MCP tools for creating and managing reusable email templates.
+---
+
+# Template Tools
+
+4 tools for managing reusable email templates.
+
+## list_templates
+
+List all email templates in the workspace.
+
+> "What templates do I have available?"
+
+---
+
+## create_template
+
+Create a reusable email template. When embedding images, first upload them with `upload_asset_from_url` and use the returned `proxyUrl`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | string | ✓ | Template name shown in dashboard |
+| `subject` | string | ✓ | Default email subject line |
+| `htmlContent` | string | ✓ | Full HTML email body |
+| `previewText` | string | — | Preview text shown in email clients |
+
+**Example:**
+
+> "Create a clean welcome email template with our company name 'Acme', a brief welcome message, and a call-to-action button linking to https://app.acme.com"
+
+```
+Tool: create_template
+{
+  "name": "Welcome Email",
+  "subject": "Welcome to Acme! 🎉",
+  "previewText": "Your account is ready — let's get started.",
+  "htmlContent": "<!DOCTYPE html>
+  <html>
+  <body style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+    <h1 style='color: #1a1a1a;'>Welcome to Acme!</h1>
+    <p>We're thrilled to have you on board.</p>
+    <a href='https://app.acme.com' style='background: #6d28d9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;'>
+      Get Started →
+    </a>
+  </body>
+  </html>"
+}
+```
+
+---
+
+## update_template
+
+Update an existing template's name, subject, preview text, or HTML content.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `templateId` | string | ✓ | Template ID (`tpl_xxx`) |
+| `name` | string | — | New name |
+| `subject` | string | — | New subject |
+| `previewText` | string | — | New preview text |
+| `htmlContent` | string | — | New HTML content |
+
+---
+
+## delete_template
+
+Permanently delete a template. Broadcasts referencing it will lose the template association but retain their inline HTML if any.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `templateId` | string | ✓ | Template ID (`tpl_xxx`) |

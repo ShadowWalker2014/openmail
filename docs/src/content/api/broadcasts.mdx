@@ -1,0 +1,213 @@
+---
+title: Broadcasts API
+description: Create, send, schedule, and track one-off email campaigns to your contact segments.
+---
+
+# Broadcasts API
+
+Broadcasts are one-off email blasts sent to one or more contact segments. A broadcast starts as a draft, then can be sent immediately or scheduled for a future time.
+
+**Base URL:** `/api/v1/broadcasts`
+
+## List Broadcasts
+
+<EndpointBadge method="GET" path="/api/v1/broadcasts" />
+
+Returns all broadcasts in the workspace.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/broadcasts
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "brd_abc123def456",
+    "workspaceId": "ws_xyz789",
+    "name": "March Newsletter",
+    "subject": "What's new in March 🌱",
+    "status": "sent",
+    "segmentIds": ["seg_abc123"],
+    "recipientCount": 4821,
+    "sentCount": 4812,
+    "scheduledAt": null,
+    "sentAt": "2025-03-01T09:00:00.000Z",
+    "createdAt": "2025-02-28T14:00:00.000Z"
+  }
+]
+```
+
+## Get Broadcast
+
+<EndpointBadge method="GET" path="/api/v1/broadcasts/:id" />
+
+Returns a single broadcast with full details.
+
+## Create Broadcast
+
+<EndpointBadge method="POST" path="/api/v1/broadcasts" />
+
+Creates a new broadcast in `draft` status. Either `htmlContent` or `templateId` must be provided.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `name` | string | ✓ | Internal name (not shown to recipients) |
+| `subject` | string | ✓ | Email subject line |
+| `segmentIds` | string[] | ✓ | One or more segment IDs to send to |
+| `htmlContent` | string | * | Full HTML email body |
+| `templateId` | string | * | Saved template ID — use instead of `htmlContent` |
+| `fromEmail` | string | — | Sender address (falls back to workspace default) |
+| `fromName` | string | — | Sender display name |
+| `scheduledAt` | ISO datetime | — | Schedule for future delivery at creation time |
+
+\* Either `htmlContent` or `templateId` required, not both.
+
+```bash
+curl -X POST https://your-api/api/v1/broadcasts \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Welcome Series",
+    "subject": "Welcome to Acme! 👋",
+    "segmentIds": ["seg_abc123"],
+    "htmlContent": "<h1>Welcome!</h1><p>Thanks for joining.</p>",
+    "fromEmail": "hello@acme.com",
+    "fromName": "Acme Team"
+  }'
+```
+
+## Update Broadcast
+
+<EndpointBadge method="PATCH" path="/api/v1/broadcasts/:id" />
+
+Updates a broadcast that is still in `draft` status. Cannot update a sending or sent broadcast. All fields are optional — only provided fields are updated.
+
+Pass `scheduledAt` to schedule (or reschedule) the broadcast. Pass `scheduledAt: null` to clear a previously set schedule and return to draft.
+
+### Request Body
+
+All fields from Create Broadcast are accepted. Additionally:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scheduledAt` | ISO datetime or `null` | Set or clear the scheduled send time |
+
+```bash
+# Schedule a broadcast
+curl -X PATCH https://your-api/api/v1/broadcasts/brd_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "scheduledAt": "2025-03-15T09:00:00Z" }'
+
+# Clear the schedule (back to draft)
+curl -X PATCH https://your-api/api/v1/broadcasts/brd_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "scheduledAt": null }'
+```
+
+## Send Broadcast
+
+<EndpointBadge method="POST" path="/api/v1/broadcasts/:id/send" />
+
+Immediately queues the broadcast for sending. This action is irreversible.
+
+```bash
+curl -X POST https://your-api/api/v1/broadcasts/brd_abc123def456/send \
+  -H "Authorization: Bearer om_..."
+```
+
+Status transitions to `queued` → `sending` → `sent`.
+
+## Test Send
+
+<EndpointBadge method="POST" path="/api/v1/broadcasts/:id/test-send" />
+
+Sends a single test email to a specified address. Does not affect broadcast status or send counts. Useful for previewing the email before sending to the full segment.
+
+```bash
+curl -X POST https://your-api/api/v1/broadcasts/brd_abc123def456/test-send \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "you@example.com" }'
+```
+
+## List Sends
+
+<EndpointBadge method="GET" path="/api/v1/broadcasts/:id/sends" />
+
+Returns paginated email send records for the broadcast. Each record represents one email sent to one contact.
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | integer | `1` | Page number |
+| `pageSize` | integer | `50` | Results per page (max 500) |
+| `status` | string | — | Filter by status: `queued`, `sent`, `failed`, `bounced` |
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/broadcasts/brd_abc123def456/sends?status=failed"
+```
+
+## Top Links
+
+<EndpointBadge method="GET" path="/api/v1/broadcasts/:id/top-links" />
+
+Returns the most clicked links in a sent broadcast, ranked by click count.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/broadcasts/brd_abc123def456/top-links
+```
+
+Response:
+```json
+[
+  { "url": "https://example.com/features", "clicks": 142 },
+  { "url": "https://example.com/pricing", "clicks": 87 }
+]
+```
+
+## Delete Broadcast
+
+<EndpointBadge method="DELETE" path="/api/v1/broadcasts/:id" />
+
+Permanently deletes a draft broadcast. Cannot delete a broadcast that is currently sending or has been sent.
+
+Returns `204 No Content` on success.
+
+## Broadcast Statuses
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Created but not yet sent or scheduled |
+| `scheduled` | Set with a `scheduledAt` in the future |
+| `queued` | Submitted to the send queue |
+| `sending` | Currently being processed by workers |
+| `sent` | All emails delivered to the queue |
+| `failed` | Send failed — check worker logs |
+
+## Broadcast Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`brd_` prefix) |
+| `name` | string | Internal broadcast name |
+| `subject` | string | Email subject line |
+| `status` | string | Current status (see above) |
+| `segmentIds` | string[] | Target segment IDs |
+| `htmlContent` | string or null | Inline HTML content |
+| `templateId` | string or null | Referenced template ID |
+| `fromEmail` | string or null | Sender address |
+| `fromName` | string or null | Sender name |
+| `recipientCount` | integer | Total unique recipients |
+| `sentCount` | integer | Emails sent so far |
+| `scheduledAt` | timestamp or null | Scheduled send time |
+| `sentAt` | timestamp or null | When sending completed |

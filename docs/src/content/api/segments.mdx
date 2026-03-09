@@ -1,0 +1,164 @@
+---
+title: Segments API
+description: Create and manage rule-based dynamic contact segments with flexible filter conditions.
+---
+
+# Segments API
+
+Segments are dynamic groups of contacts defined by rules. When a contact's attributes change, they automatically enter or exit matching segments.
+
+**Base URL:** `/api/v1/segments`
+
+## List Segments
+
+<EndpointBadge method="GET" path="/api/v1/segments" />
+
+Returns all segments in the workspace.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/segments
+```
+
+## Create Segment
+
+<EndpointBadge method="POST" path="/api/v1/segments" />
+
+Creates a new segment with filter conditions.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `name` | string | ✓ | Segment name |
+| `conditions` | array | ✓ | List of filter conditions |
+| `conditionLogic` | `"and"` or `"or"` | — | How to combine conditions (default: `"and"`) |
+| `description` | string | — | Optional description |
+
+### Condition Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `field` | string | Field to evaluate, e.g. `"attributes.plan"`, `"email"` |
+| `operator` | string | Comparison operator (see below) |
+| `value` | string, number, or boolean | Value to compare against (not used with `exists`/`not_exists`) |
+
+### Operators
+
+| Operator | Description |
+|----------|-------------|
+| `eq` | Equals |
+| `ne` | Not equals |
+| `gt` | Greater than |
+| `gte` | Greater than or equal |
+| `lt` | Less than |
+| `lte` | Less than or equal |
+| `contains` | String contains |
+| `not_contains` | String does not contain |
+| `exists` | Field exists (has any value) |
+| `not_exists` | Field does not exist |
+
+### Examples
+
+**All Pro plan users:**
+
+```bash
+curl -X POST https://your-api/api/v1/segments \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Users",
+    "conditions": [
+      { "field": "attributes.plan", "operator": "eq", "value": "pro" }
+    ]
+  }'
+```
+
+**Enterprise users with MRR > $500:**
+
+```bash
+curl -X POST https://your-api/api/v1/segments \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "High-Value Enterprise",
+    "conditionLogic": "and",
+    "conditions": [
+      { "field": "attributes.plan", "operator": "eq", "value": "enterprise" },
+      { "field": "attributes.mrr", "operator": "gt", "value": 500 }
+    ]
+  }'
+```
+
+## Update Segment
+
+<EndpointBadge method="PATCH" path="/api/v1/segments/:id" />
+
+Updates a segment's name, description, conditions, or conditionLogic. All fields are optional.
+
+```bash
+curl -X PATCH https://your-api/api/v1/segments/seg_abc123 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro and Enterprise Users",
+    "conditionLogic": "or",
+    "conditions": [
+      { "field": "attributes.plan", "operator": "eq", "value": "pro" },
+      { "field": "attributes.plan", "operator": "eq", "value": "enterprise" }
+    ]
+  }'
+```
+
+## List Segment Members
+
+<EndpointBadge method="GET" path="/api/v1/segments/:id/people" />
+
+Returns the contacts that currently match this segment's conditions, with pagination.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/segments/seg_abc123/people?page=1&pageSize=50"
+```
+
+## Segment Usage
+
+<EndpointBadge method="GET" path="/api/v1/segments/:id/usage" />
+
+Returns which broadcasts and campaigns are using this segment. Useful before deleting a segment.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/segments/seg_abc123/usage
+```
+
+```json
+{
+  "broadcasts": [
+    { "id": "brd_xxx", "name": "March Newsletter" }
+  ],
+  "campaigns": [
+    { "id": "cmp_yyy", "name": "Welcome Series" }
+  ]
+}
+```
+
+## Delete Segment
+
+<EndpointBadge method="DELETE" path="/api/v1/segments/:id" />
+
+Permanently deletes a segment. Broadcasts and campaigns referencing it will lose the segment reference. Use the `usage` endpoint first to check dependencies.
+
+Returns `204 No Content`.
+
+## Segment Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`seg_` prefix) |
+| `name` | string | Segment name |
+| `description` | string or null | Optional description |
+| `conditions` | array | Filter conditions |
+| `conditionLogic` | string | `"and"` or `"or"` |
+| `createdAt` | timestamp | Creation time |
+| `updatedAt` | timestamp | Last update time |

@@ -1,0 +1,90 @@
+---
+title: Events API
+description: Track customer activity to trigger campaigns and enrich contact profiles.
+---
+
+# Events API
+
+Events represent customer activity in your product. Tracking events is what powers campaign automation — when a contact triggers an event, any active campaign listening for that event name is automatically activated for that contact.
+
+**Base URL:** `/api/v1/events`
+
+## Track Event
+
+<EndpointBadge method="POST" path="/api/v1/events/track" />
+
+Records a customer event and triggers any matching active campaigns.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address. The contact is created if it doesn't exist. |
+| `name` | string | ✓ | Event name (e.g. `user_signed_up`, `plan_upgraded`) |
+| `properties` | object | — | Event-specific data (any JSON object) |
+| `occurredAt` | ISO datetime | — | When the event actually occurred. Defaults to the current time if omitted. Useful for backfilling historical events. |
+
+```bash
+curl -X POST https://your-api/api/v1/events/track \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@acme.com",
+    "name": "plan_upgraded",
+    "properties": {
+      "from_plan": "starter",
+      "to_plan": "pro",
+      "mrr": 99
+    }
+  }'
+```
+
+### Response
+
+```json
+{ "ok": true }
+```
+
+## How Event Triggering Works
+
+When you call `track`, OpenMail:
+
+1. Creates or upserts the contact by email
+2. Records the event with its properties
+3. Looks up all active campaigns with `triggerType: "event"` and `triggerConfig.eventName` matching the event name
+4. Enqueues the contact into each matching campaign's flow
+
+The campaign steps execute asynchronously in the background worker.
+
+## Event Naming Conventions
+
+Use `snake_case` event names. Common patterns:
+
+| Event Name | When to fire |
+|------------|-------------|
+| `user_signed_up` | New user registration |
+| `plan_upgraded` | Subscription upgrade |
+| `plan_downgraded` | Subscription downgrade |
+| `trial_started` | Free trial begins |
+| `trial_ended` | Free trial expires |
+| `feature_used` | Key feature activated |
+| `invoice_paid` | Payment received |
+| `churn` | Subscription cancelled |
+| `password_reset` | Password reset request |
+
+## Contact Auto-Creation
+
+If no contact with the given email exists in the workspace, one is created automatically when you call `track`. This means you can track events before explicitly creating contacts — OpenMail handles it.
+
+## Event Object
+
+Events are stored and accessible via the workspace (for automation and analytics). Each event has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`evt_` prefix) |
+| `workspaceId` | string | Workspace |
+| `contactId` | string | Associated contact |
+| `name` | string | Event name |
+| `properties` | object | Event properties |
+| `createdAt` | timestamp | When the event was tracked |

@@ -1,0 +1,76 @@
+---
+title: Analytics Tools
+description: MCP tools for retrieving email performance metrics.
+---
+
+# Analytics Tools
+
+2 tools for pulling email performance data.
+
+## get_analytics
+
+Get workspace-wide analytics for the last 30 days, including contacts, sends, open rate, click rate, and unsubscribes.
+
+No parameters required.
+
+> "What is my overall email performance over the last 30 days?"
+
+**Returns:**
+
+```json
+{
+  "totalContacts": 12453,
+  "newContactsLast30Days": 847,
+  "totalSends": 58920,
+  "openRate": 0.243,
+  "clickRate": 0.051,
+  "unsubscribeRate": 0.008
+}
+```
+
+**Useful questions to ask:**
+
+- "How many contacts do I have and how many are new this month?"
+- "What's my average open rate?"
+- "How many emails have I sent in the last 30 days?"
+
+---
+
+## get_broadcast_analytics
+
+Get detailed analytics for a specific broadcast.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `broadcastId` | string | ✓ | Broadcast ID (`brd_xxx`) |
+
+> "How did my March Newsletter perform? Give me open rates, click rates, and unsubscribes."
+
+```
+Tool: get_broadcast_analytics
+{ "broadcastId": "brd_abc123def456" }
+```
+
+**Returns:**
+
+```json
+{
+  "broadcastId": "brd_abc123def456",
+  "name": "March Newsletter",
+  "recipientCount": 4821,
+  "sentCount": 4812,
+  "openCount": 1169,
+  "clickCount": 245,
+  "unsubscribeCount": 12,
+  "openRate": 0.243,
+  "clickRate": 0.051
+}
+```
+
+**Tip:** Combine with `list_broadcasts` to find a broadcast by name:
+
+> "Find my most recent broadcast and show me its performance metrics."
+
+The agent will call `list_broadcasts` to find the ID, then `get_broadcast_analytics` to retrieve metrics.

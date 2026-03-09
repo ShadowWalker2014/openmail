@@ -1,0 +1,245 @@
+---
+title: React SDK
+description: React provider and hooks for OpenMail — useTrack, useIdentify, useAutoIdentify, and more.
+---
+
+# React SDK
+
+The React SDK provides a context provider and hooks for integrating OpenMail tracking into React applications.
+
+## Setup
+
+```tsx
+import { OpenMailProvider } from "@openmail/sdk/react";
+
+export default function App() {
+  return (
+    <OpenMailProvider
+      apiKey={import.meta.env.VITE_OPENMAIL_KEY}
+      autoPageView={true}
+    >
+      <Router />
+    </OpenMailProvider>
+  );
+}
+```
+
+The provider creates a single `OpenMailBrowser` instance and makes it available to all children via context.
+
+## Hooks
+
+### useTrack()
+
+Returns a stable `track` function.
+
+```tsx
+import { useTrack } from "@openmail/sdk/react";
+
+function UpgradeButton() {
+  const track = useTrack();
+
+  return (
+    <button
+      onClick={() => track("upgrade_clicked", { plan: "pro", page: "/pricing" })}
+    >
+      Upgrade to Pro
+    </button>
+  );
+}
+```
+
+### useIdentify()
+
+Returns a stable `identify` function.
+
+```tsx
+import { useIdentify } from "@openmail/sdk/react";
+
+function LoginButton() {
+  const identify = useIdentify();
+
+  async function handleLogin(email: string) {
+    const user = await loginUser(email);
+    await identify(user.email, {
+      firstName: user.firstName,
+      plan: user.plan,
+    });
+  }
+}
+```
+
+### useAutoIdentify()
+
+Automatically calls `identify()` when the user changes, and `reset()` on logout. Use this in your auth layer.
+
+```tsx
+import { useAutoIdentify } from "@openmail/sdk/react";
+import { useAuth } from "./auth";
+
+function AuthSync() {
+  const { user } = useAuth();
+
+  // Automatically identifies when user logs in, resets when they log out
+  useAutoIdentify(
+    user?.email ?? null,
+    { firstName: user?.firstName, plan: user?.plan }
+  );
+
+  return null;
+}
+
+// Add <AuthSync /> to your app root:
+function App() {
+  return (
+    <OpenMailProvider apiKey="om_...">
+      <AuthSync />
+      <Router />
+    </OpenMailProvider>
+  );
+}
+```
+
+### usePage()
+
+Returns a stable `page` function for manual page tracking (not needed with `autoPageView: true`).
+
+```tsx
+import { usePage } from "@openmail/sdk/react";
+
+function PageTracker() {
+  const page = usePage();
+  const location = useLocation();
+
+  useEffect(() => {
+    page(document.title, { path: location.pathname });
+  }, [location.pathname]);
+
+  return null;
+}
+```
+
+### useGroup()
+
+Returns a stable `group` function.
+
+```tsx
+import { useGroup } from "@openmail/sdk/react";
+
+function WorkspaceSync({ workspace }) {
+  const group = useGroup();
+
+  useEffect(() => {
+    if (workspace) {
+      group(workspace.id, {
+        name: workspace.name,
+        plan: workspace.plan,
+        seats: workspace.seats,
+      });
+    }
+  }, [workspace?.id]);
+}
+```
+
+### useOpenMail()
+
+Access the full SDK instance directly for advanced usage.
+
+```tsx
+import { useOpenMail } from "@openmail/sdk/react";
+
+function AdminPanel() {
+  const openmail = useOpenMail();
+
+  async function handleExport() {
+    // Access full API
+    const stats = await openmail.analytics.overview();
+    openmail.track("export_started", { type: "analytics" });
+  }
+}
+```
+
+## Full Example: React App with Auth
+
+```tsx
+import { OpenMailProvider, useAutoIdentify, useTrack } from "@openmail/sdk/react";
+import { useUser } from "./hooks/use-user";
+
+// Provider at app root
+function Root() {
+  return (
+    <OpenMailProvider
+      apiKey={import.meta.env.VITE_OPENMAIL_KEY}
+      autoPageView={true}
+      persistence="localStorage"
+    >
+      <App />
+    </OpenMailProvider>
+  );
+}
+
+// Auth sync component
+function AuthSync() {
+  const { user, isLoaded } = useUser();
+
+  useAutoIdentify(
+    isLoaded ? (user?.email ?? null) : undefined,
+    user ? {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      plan: user.subscriptionPlan,
+      createdAt: user.createdAt,
+    } : undefined
+  );
+
+  return null;
+}
+
+// Component with tracking
+function PricingPage() {
+  const track = useTrack();
+
+  return (
+    <div>
+      <h1>Pricing</h1>
+      {plans.map((plan) => (
+        <button
+          key={plan.id}
+          onClick={() => track("plan_selected", { plan: plan.id, price: plan.price })}
+        >
+          {plan.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+```
+
+## TypeScript
+
+All hooks are fully typed:
+
+```tsx
+import type { Properties, Traits } from "@openmail/sdk/react";
+
+const track = useTrack();
+track("event_name", { key: "value" } satisfies Properties);
+
+const identify = useIdentify();
+identify("alice@example.com", { plan: "pro" } satisfies Traits);
+```
+
+## Provider Props
+
+`OpenMailProvider` accepts all `BrowserConfig` options plus `children`:
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `apiKey` | `string` | **required** | Workspace API key |
+| `apiUrl` | `string` | auto | API base URL |
+| `autoPageView` | `boolean` | `true` | Auto page view tracking |
+| `persistence` | `string` | `"localStorage"` | Storage backend |
+| `cookieDomain` | `string` | — | Cookie domain |
+| `flushAt` | `number` | `20` | Batch size |
+| `flushInterval` | `number` | `5000` | Flush interval (ms) |
+| `disabled` | `boolean` | `false` | Disable all tracking |
+| `debug` | `boolean` | `false` | Debug logging |

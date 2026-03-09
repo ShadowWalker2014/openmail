@@ -97,6 +97,20 @@
     --violet: 250 89% 70%;              /* #7c6af8 */
     --violet-foreground: 0 0% 98%;
 
+    /* Status colors */
+    --success: 152 69% 40%;             /* emerald-600 */
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;              /* amber-500 */
+    --warning-foreground: 0 0% 6%;
+
+    /* Z-index scale */
+    --z-base:     0;
+    --z-raised:   10;
+    --z-dropdown: 20;
+    --z-overlay:  30;
+    --z-modal:    40;
+    --z-command:  50;
+
     /* Motion easing — spring for entrances, ease-out for micro */
     --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ease-out: cubic-bezier(0, 0, 0.2, 1);
@@ -229,6 +243,50 @@
   }
   .drag-handle:hover, [data-drag-group]:hover .drag-handle { opacity: 1; }
   .drag-handle:active { cursor: grabbing; }
+
+  /* ── Status badge utilities ── */
+  .badge-success { background: hsl(var(--success) / 0.15); color: hsl(152 69% 55%); }
+  .badge-error   { background: hsl(var(--destructive) / 0.15); color: hsl(var(--destructive)); }
+  .badge-warning { background: hsl(var(--warning) / 0.15); color: hsl(38 92% 60%); }
+  .badge-neutral { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+  .badge-violet  { background: hsl(var(--violet) / 0.15); color: hsl(var(--violet)); }
+
+  /* ── Interactive row — full-row hover highlight ── */
+  .interactive-row {
+    transition: background-color 100ms var(--ease-out);
+    cursor: pointer;
+  }
+  .interactive-row:hover { background: hsl(var(--accent) / 0.5); }
+  .interactive-row:active { background: hsl(var(--accent) / 0.8); }
+
+  /* ── Row actions — visible only on parent hover ── */
+  .row-actions {
+    opacity: 0;
+    transition: opacity 150ms var(--ease-out);
+  }
+  [data-row]:hover .row-actions,
+  .interactive-row:hover .row-actions { opacity: 1; }
+
+  /* ── Glass surface — for nav, overlays ── */
+  .glass {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: hsl(var(--background) / 0.85);
+    border-color: hsl(var(--border) / 0.6);
+  }
+
+  /* ── Top edge gradient line (hover reveal on cards) ── */
+  .edge-glow::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, hsl(var(--violet) / 0.3), transparent);
+    opacity: 0;
+    transition: opacity 300ms var(--ease-out);
+  }
+  .edge-glow:hover::before { opacity: 1; }
 }
 
 /* ── Keyframes ── */

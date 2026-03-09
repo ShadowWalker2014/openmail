@@ -1,0 +1,110 @@
+---
+title: Configuration
+description: Complete reference for all environment variables across OpenMail services.
+---
+
+# Configuration
+
+OpenMail is configured entirely through environment variables. Each service has its own set of required and optional variables.
+
+## API Service (`api/`)
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `DATABASE_URL` | ✓ | PostgreSQL connection string |
+| `REDIS_URL` | ✓ | Redis connection string |
+| `BETTER_AUTH_SECRET` | ✓ | 32+ char random secret — generate with `openssl rand -base64 32` |
+| `BETTER_AUTH_URL` | ✓ | Public URL of the API service (e.g. `https://api.openmail.win`) |
+| `WEB_URL` | ✓ | Public URL of the web dashboard (for CORS and redirects) |
+| `RESEND_API_KEY` | ✓ | Platform Resend API key for system emails (invites, password resets) |
+| `PLATFORM_FROM_EMAIL` | ✓ | Sender address for system emails — must be verified in Resend |
+| `PLATFORM_FROM_NAME` | — | Sender display name (default: `OpenMail`) |
+| `DEFAULT_FROM_EMAIL` | — | Fallback sender for workspace campaigns without a custom key |
+| `DEFAULT_FROM_NAME` | — | Fallback sender name (default: `OpenMail`) |
+| `TRACKER_URL` | — | Public URL of tracker service — enables open/click tracking in emails |
+| `PORT` | — | HTTP port (default: `3001`) |
+
+## Worker Service (`worker/`)
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `DATABASE_URL` | ✓ | Same PostgreSQL instance as api |
+| `REDIS_URL` | ✓ | Same Redis instance as api |
+| `RESEND_API_KEY` | ✓ | Platform Resend API key |
+| `TRACKER_URL` | ✓ | Public URL of tracker service (for open/click tracking URLs in emails) |
+| `DEFAULT_FROM_EMAIL` | — | Fallback sender for workspace campaign emails |
+| `DEFAULT_FROM_NAME` | — | Fallback sender name |
+
+## Tracker Service (`tracker/`)
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `API_URL` | ✓ | Internal URL of the API service (for reporting events back) |
+| `PORT` | — | HTTP port (default: `3003`) |
+
+## MCP Service (`mcp/`)
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `API_URL` | ✓ | Internal URL of the API service |
+| `PORT` | — | HTTP port (default: `3002`) |
+
+## Asset Storage (Optional)
+
+When you link a Railway Object Storage bucket to the api service, these are injected automatically:
+
+| Variable | Source |
+|----------|--------|
+| `AWS_ENDPOINT_URL` | Railway Storage |
+| `AWS_DEFAULT_REGION` | Railway Storage |
+| `AWS_S3_BUCKET_NAME` | Railway Storage |
+| `AWS_ACCESS_KEY_ID` | Railway Storage |
+| `AWS_SECRET_ACCESS_KEY` | Railway Storage |
+
+If these are not set, the Assets feature is disabled and the UI will indicate storage is not configured.
+
+## Example `.env` files
+
+### `api/.env.local`
+
+```bash
+DATABASE_URL=postgresql://postgres:password@localhost:5432/openmail
+REDIS_URL=redis://localhost:6379
+
+BETTER_AUTH_SECRET=your-generated-secret-here
+BETTER_AUTH_URL=http://localhost:3001
+WEB_URL=http://localhost:5173
+
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PLATFORM_FROM_EMAIL=noreply@yourdomain.com
+PLATFORM_FROM_NAME=OpenMail
+
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+DEFAULT_FROM_NAME=OpenMail
+
+TRACKER_URL=http://localhost:3003
+```
+
+### `worker/.env.local`
+
+```bash
+DATABASE_URL=postgresql://postgres:password@localhost:5432/openmail
+REDIS_URL=redis://localhost:6379
+
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TRACKER_URL=http://localhost:3003
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+```
+
+### `tracker/.env.local`
+
+```bash
+API_URL=http://localhost:3001
+```
+
+## Security Notes
+
+- Generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32` — use a different value for each environment
+- Never commit `.env.local` files to version control — they are gitignored
+- The `.env` file (not `.env.local`) is used for public build-time variables only
+- In production, inject secrets via Railway dashboard → Service Variables, not files

@@ -1,0 +1,293 @@
+---
+title: Node.js SDK
+description: Server-side TypeScript SDK with full API coverage, event batching, and Segment/PostHog compatibility.
+---
+
+# Node.js SDK
+
+The server-side SDK provides full API coverage with automatic event batching, retries, and Segment/PostHog-compatible tracking methods.
+
+## Setup
+
+```ts
+import { OpenMail } from "@openmail/sdk";
+
+const openmail = new OpenMail({
+  apiKey: "om_your_workspace_api_key",
+  apiUrl: "https://api.openmail.win", // optional, this is the default
+});
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | `string` | **required** | Workspace API key (starts with `om_`) |
+| `apiUrl` | `string` | `https://api.openmail.win` | API base URL |
+| `flushAt` | `number` | `20` | Events to buffer before flushing |
+| `flushInterval` | `number` | `10000` | Max ms between automatic flushes |
+| `maxRetries` | `number` | `3` | Retries on transient errors (500, 502, 503, 504) |
+| `timeout` | `number` | `10000` | Request timeout in ms |
+| `disabled` | `boolean` | `false` | Disable all tracking (e.g. in test environments) |
+| `debug` | `boolean` | `false` | Log all requests/responses to console |
+
+## Core Methods
+
+### identify()
+
+Create or update a contact. Equivalent to Segment's `analytics.identify()`.
+
+```ts
+// Email as userId
+await openmail.identify("alice@example.com", {
+  firstName: "Alice",
+  lastName: "Smith",
+  plan: "pro",
+  company: "Acme Corp",
+  mrr: 99,
+});
+
+// Separate userId with email in traits (Segment pattern)
+await openmail.identify("user_123", {
+  email: "alice@example.com",
+  plan: "pro",
+});
+```
+
+**Trait mapping:**
+
+| Trait | Maps to |
+|-------|---------|
+| `email` / userId (if it's an email) | `contact.email` |
+| `firstName` / `first_name` | `contact.firstName` |
+| `lastName` / `last_name` | `contact.lastName` |
+| `phone` | `contact.phone` |
+| Anything else | `contact.attributes[key]` |
+
+### track()
+
+Track a customer event. **Fire-and-forget** — returns immediately; flush happens in the background.
+
+```ts
+await openmail.track("plan_upgraded", {
+  from_plan: "starter",
+  to_plan: "pro",
+  mrr: 99,
+}, {
+  userId: "alice@example.com", // required if identify() not called first
+  timestamp: "2025-03-01T09:00:00Z", // optional - when the event occurred
+});
+```
+
+After calling `identify()`, the `userId` option is not required:
+
+```ts
+await openmail.identify("alice@example.com", {});
+
+// userId remembered for subsequent calls
+await openmail.track("feature_used", { feature: "analytics" });
+await openmail.track("export_created", { format: "csv" });
+
+// Flush all queued events before exit
+await openmail.flush();
+```
+
+### page()
+
+Track a server-side page view.
+
+```ts
+await openmail.page("Dashboard", { path: "/dashboard" }, { userId: "alice@example.com" });
+```
+
+### group()
+
+Associate a user with a group (company, team, workspace).
+
+```ts
+await openmail.group("acme-corp", {
+  name: "Acme Corp",
+  plan: "enterprise",
+  seats: 50,
+}, { userId: "alice@example.com" });
+```
+
+### alias()
+
+Link an anonymous user to an identified user (e.g. after sign-up).
+
+```ts
+await openmail.alias("alice@example.com", "anon_device_id");
+```
+
+### capture()
+
+PostHog-compatible alias for `track()`.
+
+```ts
+// PostHog style
+await openmail.capture("button_clicked", { button: "upgrade" });
+```
+
+### reset()
+
+Clear the current user context (call on logout).
+
+```ts
+openmail.reset();
+```
+
+### flush() / shutdown()
+
+```ts
+// Flush pending events (call before process exit)
+await openmail.flush();
+
+// Shutdown: flush + destroy timer (long-running scripts)
+await openmail.shutdown();
+process.exit(0);
+```
+
+## Full API Namespaces
+
+The SDK includes typed sub-clients for all OpenMail resources:
+
+### `openmail.contacts`
+
+```ts
+// List with pagination
+const { data, total } = await openmail.contacts.list({ page: 1, pageSize: 50, search: "@acme.com" });
+
+// Create / upsert
+const contact = await openmail.contacts.create({ email: "bob@acme.com", attributes: { plan: "pro" } });
+
+// Get by ID
+const contact = await openmail.contacts.get("con_abc123");
+
+// Update (attributes are merged)
+await openmail.contacts.update("con_abc123", { attributes: { plan: "enterprise" } });
+
+// Get event history
+const events = await openmail.contacts.events("con_abc123", { pageSize: 20 });
+
+// Get email send history
+const sends = await openmail.contacts.sends("con_abc123");
+
+// Delete
+await openmail.contacts.delete("con_abc123");
+```
+
+### `openmail.broadcasts`
+
+```ts
+const broadcasts = await openmail.broadcasts.list();
+
+const broadcast = await openmail.broadcasts.create({
+  name: "March Newsletter",
+  subject: "What's new in March 🌱",
+  segmentIds: ["seg_abc123"],
+  htmlContent: "<h1>Hello!</h1>",
+  fromEmail: "hello@acme.com",
+  fromName: "Acme Team",
+});
+
+await openmail.broadcasts.send(broadcast.id);
+
+// Schedule instead of sending immediately
+await openmail.broadcasts.schedule(broadcast.id, "2025-03-15T09:00:00Z");
+
+// Send test email
+await openmail.broadcasts.testSend(broadcast.id, "preview@acme.com");
+
+// Top clicked links
+const links = await openmail.broadcasts.topLinks(broadcast.id);
+```
+
+### `openmail.campaigns`
+
+```ts
+const campaign = await openmail.campaigns.create({
+  name: "Welcome Series",
+  triggerType: "event",
+  triggerConfig: { eventName: "user_signed_up" },
+});
+
+// Add steps
+await openmail.campaigns.addStep(campaign.id, {
+  stepType: "email",
+  config: { templateId: "tpl_welcome" },
+});
+await openmail.campaigns.addStep(campaign.id, {
+  stepType: "wait",
+  config: { delaySeconds: 259200 }, // 3 days
+});
+
+// Activate
+await openmail.campaigns.activate(campaign.id);
+
+// Pause
+await openmail.campaigns.pause(campaign.id);
+```
+
+### `openmail.segments`
+
+```ts
+const segment = await openmail.segments.create({
+  name: "Pro Users",
+  conditions: [
+    { field: "attributes.plan", operator: "eq", value: "pro" },
+  ],
+});
+
+// Get members
+const { data: contacts } = await openmail.segments.members(segment.id);
+
+// Check usage before deleting
+const usage = await openmail.segments.usage(segment.id);
+if (usage.broadcasts.length === 0 && usage.campaigns.length === 0) {
+  await openmail.segments.delete(segment.id);
+}
+```
+
+### `openmail.analytics`
+
+```ts
+const stats = await openmail.analytics.overview();
+console.log(`Open rate: ${(stats.openRate * 100).toFixed(1)}%`);
+console.log(`Total contacts: ${stats.totalContacts}`);
+
+const broadcastStats = await openmail.analytics.broadcast("brd_abc123");
+```
+
+## setUserProperties()
+
+Merge properties onto a contact (fetches existing attributes first):
+
+```ts
+// Safely merges — won't overwrite existing attributes
+await openmail.setUserProperties("alice@example.com", {
+  lastSeenAt: new Date().toISOString(),
+  featureFlags: { newDashboard: true },
+});
+```
+
+## High-Volume Usage
+
+For high-volume event tracking (e.g. webhooks, batch jobs):
+
+```ts
+const openmail = new OpenMail({
+  apiKey: "om_...",
+  flushAt: 50,        // flush every 50 events
+  flushInterval: 5000, // or every 5 seconds
+});
+
+// Process thousands of events
+for (const event of events) {
+  openmail.track(event.name, event.properties, { userId: event.email });
+  // Events are batched automatically
+}
+
+// Wait for all to flush before exiting
+await openmail.flush();
+```

@@ -5,6 +5,7 @@ import { useSession } from "@/lib/auth-client";
 import { useWorkspaceStore } from "@/store/workspace";
 import { Button } from "@/components/ui/button";
 import { Mail, ShieldCheck } from "lucide-react";
+import { LogoIcon } from "@/components/logo-icon";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/invite/$token")({
@@ -83,9 +84,7 @@ function InviteAcceptPage() {
       <div className="relative w-full max-w-[360px]">
         {/* Logo */}
         <div className="mb-6 flex justify-center">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-border bg-muted">
-            <Mail className="h-4 w-4 text-foreground/80" />
-          </div>
+          <LogoIcon size={32} className="rounded-[7px]" />
         </div>
 
         {isLoading && (

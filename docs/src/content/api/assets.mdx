@@ -1,0 +1,174 @@
+---
+title: Assets API
+description: Upload and manage images, PDFs, and other files for use in email templates.
+---
+
+# Assets API
+
+Assets are uploaded files (images, videos, PDFs) stored in Railway Object Storage (S3-compatible). Each asset gets a stable `proxyUrl` that can be embedded in email HTML.
+
+**Base URL:** `/api/v1/assets`
+
+## List Assets
+
+<EndpointBadge method="GET" path="/api/v1/assets" />
+
+Returns all assets in the workspace.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  https://your-api/api/v1/assets
+```
+
+### Response
+
+```json
+[
+  {
+    "id": "ast_abc123def456",
+    "workspaceId": "ws_xyz789",
+    "name": "Product Banner",
+    "fileName": "banner.png",
+    "mimeType": "image/png",
+    "size": 148320,
+    "proxyUrl": "https://your-api/api/public/assets/ws_xyz789/ast_abc123def456",
+    "createdAt": "2025-01-15T10:00:00.000Z"
+  }
+]
+```
+
+## Get Asset
+
+<EndpointBadge method="GET" path="/api/v1/assets/:id" />
+
+Returns a single asset by ID including its `proxyUrl`.
+
+<EndpointBadge method="GET" path="/api/v1/assets/:id/url" />
+
+Backwards-compatible alias — also returns the asset with `proxyUrl`. Equivalent to `GET /:id`.
+
+## Upload from URL
+
+<EndpointBadge method="POST" path="/api/v1/assets/upload-from-url" />
+
+Uploads a file from any public URL. The API fetches the file server-side and stores it in S3.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `url` | string | ✓ | Public URL of the image or file |
+| `name` | string | — | Display name in the asset library |
+
+```bash
+curl -X POST https://your-api/api/v1/assets/upload-from-url \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/banner.png",
+    "name": "Product Banner"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "ast_abc123def456",
+  "name": "Product Banner",
+  "proxyUrl": "https://your-api/api/public/assets/ws_xyz789/ast_abc123def456",
+  "fileName": "banner.png",
+  "mimeType": "image/png",
+  "size": 148320
+}
+```
+
+## Upload Base64
+
+<EndpointBadge method="POST" path="/api/v1/assets/upload-base64" />
+
+Uploads a file from base64-encoded content. Use this when you have file content in memory (e.g. AI-generated images).
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `content` | string | ✓ | Base64-encoded file content |
+| `fileName` | string | ✓ | File name with extension (e.g. `banner.png`) |
+| `mimeType` | string | ✓ | MIME type (e.g. `image/png`) |
+| `name` | string | — | Display name in the asset library |
+
+### Supported Types
+
+- Images: `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/svg+xml`
+- Video: `video/mp4`, `video/webm`
+- Documents: `application/pdf`
+
+Max file size: **25 MB**
+
+## Get Upload URL (Direct Upload)
+
+<EndpointBadge method="POST" path="/api/v1/assets/upload-url" />
+
+Returns a presigned S3 PUT URL for direct browser upload (5-minute expiry). The client uploads the file directly to S3 without going through the API server.
+
+```bash
+curl -X POST https://your-api/api/v1/assets/upload-url \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileName": "banner.png",
+    "mimeType": "image/png",
+    "size": 148320,
+    "name": "Product Banner"
+  }'
+```
+
+Response:
+```json
+{
+  "assetId": "ast_abc123def456",
+  "uploadUrl": "https://...(presigned S3 URL)...",
+  "proxyUrl": "https://your-api/api/public/assets/ws_xyz789/ast_abc123def456"
+}
+```
+
+## Delete Asset
+
+<EndpointBadge method="DELETE" path="/api/v1/assets/:id" />
+
+Permanently deletes an asset from storage and the library. Any emails using the asset's URL will show a broken image.
+
+## Public Asset URL
+
+Assets are served publicly (no auth required) at:
+
+```
+GET /api/public/assets/:workspaceId/:assetId
+```
+
+This URL is stable and safe to embed in email HTML. It streams the file from S3 through the API with proper `Content-Type` headers.
+
+## Email Usage Workflow
+
+When building emails with images:
+
+1. Upload the image → get `proxyUrl`
+2. Create or update a template using the `proxyUrl`:
+   ```html
+   <img src="{{proxyUrl}}" alt="Banner" style="max-width:100%;display:block" />
+   ```
+3. Create a broadcast referencing the template
+4. Send the broadcast
+
+## Asset Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`ast_` prefix) |
+| `name` | string or null | Display name |
+| `fileName` | string | Original filename with extension |
+| `mimeType` | string | File MIME type |
+| `size` | integer | File size in bytes |
+| `proxyUrl` | string | Stable public URL for embedding in emails |
+| `createdAt` | timestamp | Upload time |

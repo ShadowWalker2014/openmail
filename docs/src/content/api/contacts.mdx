@@ -1,0 +1,182 @@
+---
+title: Contacts API
+description: Create, update, search, and delete contacts. Access per-contact events and email send history.
+---
+
+# Contacts API
+
+Contacts are people you want to email. Each contact belongs to a workspace and has an email address plus flexible key-value attributes.
+
+**Base URL:** `/api/v1/contacts`
+
+## List Contacts
+
+<EndpointBadge method="GET" path="/api/v1/contacts" />
+
+Returns a paginated list of contacts. Supports search by email.
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | integer | `1` | Page number |
+| `pageSize` | integer | `50` | Results per page (max 500) |
+| `search` | string | — | Filter contacts by email (partial match) |
+
+### Example Request
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/contacts?page=1&pageSize=50&search=acme.com"
+```
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "con_abc123def456",
+      "workspaceId": "ws_xyz789",
+      "email": "alice@acme.com",
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "attributes": { "plan": "pro", "company": "Acme" },
+      "unsubscribed": false,
+      "createdAt": "2025-01-15T10:00:00.000Z",
+      "updatedAt": "2025-01-15T10:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 50
+}
+```
+
+## Create / Upsert Contact
+
+<EndpointBadge method="POST" path="/api/v1/contacts" />
+
+Creates a new contact or updates an existing one. Deduplication is by `email` within the workspace — if a contact with that email already exists, it is updated (`200`). A new contact returns `201`.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `email` | string | ✓ | Contact email address |
+| `firstName` | string | — | First name |
+| `lastName` | string | — | Last name |
+| `phone` | string | — | Phone number |
+| `attributes` | object | — | Custom key-value traits (any JSON object) |
+
+```bash
+curl -X POST https://your-api/api/v1/contacts \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@acme.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "attributes": {
+      "plan": "pro",
+      "company": "Acme Corp",
+      "mrr": 99
+    }
+  }'
+```
+
+## Get Contact
+
+<EndpointBadge method="GET" path="/api/v1/contacts/:id" />
+
+Returns a single contact by ID.
+
+## Update Contact
+
+<EndpointBadge method="PATCH" path="/api/v1/contacts/:id" />
+
+Updates a contact's fields. Only provided fields are updated. For `attributes`, the provided object is **merged** — existing keys not listed are preserved.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `firstName` | string | Updated first name |
+| `lastName` | string | Updated last name |
+| `phone` | string | Updated phone number |
+| `attributes` | object | Attributes to merge (not replace) |
+
+```bash
+curl -X PATCH https://your-api/api/v1/contacts/con_abc123def456 \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attributes": { "plan": "enterprise", "seats": 50 }
+  }'
+```
+
+## Delete Contact
+
+<EndpointBadge method="DELETE" path="/api/v1/contacts/:id" />
+
+Permanently deletes a contact and all associated data. Returns `204 No Content`.
+
+## Contact Events
+
+<EndpointBadge method="GET" path="/api/v1/contacts/:id/events" />
+
+Returns the event history for a contact — all tracked events in reverse chronological order.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/contacts/con_abc123def456/events?page=1&pageSize=50"
+```
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "evt_xyz789",
+      "name": "plan_upgraded",
+      "properties": { "from_plan": "starter", "to_plan": "pro" },
+      "createdAt": "2025-02-10T14:22:00.000Z"
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "pageSize": 50
+}
+```
+
+## Contact Email Sends
+
+<EndpointBadge method="GET" path="/api/v1/contacts/:id/sends" />
+
+Returns the email send history for a contact — every email sent to them across all broadcasts and campaigns.
+
+```bash
+curl -H "Authorization: Bearer om_..." \
+  "https://your-api/api/v1/contacts/con_abc123def456/sends?page=1&pageSize=50"
+```
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | integer | `1` | Page number |
+| `pageSize` | integer | `50` | Results per page (max 500) |
+
+## Contact Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (`con_` prefix) |
+| `workspaceId` | string | Workspace this contact belongs to |
+| `email` | string | Email address (unique per workspace) |
+| `firstName` | string or null | First name |
+| `lastName` | string or null | Last name |
+| `phone` | string or null | Phone number |
+| `attributes` | object | Custom key-value attributes |
+| `unsubscribed` | boolean | Whether the contact has unsubscribed |
+| `createdAt` | ISO timestamp | When the contact was created |
+| `updatedAt` | ISO timestamp | When the contact was last updated |
