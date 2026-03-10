@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
-import { segments, contacts, broadcasts, campaigns } from "@openmail/shared/schema";
+import { segments, contacts, broadcasts, campaigns, events as eventsTable, contactGroups, groups } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -146,9 +146,77 @@ app.get("/:id/people", async (c) => {
 
   const conditions = (segment.conditions as any[]) ?? [];
 
-  function buildClause(cond: { field: string; operator: string; value?: string }): SQL | null {
-    const { field, operator, value } = cond;
+  /**
+   * Build a SQL clause for a single segment condition.
+   *
+   * Supported field paths:
+   *   email, firstName, lastName, phone, unsubscribed
+   *   attributes.<key>          → JSONB text extraction
+   *   event.<event_name>        → EXISTS subquery in events table
+   *   group.<group_type>        → EXISTS subquery in contact_groups + groups
+   *
+   * Operators:
+   *   eq / equals, ne / not_equals
+   *   contains, not_contains
+   *   exists / is_set, not_exists / is_not_set
+   *   gt, lt, gte, lte  (numeric — cast attribute value to numeric)
+   */
+  function buildClause(cond: { field: string; operator: string; value?: string | number | boolean }): SQL | null {
+    const { field, operator: op, value } = cond;
 
+    // ── Event-based conditions ──────────────────────────────────────────────
+    // field: "event.<event_name>"
+    // is_set / exists → contact has triggered this event at least once
+    // not_exists / is_not_set → contact has NEVER triggered this event
+    // eq / equals → (same as is_set, for compatibility)
+    if (field.startsWith("event.")) {
+      const eventName = field.slice("event.".length);
+      if (!eventName) return null;
+      const hasEvent = sql`EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.contact_id = ${contacts.id}
+          AND e.name = ${eventName}
+          AND e.workspace_id = ${workspaceId}
+      )`;
+      if (op === "exists" || op === "is_set" || op === "eq" || op === "equals") {
+        return hasEvent;
+      }
+      if (op === "not_exists" || op === "is_not_set" || op === "ne" || op === "not_equals") {
+        return sql`NOT ${hasEvent}`;
+      }
+      return null;
+    }
+
+    // ── Group membership conditions ─────────────────────────────────────────
+    // field: "group.<group_type>"  value: "<group_key>"
+    // is_set  → contact is in ANY group of this type
+    // eq      → contact is in group with this specific group_key
+    // not_exists / ne → negation
+    if (field.startsWith("group.")) {
+      const groupType = field.slice("group.".length);
+      if (!groupType) return null;
+
+      // Base EXISTS subquery: contact is linked to a group of this type
+      const inGroupOfType = sql`EXISTS (
+        SELECT 1 FROM contact_groups cg
+        JOIN groups g ON g.id = cg.group_id
+        WHERE cg.contact_id = ${contacts.id}
+          AND cg.workspace_id = ${workspaceId}
+          AND g.group_type = ${groupType}
+          AND g.workspace_id = ${workspaceId}
+          ${value !== undefined ? sql`AND g.group_key = ${String(value)}` : sql``}
+      )`;
+
+      if (op === "exists" || op === "is_set" || op === "eq" || op === "equals") {
+        return inGroupOfType;
+      }
+      if (op === "not_exists" || op === "is_not_set" || op === "ne" || op === "not_equals") {
+        return sql`NOT ${inGroupOfType}`;
+      }
+      return null;
+    }
+
+    // ── Standard contact fields ─────────────────────────────────────────────
     let fieldExpr: SQL;
     if (field === "email") {
       fieldExpr = sql`${contacts.email}`;
@@ -156,6 +224,8 @@ app.get("/:id/people", async (c) => {
       fieldExpr = sql`${contacts.firstName}`;
     } else if (field === "lastName") {
       fieldExpr = sql`${contacts.lastName}`;
+    } else if (field === "phone") {
+      fieldExpr = sql`${contacts.phone}`;
     } else if (field === "unsubscribed") {
       fieldExpr = sql`${contacts.unsubscribed}`;
     } else if (field.startsWith("attributes.")) {
@@ -166,36 +236,51 @@ app.get("/:id/people", async (c) => {
       return null;
     }
 
-    const op = operator;
     if (op === "eq" || op === "equals") {
       if (field === "unsubscribed") {
-        return sql`${contacts.unsubscribed} = ${value === "true"}`;
+        return sql`${contacts.unsubscribed} = ${value === "true" || value === true}`;
       }
-      return sql`lower(${fieldExpr}::text) = lower(${value ?? ""})`;
+      return sql`lower(${fieldExpr}::text) = lower(${String(value ?? "")})`;
     } else if (op === "ne" || op === "not_equals") {
       if (field === "unsubscribed") {
-        return sql`${contacts.unsubscribed} != ${value === "true"}`;
+        return sql`${contacts.unsubscribed} != ${value === "true" || value === true}`;
       }
-      return sql`lower(${fieldExpr}::text) != lower(${value ?? ""})`;
+      return sql`lower(${fieldExpr}::text) != lower(${String(value ?? "")})`;
     } else if (op === "contains") {
-      // Use POSITION instead of LIKE to avoid treating % and _ as wildcards.
-      return sql`position(lower(${value ?? ""}) in lower(${fieldExpr}::text)) > 0`;
+      return sql`position(lower(${String(value ?? "")}) in lower(${fieldExpr}::text)) > 0`;
     } else if (op === "not_contains") {
-      return sql`position(lower(${value ?? ""}) in lower(${fieldExpr}::text)) = 0`;
+      return sql`position(lower(${String(value ?? "")}) in lower(${fieldExpr}::text)) = 0`;
     } else if (op === "exists" || op === "is_set") {
       if (field.startsWith("attributes.")) {
         const attrKey = field.slice("attributes.".length);
-        return sql`(${contacts.attributes}->>${attrKey}) is not null`;
+        return sql`(${contacts.attributes}->>${attrKey}) is not null AND (${contacts.attributes}->>${attrKey}) != ''`;
       }
-      // For nullable columns (firstName, lastName) check IS NOT NULL.
-      // Note: email and unsubscribed are NOT NULL — is_set always matches for them.
       return sql`${fieldExpr} is not null`;
     } else if (op === "not_exists" || op === "is_not_set") {
       if (field.startsWith("attributes.")) {
         const attrKey = field.slice("attributes.".length);
-        return sql`(${contacts.attributes}->>${attrKey}) is null`;
+        return sql`((${contacts.attributes}->>${attrKey}) is null OR (${contacts.attributes}->>${attrKey}) = '')`;
       }
       return sql`${fieldExpr} is null`;
+    }
+    // ── Numeric comparisons on attributes ──────────────────────────────────
+    // Cast the JSONB text value to numeric for comparison
+    else if (op === "gt") {
+      if (!field.startsWith("attributes.")) return null;
+      const attrKey = field.slice("attributes.".length);
+      return sql`((${contacts.attributes}->>${attrKey})::numeric > ${Number(value)})`;
+    } else if (op === "lt") {
+      if (!field.startsWith("attributes.")) return null;
+      const attrKey = field.slice("attributes.".length);
+      return sql`((${contacts.attributes}->>${attrKey})::numeric < ${Number(value)})`;
+    } else if (op === "gte") {
+      if (!field.startsWith("attributes.")) return null;
+      const attrKey = field.slice("attributes.".length);
+      return sql`((${contacts.attributes}->>${attrKey})::numeric >= ${Number(value)})`;
+    } else if (op === "lte") {
+      if (!field.startsWith("attributes.")) return null;
+      const attrKey = field.slice("attributes.".length);
+      return sql`((${contacts.attributes}->>${attrKey})::numeric <= ${Number(value)})`;
     }
     return null;
   }
