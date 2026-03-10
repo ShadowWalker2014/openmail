@@ -103,6 +103,9 @@ async function handleCapturedEvent(
       // Return a synthetic ID — $groupidentify doesn't create an event record
       return `grp_${Date.now()}`;
     }
+    // $group_key is missing — drop silently; do NOT fall through to storeEvent
+    // because that would pollute the events table with a malformed $groupidentify record.
+    return `grp_noop_${Date.now()}`;
   }
   return storeEvent(workspaceId, email, eventName, properties, occurredAt);
 }
@@ -432,8 +435,9 @@ function cioObjectTypeToGroupType(objectTypeId: string): string {
   return CIO_OBJECT_TYPE_MAP[objectTypeId] ?? `object_type_${objectTypeId}`;
 }
 
-// PUT /cio/v1/objects/:objectTypeId/:objectId — upsert a group
-app.put("/cio/v1/objects/:objectTypeId/:objectId", async (c) => {
+// PUT and POST /cio/v1/objects/:objectTypeId/:objectId — upsert a group
+// Customer.io SDK uses PUT; REST clients may use POST — both are supported.
+async function handleCioObjectUpsert(c: Context): Promise<Response> {
   const workspaceId = await resolveWorkspace(c);
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
 
@@ -445,22 +449,10 @@ app.put("/cio/v1/objects/:objectTypeId/:objectId", async (c) => {
   await upsertGroup(workspaceId, groupType, objectId, body);
 
   return new Response(null, { status: 200 });
-});
+}
 
-// POST version for REST clients (same semantics as PUT)
-app.post("/cio/v1/objects/:objectTypeId/:objectId", async (c) => {
-  const workspaceId = await resolveWorkspace(c);
-  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
-
-  const objectTypeId = c.req.param("objectTypeId") ?? "";
-  const objectId     = c.req.param("objectId") ?? "";
-  const body         = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-
-  const groupType = cioObjectTypeToGroupType(objectTypeId);
-  await upsertGroup(workspaceId, groupType, objectId, body);
-
-  return new Response(null, { status: 200 });
-});
+app.put("/cio/v1/objects/:objectTypeId/:objectId", handleCioObjectUpsert);
+app.post("/cio/v1/objects/:objectTypeId/:objectId", handleCioObjectUpsert);
 
 // PUT /cio/v1/objects/:objectTypeId/:objectId/relationships — link contacts to group
 app.put("/cio/v1/objects/:objectTypeId/:objectId/relationships", async (c) => {

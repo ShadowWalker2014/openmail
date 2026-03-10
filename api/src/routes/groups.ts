@@ -195,13 +195,16 @@ export async function upsertGroup(
   attributes: Record<string, unknown>,
 ): Promise<typeof groups.$inferSelect> {
   const db = getDb();
+  const hasAttributes = Object.keys(attributes).length > 0;
   const [group] = await db
     .insert(groups)
     .values({ id: generateId("grp"), workspaceId, groupType, groupKey, attributes })
     .onConflictDoUpdate({
       target: [groups.workspaceId, groups.groupType, groups.groupKey],
       set: {
-        attributes: attributes as any,  // merge is handled client-side; API replaces
+        // Only overwrite attributes when the caller actually provided some;
+        // an empty {} must not erase existing attributes (e.g. the /relationships endpoint).
+        ...(hasAttributes ? { attributes: attributes as any } : {}),
         updatedAt: new Date(),
       },
     })
@@ -210,7 +213,8 @@ export async function upsertGroup(
 }
 
 /**
- * Link a contact (by email) to a group, creating the contact if it doesn't exist.
+ * Link a contact (by email) to a group.
+ * If the contact does not exist in the workspace, this is a no-op (no zombie links created).
  */
 export async function linkContactToGroup(
   workspaceId: string,
