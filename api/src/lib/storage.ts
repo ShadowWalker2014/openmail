@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, CreateBucketCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 let _s3: S3Client | null = null;
@@ -33,8 +33,30 @@ export function isStorageConfigured(): boolean {
   );
 }
 
+let _bucketEnsured = false;
+
+/**
+ * Idempotently create the S3 bucket if it doesn't exist yet.
+ * Safe to call on every startup — errors from existing buckets are ignored.
+ * Needed when using self-hosted MinIO which has no "default buckets" feature.
+ */
+export async function ensureBucketExists(): Promise<void> {
+  if (_bucketEnsured || !isStorageConfigured()) return;
+  const bucket = getBucket();
+  await getS3()
+    .send(new CreateBucketCommand({ Bucket: bucket }))
+    .catch((err: unknown) => {
+      const code = (err as { Code?: string; name?: string })?.Code ?? (err as { name?: string })?.name;
+      // These mean the bucket already exists — that's fine
+      if (code === "BucketAlreadyExists" || code === "BucketAlreadyOwnedByYou") return;
+      throw err;
+    });
+  _bucketEnsured = true;
+}
+
 /** Generate a presigned PUT URL — client uploads directly to S3 */
 export async function generateUploadUrl(key: string, contentType: string): Promise<string> {
+  await ensureBucketExists();
   return getSignedUrl(
     getS3(),
     new PutObjectCommand({ Bucket: getBucket(), Key: key, ContentType: contentType }),
@@ -44,6 +66,7 @@ export async function generateUploadUrl(key: string, contentType: string): Promi
 
 /** Upload a Buffer directly to S3 (server-side upload — for URL fetch and base64 flows) */
 export async function putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+  await ensureBucketExists();
   await getS3().send(new PutObjectCommand({
     Bucket: getBucket(),
     Key: key,
