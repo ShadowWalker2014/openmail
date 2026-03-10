@@ -363,7 +363,8 @@ export interface Group {
   workspaceId: string;
   groupType: string;
   groupKey: string;
-  attributes: Properties;
+  /** Can be null when the DB DEFAULT didn't populate it (e.g. manually created rows). */
+  attributes: Properties | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -375,12 +376,9 @@ export interface CreateGroupInput {
 }
 
 export interface GroupMembership {
-  contact: {
-    id: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-    attributes: Properties;
+  /** Subset of Contact fields returned by the groups/:id/contacts endpoint. */
+  contact: Pick<Contact, "id" | "email" | "firstName" | "lastName"> & {
+    attributes: Properties | null;
   };
   role: string | null;
   joinedAt: string;
@@ -433,7 +431,7 @@ export interface SegmentCompatible {
   track(event: string, properties?: Properties, options?: TrackOptions): Promise<TrackResult>;
   page(name?: string, properties?: Properties, options?: TrackOptions): Promise<TrackResult>;
   screen(name?: string, properties?: Properties, options?: TrackOptions): Promise<TrackResult>;
-  group(groupId: string, traits?: Traits, options?: TrackOptions): Promise<TrackResult>;
+  group(groupId: string, traits?: Traits, options?: TrackOptions & { groupType?: string }): Promise<TrackResult>;
   alias(userId: string, previousId: string): Promise<void>;
   reset(): void;
 }
@@ -446,6 +444,8 @@ export interface SegmentCompatible {
 export interface PostHogCompatible {
   capture(event: string, properties?: Properties): Promise<TrackResult>;
   identify(distinctId: string, properties?: Properties): Promise<Contact>;
+  /** PostHog group identify — `group(type, key, properties)` */
+  groupPostHog?(groupType: string, groupKey: string, groupProperties?: Properties): Promise<TrackResult>;
   reset(): void;
   opt_in_capturing(): void;
   opt_out_capturing(): void;

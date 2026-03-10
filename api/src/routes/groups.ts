@@ -1,7 +1,7 @@
 /**
  * Groups API — manage group/organization entities and contact memberships.
  *
- * POST-compatible with:
+ * Compatible with:
  *   - PostHog  : $groupidentify events
  *   - Segment  : analytics.group()
  *   - Customer.io : Objects API
@@ -47,8 +47,8 @@ app.get("/", async (c) => {
 
 // ── POST / — create or upsert a group ────────────────────────────────────────
 const groupSchema = z.object({
-  groupType: z.string().min(1).default("company"),
-  groupKey:  z.string().min(1),
+  groupType:  z.string().min(1).default("company"),
+  groupKey:   z.string().min(1),
   attributes: z.record(z.unknown()).optional().default({}),
 });
 
@@ -65,7 +65,8 @@ app.post("/", zValidator("json", groupSchema), async (c) => {
       set: { attributes: body.attributes, updatedAt: new Date() },
     })
     .returning();
-  return c.json(group, 201);
+  // Always return 200 — this is an upsert; 201 on conflict-update would be semantically wrong
+  return c.json(group, 200);
 });
 
 // ── GET /:id — get a group ────────────────────────────────────────────────────
@@ -81,10 +82,12 @@ app.get("/:id", async (c) => {
   return c.json(group);
 });
 
-// ── PATCH /:id — update group attributes ─────────────────────────────────────
+// ── PATCH /:id — replace group attributes ─────────────────────────────────────
+// NOTE: This performs a FULL REPLACEMENT of the attributes object, not a merge.
+// Call GET first and merge manually if you need patch semantics.
 app.patch("/:id", zValidator("json", z.object({
   attributes: z.record(z.unknown()).optional(),
-  groupType: z.string().optional(),
+  groupType:  z.string().min(1).optional(),
 })), async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const body = c.req.valid("json");
@@ -116,7 +119,6 @@ app.get("/:id/contacts", async (c) => {
   const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
 
-  // Verify group belongs to workspace
   const [group] = await db
     .select({ id: groups.id })
     .from(groups)
@@ -124,18 +126,18 @@ app.get("/:id/contacts", async (c) => {
     .limit(1);
   if (!group) return c.json({ error: "Not found" }, 404);
 
-  const members = await db
-    .select({ contact: contacts, role: contactGroups.role, joinedAt: contactGroups.createdAt })
-    .from(contactGroups)
-    .innerJoin(contacts, eq(contactGroups.contactId, contacts.id))
-    .where(and(eq(contactGroups.groupId, group.id), eq(contactGroups.workspaceId, workspaceId)))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
-
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(contactGroups)
-    .where(and(eq(contactGroups.groupId, group.id), eq(contactGroups.workspaceId, workspaceId)));
+  const [{ total }, members] = await Promise.all([
+    db.select({ total: count() })
+      .from(contactGroups)
+      .where(and(eq(contactGroups.groupId, group.id), eq(contactGroups.workspaceId, workspaceId)))
+      .then(([r]) => r),
+    db.select({ contact: contacts, role: contactGroups.role, joinedAt: contactGroups.createdAt })
+      .from(contactGroups)
+      .innerJoin(contacts, eq(contactGroups.contactId, contacts.id))
+      .where(and(eq(contactGroups.groupId, group.id), eq(contactGroups.workspaceId, workspaceId)))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+  ]);
 
   return c.json({ data: members, total, page, pageSize });
 });
@@ -143,12 +145,13 @@ app.get("/:id/contacts", async (c) => {
 // ── POST /:id/contacts — add a contact to a group ────────────────────────────
 app.post("/:id/contacts", zValidator("json", z.object({
   contactId: z.string(),
-  role: z.string().optional(),
+  role:      z.string().optional(),
 })), async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const { contactId, role } = c.req.valid("json");
   const db = getDb();
 
+  // Verify the group belongs to this workspace
   const [group] = await db
     .select({ id: groups.id })
     .from(groups)
@@ -156,19 +159,29 @@ app.post("/:id/contacts", zValidator("json", z.object({
     .limit(1);
   if (!group) return c.json({ error: "Group not found" }, 404);
 
+  // FIX (HIGH): Verify the contact ALSO belongs to this workspace.
+  // Without this check, an attacker could link contacts from another workspace.
+  const [contact] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.workspaceId, workspaceId)))
+    .limit(1);
+  if (!contact) return c.json({ error: "Contact not found" }, 404);
+
   await db
     .insert(contactGroups)
-    .values({ workspaceId, contactId, groupId: group.id, role })
+    .values({ workspaceId, contactId: contact.id, groupId: group.id, role })
     .onConflictDoNothing();
 
-  return c.json({ success: true }, 201);
+  // Return 200 (idempotent — link may already exist; returning 201 when it was a no-op is wrong)
+  return c.json({ success: true }, 200);
 });
 
 // ── DELETE /:id/contacts/:contactId — remove a contact from a group ───────────
 app.delete("/:id/contacts/:contactId", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
   const db = getDb();
-  await db
+  const [deleted] = await db
     .delete(contactGroups)
     .where(
       and(
@@ -176,7 +189,10 @@ app.delete("/:id/contacts/:contactId", async (c) => {
         eq(contactGroups.contactId, c.req.param("contactId")),
         eq(contactGroups.workspaceId, workspaceId),
       )
-    );
+    )
+    .returning({ contactId: contactGroups.contactId });
+
+  if (!deleted) return c.json({ error: "Not found" }, 404);
   return c.json({ success: true });
 });
 
@@ -187,6 +203,11 @@ export default app;
 /**
  * Upsert a group by (workspaceId, groupType, groupKey).
  * Returns the group record (new or existing).
+ *
+ * When `attributes` is non-empty the stored attributes are fully replaced.
+ * When `attributes` is empty ({}) the existing attributes are preserved —
+ * this allows callers (e.g. the relationships endpoint) to ensure the row
+ * exists without accidentally wiping data.
  */
 export async function upsertGroup(
   workspaceId: string,
@@ -196,15 +217,17 @@ export async function upsertGroup(
 ): Promise<typeof groups.$inferSelect> {
   const db = getDb();
   const hasAttributes = Object.keys(attributes).length > 0;
+
   const [group] = await db
     .insert(groups)
     .values({ id: generateId("grp"), workspaceId, groupType, groupKey, attributes })
     .onConflictDoUpdate({
       target: [groups.workspaceId, groups.groupType, groups.groupKey],
       set: {
-        // Only overwrite attributes when the caller actually provided some;
-        // an empty {} must not erase existing attributes (e.g. the /relationships endpoint).
-        ...(hasAttributes ? { attributes: attributes as any } : {}),
+        // FIX (CRITICAL): Only update attributes when the caller explicitly
+        // provides them. Passing {} from the relationships endpoint used to
+        // wipe the entire attributes column on every call.
+        ...(hasAttributes ? { attributes } : {}),
         updatedAt: new Date(),
       },
     })
@@ -214,7 +237,8 @@ export async function upsertGroup(
 
 /**
  * Link a contact (by email) to a group.
- * If the contact does not exist in the workspace, this is a no-op (no zombie links created).
+ * If the contact does not exist in the workspace this is a no-op —
+ * no zombie links are created. The caller must ensure the contact exists first.
  */
 export async function linkContactToGroup(
   workspaceId: string,
@@ -228,7 +252,7 @@ export async function linkContactToGroup(
     .from(contacts)
     .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
     .limit(1);
-  if (!contact) return; // contact doesn't exist yet — don't create zombie link
+  if (!contact) return;
 
   await db
     .insert(contactGroups)

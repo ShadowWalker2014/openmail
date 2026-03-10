@@ -283,18 +283,28 @@ class GroupsAPI {
     return this.http.get<PaginatedResponse<Group>>(`/api/v1/groups${q}`);
   }
 
-  async create(input: CreateGroupInput): Promise<Group> {
+  /**
+   * Upsert a group by (groupType, groupKey). Idempotent — safe to call repeatedly.
+   * NOTE: On conflict, attributes are fully replaced (not merged).
+   */
+  async upsert(input: CreateGroupInput): Promise<Group> {
     return this.http.post<Group>("/api/v1/groups", { groupType: "company", ...input });
   }
 
-  async upsert(input: CreateGroupInput): Promise<Group> {
-    return this.http.post<Group>("/api/v1/groups", { groupType: "company", ...input });
+  /** @deprecated Use {@link upsert} instead. The POST endpoint is always an upsert. */
+  async create(input: CreateGroupInput): Promise<Group> {
+    return this.upsert(input);
   }
 
   async get(id: string): Promise<Group> {
     return this.http.get<Group>(`/api/v1/groups/${id}`);
   }
 
+  /**
+   * Replace all attributes on the group.
+   * @remarks This is a FULL REPLACEMENT — existing attributes not passed here are deleted.
+   * Fetch the group first and merge manually if you need partial-update semantics.
+   */
   async update(id: string, attributes: Record<string, unknown>): Promise<Group> {
     return this.http.patch<Group>(`/api/v1/groups/${id}`, { attributes });
   }
@@ -480,6 +490,12 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
       );
     }
 
+    // FIX (HIGH): Store the RESOLVED email (not the raw userId argument).
+    // When userId is "user_123" and email comes from traits.email, _userId
+    // must be the email so that subsequent group() / track() calls send the
+    // correct contactEmail. Storing the raw userId caused zombie associations.
+    this._userId = normalized.email;
+
     const hasNewAttributes = Object.keys(normalized.attributes).length > 0;
 
     // If new attributes are provided, we must fetch-then-merge because the API
@@ -633,16 +649,12 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
       this.logger.error("groupPostHog() upsert failed:", err.message);
     });
 
-    // Also fire the $groupidentify event for PostHog compatibility
-    this.queue.push({
-      email: this._userId ?? groupKey,
-      name: "$groupidentify",
-      properties: {
-        $group_type: groupType,
-        $group_key:  groupKey,
-        $group_set:  groupProperties,
-      },
-    }).catch(() => {});
+    // FIX (BUG-1 SDK): Removed the queue push that was sending groupKey as the
+    // email field when _userId was undefined. This was storing "acme-corp" as
+    // contactEmail in the events table.
+    // FIX (BUG-3 SDK): The queue flushes to POST /api/v1/events/track which
+    // does NOT handle $groupidentify specially — the group is already upserted
+    // above, so a redundant event record serves no purpose.
 
     this.logger.log("groupPostHog()", { groupType, groupKey });
     return Promise.resolve({ id: "" });

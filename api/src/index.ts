@@ -38,7 +38,11 @@ app.use("/api/ingest/*", cors({
   origin: "*",
   credentials: false,
   allowHeaders: ["Content-Type", "Authorization"],
-  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+  // FIX (HIGH): PUT is required for Customer.io SDK compatibility.
+  // PUT /cio/v1/customers/:id   — identify (SDK default method)
+  // PUT /cio/v1/objects/:t/:id  — Objects API group upsert
+  // PUT /cio/v1/objects/:t/:id/relationships — link contacts to group
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 }));
 
 // Dashboard cors — scoped to the configured WEB_URL origin only

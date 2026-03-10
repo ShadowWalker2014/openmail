@@ -372,9 +372,17 @@ export class OpenMailBrowser {
    * Compatible with Segment's `analytics.group(groupId, traits)`.
    * Use `groupType` to specify the type (default: "company").
    */
-  group(groupId: string, traits: Traits = {}, options: { groupType?: string } = {}): Promise<TrackResult> {
+  // FIX (MEDIUM): Accept TrackOptions so callers can pass options.userId to
+  // override the active user (Segment spec). Previously options only had
+  // groupType, so there was no way to pass userId from the browser SDK.
+  group(
+    groupId: string,
+    traits: Traits = {},
+    options: { groupType?: string; userId?: string } = {},
+  ): Promise<TrackResult> {
     const groupType = options.groupType ?? "company";
-    const email = this.userId ?? undefined;
+    // FIX: Honor options.userId before falling back to the persisted userId
+    const email = options.userId ?? this.userId ?? undefined;
 
     // Fire-and-forget group upsert — non-blocking like track()
     this.http.post("/api/ingest/group", {

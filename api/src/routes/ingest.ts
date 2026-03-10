@@ -351,8 +351,20 @@ async function handleCioIdentify(c: Context): Promise<Response> {
     (last_name as string | undefined) ??
     (typeof name === "string" ? (name.split(" ").slice(1).join(" ") || undefined) : undefined);
 
+  // FIX (MEDIUM): Strip internal/security-sensitive fields before storing as
+  // contact attributes. Without this, `api_key`, `id`, `workspaceId`, etc.
+  // would be stored verbatim in the attributes column (visible in the dashboard).
+  const CIO_CONTACT_SKIP = new Set([
+    "id", "workspace_id", "workspaceId", "contact_id", "contactId",
+    "api_key", "password", "__proto__", "constructor",
+  ]);
+  const attributes: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (!CIO_CONTACT_SKIP.has(k)) attributes[k] = v;
+  }
+
   await upsertContact(workspaceId, email, firstName, lastName,
-    Object.keys(rest).length > 0 ? rest : undefined);
+    Object.keys(attributes).length > 0 ? attributes : undefined);
 
   return new Response(null, { status: 200 });
 }
@@ -394,24 +406,33 @@ app.post("/cio/v1/metrics", async (c) => {
 
 // ── POST /group — OpenMail native group upsert ────────────────────────────────
 // Body: { api_key?, groupType, groupKey, attributes?, contactEmail? }
+const ingestGroupSchema = z.object({
+  groupType:    z.string().min(1).default("company"),
+  groupKey:     z.string().min(1),
+  attributes:   z.record(z.unknown()).optional().default({}),
+  contactEmail: z.string().email().optional(),
+});
+
 app.post("/group", async (c) => {
   const workspaceId = await resolveWorkspace(c);
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
 
-  const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: "Invalid JSON body" }, 400);
+  // FIX (MEDIUM): Use Zod validation instead of unsafe manual type casts.
+  // This prevents groupKey: 123 (number) slipping through as a TEXT column value
+  // and blocks whitespace-only group keys.
+  const rawBody = await c.req.json().catch(() => null);
+  if (!rawBody) return c.json({ error: "Invalid JSON body" }, 400);
 
-  const groupType  = (body.groupType  as string | undefined) ?? "company";
-  const groupKey   = (body.groupKey   as string | undefined);
-  const attributes = (body.attributes as Record<string, unknown> | undefined) ?? {};
+  const parsed = ingestGroupSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json({ error: "Validation error", details: parsed.error.flatten() }, 400);
+  }
 
-  if (!groupKey) return c.json({ error: "groupKey is required" }, 400);
-
+  const { groupType, groupKey, attributes, contactEmail } = parsed.data;
   const group = await upsertGroup(workspaceId, groupType, groupKey, attributes);
 
-  // Optionally link a contact to the group
-  if (body.contactEmail && typeof body.contactEmail === "string") {
-    await linkContactToGroup(workspaceId, body.contactEmail, group.id);
+  if (contactEmail) {
+    await linkContactToGroup(workspaceId, contactEmail, group.id);
   }
 
   return c.json({ id: group.id, groupType: group.groupType, groupKey: group.groupKey }, 200);
@@ -435,6 +456,24 @@ function cioObjectTypeToGroupType(objectTypeId: string): string {
   return CIO_OBJECT_TYPE_MAP[objectTypeId] ?? `object_type_${objectTypeId}`;
 }
 
+// FIX (HIGH): Strip known internal/system fields from the body before
+// storing it as group attributes. Without this, a client could send
+// { "id": "grp_xxx", "workspaceId": "ws_other", "api_key": "...", "name": "Acme" }
+// and have internal field names pollute the attributes JSONB column.
+const CIO_OBJECT_SKIP_KEYS = new Set([
+  "id", "workspace_id", "workspaceId", "group_type", "groupType",
+  "group_key", "groupKey", "created_at", "createdAt", "updated_at", "updatedAt",
+  "api_key", "password", "__proto__", "constructor",
+]);
+
+function filterObjectAttributes(body: Record<string, unknown>): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (!CIO_OBJECT_SKIP_KEYS.has(k)) attrs[k] = v;
+  }
+  return attrs;
+}
+
 // PUT and POST /cio/v1/objects/:objectTypeId/:objectId — upsert a group
 // Customer.io SDK uses PUT; REST clients may use POST — both are supported.
 async function handleCioObjectUpsert(c: Context): Promise<Response> {
@@ -446,7 +485,9 @@ async function handleCioObjectUpsert(c: Context): Promise<Response> {
   const body         = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 
   const groupType = cioObjectTypeToGroupType(objectTypeId);
-  await upsertGroup(workspaceId, groupType, objectId, body);
+  // Strip system fields before storing as attributes
+  const attributes = filterObjectAttributes(body);
+  await upsertGroup(workspaceId, groupType, objectId, attributes);
 
   return new Response(null, { status: 200 });
 }
