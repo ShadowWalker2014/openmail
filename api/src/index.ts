@@ -20,6 +20,7 @@ import inviteAcceptRouter from "./routes/invite-accept.js";
 import assetsRouter from "./routes/assets.js";
 import sendsRouter from "./routes/sends.js";
 import ingestRouter from "./routes/ingest.js";
+import groupsRouter from "./routes/groups.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -115,6 +116,7 @@ sessionApi.route("/ws/:workspaceId/members", membersRouter);
 sessionApi.route("/ws/:workspaceId/invites", invitesRouter);
 sessionApi.route("/ws/:workspaceId/assets", assetsRouter);
 sessionApi.route("/ws/:workspaceId/sends", sendsRouter);
+sessionApi.route("/ws/:workspaceId/groups", groupsRouter);
 sessionApi.route("/invites", inviteAcceptRouter);
 
 app.route("/api/session", sessionApi);
@@ -158,6 +160,7 @@ apiKeyApi.route("/templates", templatesRouter);
 apiKeyApi.route("/campaigns", campaignsRouter);
 apiKeyApi.route("/segments", segmentsRouter);
 apiKeyApi.route("/analytics", analyticsRouter);
+apiKeyApi.route("/groups", groupsRouter);
 apiKeyApi.route("/assets", assetsRouter);
 
 app.route("/api/v1", apiKeyApi);
@@ -172,10 +175,44 @@ export { app };
 // Run idempotent migrations at startup
 async function runStartupMigrations() {
   const db = getDb();
-  await db.execute(
-    // language=SQL
-    `ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS logo_url TEXT`
-  );
+
+  // Legacy column additions
+  await db.execute(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS logo_url TEXT`);
+
+  // Groups tables (added for group identify — PostHog + Customer.io compat)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id           TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      group_type   TEXT NOT NULL DEFAULT 'company',
+      group_key    TEXT NOT NULL,
+      attributes   JSONB DEFAULT '{}'::jsonb,
+      created_at   TIMESTAMP NOT NULL DEFAULT now(),
+      updated_at   TIMESTAMP NOT NULL DEFAULT now()
+    )
+  `);
+
+  await db.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS groups_workspace_type_key_idx
+    ON groups (workspace_id, group_type, group_key)
+  `);
+
+  await db.execute(`CREATE INDEX IF NOT EXISTS groups_workspace_idx ON groups (workspace_id)`);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS contact_groups (
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      contact_id   TEXT NOT NULL REFERENCES contacts(id)  ON DELETE CASCADE,
+      group_id     TEXT NOT NULL REFERENCES groups(id)    ON DELETE CASCADE,
+      role         TEXT,
+      created_at   TIMESTAMP NOT NULL DEFAULT now(),
+      PRIMARY KEY (contact_id, group_id)
+    )
+  `);
+
+  await db.execute(`CREATE INDEX IF NOT EXISTS contact_groups_group_idx      ON contact_groups (group_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS contact_groups_workspace_idx   ON contact_groups (workspace_id)`);
+
   logger.info("Startup migrations OK");
 }
 

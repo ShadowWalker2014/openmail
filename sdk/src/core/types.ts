@@ -356,6 +356,36 @@ export interface BroadcastAnalytics {
   [key: string]: number | string;
 }
 
+// ─── Groups ───────────────────────────────────────────────────────────────────
+
+export interface Group {
+  id: string;
+  workspaceId: string;
+  groupType: string;
+  groupKey: string;
+  attributes: Properties;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateGroupInput {
+  groupType?: string;
+  groupKey: string;
+  attributes?: Properties;
+}
+
+export interface GroupMembership {
+  contact: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    attributes: Properties;
+  };
+  role: string | null;
+  joinedAt: string;
+}
+
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
 export interface Asset {

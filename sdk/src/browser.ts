@@ -367,10 +367,26 @@ export class OpenMailBrowser {
   }
 
   /**
-   * Associate the current user with a group (company, team, organization).
+   * Upsert a group and associate the current user with it.
+   *
+   * Compatible with Segment's `analytics.group(groupId, traits)`.
+   * Use `groupType` to specify the type (default: "company").
    */
-  group(groupId: string, traits: Traits = {}): Promise<TrackResult> {
-    return this.track("$group", { groupId, ...traits });
+  group(groupId: string, traits: Traits = {}, options: { groupType?: string } = {}): Promise<TrackResult> {
+    const groupType = options.groupType ?? "company";
+    const email = this.userId ?? undefined;
+
+    // Fire-and-forget group upsert — non-blocking like track()
+    this.http.post("/api/ingest/group", {
+      groupType,
+      groupKey: groupId,
+      attributes: traits,
+      ...(email ? { contactEmail: email } : {}),
+    }).catch((err: Error) => {
+      this.logger.error("group() upsert failed:", err.message);
+    });
+
+    return Promise.resolve({ id: "" });
   }
 
   /**

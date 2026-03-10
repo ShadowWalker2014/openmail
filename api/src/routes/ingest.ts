@@ -7,12 +7,16 @@
  *   3. Authorization: Basic base64(x:om_xxx)  (Customer.io Basic Auth — api_key is the password)
  *
  * Endpoints:
- *   POST /api/ingest/capture           — PostHog single-event format
- *   POST /api/ingest/batch             — PostHog batch format
- *   POST /api/ingest/identify          — Identify / upsert contact
- *   POST /api/ingest/track             — OpenMail native + generic track
- *   POST /api/ingest/cio/v1/customers/:id         — Customer.io identify
- *   POST /api/ingest/cio/v1/customers/:id/events  — Customer.io track
+ *   POST /api/ingest/capture                          — PostHog single-event + $groupidentify
+ *   POST /api/ingest/batch                            — PostHog batch (incl. $groupidentify events)
+ *   POST /api/ingest/identify                         — Identify / upsert contact
+ *   POST /api/ingest/group                            — OpenMail native group upsert
+ *   POST /api/ingest/track                            — OpenMail native event track
+ *   POST /api/ingest/cio/v1/customers/:id             — Customer.io identify
+ *   POST|PUT /api/ingest/cio/v1/customers/:id         — Customer.io identify (SDK uses PUT)
+ *   POST /api/ingest/cio/v1/customers/:id/events      — Customer.io track event
+ *   PUT  /api/ingest/cio/v1/objects/:typeId/:id       — Customer.io Objects (group upsert)
+ *   PUT  /api/ingest/cio/v1/objects/:typeId/:id/relationships — Customer.io link contacts to group
  */
 import { Hono } from "hono";
 import { z } from "zod";
@@ -25,6 +29,7 @@ import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { Context } from "hono";
 import type { ApiVariables } from "../types.js";
+import { upsertGroup, linkContactToGroup } from "./groups.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -72,6 +77,34 @@ let _q: Queue | null = null;
 function getQ() {
   if (!_q) _q = new Queue("events", { connection: getQueueRedisConnection() });
   return _q;
+}
+
+// ── Core: handle a single captured event — routes $groupidentify specially ────
+
+async function handleCapturedEvent(
+  workspaceId: string,
+  email: string,
+  eventName: string,
+  properties: Record<string, unknown>,
+  occurredAt?: string,
+): Promise<string> {
+  // PostHog-style group identify: event="$groupidentify" with $group_type / $group_key / $group_set
+  if (eventName === "$groupidentify") {
+    const groupType = (properties.$group_type as string | undefined) ?? "company";
+    const groupKey  = (properties.$group_key  as string | undefined);
+    const groupSet  = (properties.$group_set  as Record<string, unknown> | undefined) ?? {};
+
+    if (groupKey) {
+      const group = await upsertGroup(workspaceId, groupType, groupKey, groupSet);
+      // Link the identifying user to the group (if they're a known contact)
+      if (email && email.includes("@")) {
+        await linkContactToGroup(workspaceId, email, group.id);
+      }
+      // Return a synthetic ID — $groupidentify doesn't create an event record
+      return `grp_${Date.now()}`;
+    }
+  }
+  return storeEvent(workspaceId, email, eventName, properties, occurredAt);
 }
 
 // ── Core: store one event ─────────────────────────────────────────────────────
@@ -166,7 +199,7 @@ app.post("/capture", async (c) => {
       ? distinct_id
       : (properties?.$email as string | undefined) ?? distinct_id;
 
-  const id = await storeEvent(workspaceId, email, event, properties ?? {}, timestamp);
+  const id = await handleCapturedEvent(workspaceId, email, event, properties ?? {}, timestamp);
   return c.json({ status: 1 }, 200); // PostHog returns 1 on success
 });
 
@@ -200,7 +233,7 @@ app.post("/batch", async (c) => {
         typeof item.distinct_id === "string" && item.distinct_id.includes("@")
           ? item.distinct_id
           : (item.properties?.$email as string | undefined) ?? item.distinct_id;
-      return storeEvent(workspaceId, email, item.event, item.properties ?? {}, item.timestamp);
+      return handleCapturedEvent(workspaceId, email, item.event, item.properties ?? {}, item.timestamp);
     })
   );
 
@@ -353,6 +386,110 @@ app.post("/cio/v1/customers/:id/events", async (c) => {
 app.post("/cio/v1/metrics", async (c) => {
   const workspaceId = await resolveWorkspace(c);
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
+  return new Response(null, { status: 200 });
+});
+
+// ── POST /group — OpenMail native group upsert ────────────────────────────────
+// Body: { api_key?, groupType, groupKey, attributes?, contactEmail? }
+app.post("/group", async (c) => {
+  const workspaceId = await resolveWorkspace(c);
+  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
+
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: "Invalid JSON body" }, 400);
+
+  const groupType  = (body.groupType  as string | undefined) ?? "company";
+  const groupKey   = (body.groupKey   as string | undefined);
+  const attributes = (body.attributes as Record<string, unknown> | undefined) ?? {};
+
+  if (!groupKey) return c.json({ error: "groupKey is required" }, 400);
+
+  const group = await upsertGroup(workspaceId, groupType, groupKey, attributes);
+
+  // Optionally link a contact to the group
+  if (body.contactEmail && typeof body.contactEmail === "string") {
+    await linkContactToGroup(workspaceId, body.contactEmail, group.id);
+  }
+
+  return c.json({ id: group.id, groupType: group.groupType, groupKey: group.groupKey }, 200);
+});
+
+// ── Customer.io Objects API (group management) ────────────────────────────────
+// Customer.io's SDK sends:
+//   PUT /objects/:objectTypeId/:objectId              — create/update a group
+//   PUT /objects/:objectTypeId/:objectId/relationships— link contacts to group
+//
+// objectTypeId "1" = company (the default Customer.io convention)
+
+const CIO_OBJECT_TYPE_MAP: Record<string, string> = {
+  "1": "company",
+  "2": "account",
+  "3": "team",
+  "4": "project",
+};
+
+function cioObjectTypeToGroupType(objectTypeId: string): string {
+  return CIO_OBJECT_TYPE_MAP[objectTypeId] ?? `object_type_${objectTypeId}`;
+}
+
+// PUT /cio/v1/objects/:objectTypeId/:objectId — upsert a group
+app.put("/cio/v1/objects/:objectTypeId/:objectId", async (c) => {
+  const workspaceId = await resolveWorkspace(c);
+  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
+
+  const objectTypeId = c.req.param("objectTypeId") ?? "";
+  const objectId     = c.req.param("objectId") ?? "";
+  const body         = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+
+  const groupType = cioObjectTypeToGroupType(objectTypeId);
+  await upsertGroup(workspaceId, groupType, objectId, body);
+
+  return new Response(null, { status: 200 });
+});
+
+// POST version for REST clients (same semantics as PUT)
+app.post("/cio/v1/objects/:objectTypeId/:objectId", async (c) => {
+  const workspaceId = await resolveWorkspace(c);
+  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
+
+  const objectTypeId = c.req.param("objectTypeId") ?? "";
+  const objectId     = c.req.param("objectId") ?? "";
+  const body         = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+
+  const groupType = cioObjectTypeToGroupType(objectTypeId);
+  await upsertGroup(workspaceId, groupType, objectId, body);
+
+  return new Response(null, { status: 200 });
+});
+
+// PUT /cio/v1/objects/:objectTypeId/:objectId/relationships — link contacts to group
+app.put("/cio/v1/objects/:objectTypeId/:objectId/relationships", async (c) => {
+  const workspaceId = await resolveWorkspace(c);
+  if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
+
+  const objectTypeId = c.req.param("objectTypeId") ?? "";
+  const objectId     = c.req.param("objectId") ?? "";
+  const body         = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: "Invalid JSON body" }, 400);
+
+  const groupType = cioObjectTypeToGroupType(objectTypeId);
+  // First ensure the group exists
+  const group = await upsertGroup(workspaceId, groupType, objectId, {});
+
+  // Link each contact in the relationships array
+  const relationships = (body.relationships as Array<{
+    identifiers?: { id?: string; email?: string };
+  }> | undefined) ?? [];
+
+  await Promise.allSettled(
+    relationships.map((rel) => {
+      const email = rel.identifiers?.email ?? rel.identifiers?.id;
+      if (email && email.includes("@")) {
+        return linkContactToGroup(workspaceId, email, group.id);
+      }
+    })
+  );
+
   return new Response(null, { status: 200 });
 });
 

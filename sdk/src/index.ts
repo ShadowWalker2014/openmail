@@ -9,6 +9,9 @@ export { OpenMail, createOpenMail } from "./node/index.js";
 export { OpenMailError } from "./core/errors.js";
 export type {
   OpenMailConfig,
+  Group,
+  CreateGroupInput,
+  GroupMembership,
   Contact,
   CreateContactInput,
   UpdateContactInput,

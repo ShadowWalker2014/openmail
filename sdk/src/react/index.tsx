@@ -179,8 +179,8 @@ export function usePage() {
 export function useGroup() {
   const openmail = useOpenMail();
   return useCallback(
-    (groupId: string, traits?: Traits): Promise<TrackResult> =>
-      openmail.group(groupId, traits),
+    (groupId: string, traits?: Traits, options?: { groupType?: string }): Promise<TrackResult> =>
+      openmail.group(groupId, traits ?? {}, options),
     [openmail]
   );
 }

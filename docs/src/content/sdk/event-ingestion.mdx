@@ -24,12 +24,16 @@ Get your API key from **Settings → API Keys** in the dashboard.
 | Endpoint | Format | Description |
 |----------|--------|-------------|
 | `POST /api/v1/events/track` | OpenMail native | Track a single event (API key auth) |
-| `POST /api/ingest/capture` | PostHog | Single event (PostHog format) |
+| `POST /api/ingest/capture` | PostHog | Single event + `$groupidentify` |
 | `POST /api/ingest/batch` | PostHog | Multiple events (up to 100 per call) |
 | `POST /api/ingest/identify` | PostHog / Segment | Create or update a contact |
+| `POST /api/ingest/group` | OpenMail native | Upsert a group entity |
 | `POST /api/ingest/track` | OpenMail native | Native format via ingest base URL |
 | `POST /api/ingest/cio/v1/customers/:id` | Customer.io | Identify user |
 | `POST /api/ingest/cio/v1/customers/:id/events` | Customer.io | Track event |
+| `PUT /api/ingest/cio/v1/objects/:typeId/:id` | Customer.io | Upsert group (Objects API) |
+| `PUT /api/ingest/cio/v1/objects/:typeId/:id/relationships` | Customer.io | Link contacts to group |
+| `GET/POST /api/v1/groups` | REST | Groups CRUD |
 
 ---
 
@@ -97,6 +101,164 @@ await openmail.flush();
 ```
 
 See the full [Node.js SDK docs](/sdk/node) for all available methods.
+
+---
+
+## Group Identify
+
+Track and store group/organization entities (companies, teams, projects). Compatible with PostHog `groupIdentify()` and Customer.io's Objects API.
+
+### What "group identify" stores
+
+When you call any group endpoint, OpenMail:
+1. Upserts a **group entity** — stored with its properties (name, plan, mrr, …)
+2. **Links the contact** to the group — so you can query all contacts in a company
+
+### Native Format
+
+<EndpointBadge method="POST" path="/api/ingest/group" />
+
+```json
+{
+  "api_key": "om_your_key",
+  "groupType": "company",
+  "groupKey": "acme-corp",
+  "attributes": {
+    "name": "Acme Corp",
+    "plan": "enterprise",
+    "mrr": 5000
+  },
+  "contactEmail": "alice@example.com"
+}
+```
+
+`contactEmail` is optional — pass it to link the current user to the group.
+
+### REST API for Groups
+
+<EndpointBadge method="GET" path="/api/v1/groups" />
+<EndpointBadge method="POST" path="/api/v1/groups" />
+<EndpointBadge method="PATCH" path="/api/v1/groups/:id" />
+<EndpointBadge method="DELETE" path="/api/v1/groups/:id" />
+<EndpointBadge method="GET" path="/api/v1/groups/:id/contacts" />
+<EndpointBadge method="POST" path="/api/v1/groups/:id/contacts" />
+
+```bash
+# Create / upsert a group
+curl -X POST https://api.openmail.win/api/v1/groups \
+  -H "Authorization: Bearer om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "groupType": "company",
+    "groupKey": "acme-corp",
+    "attributes": { "name": "Acme Corp", "plan": "enterprise" }
+  }'
+
+# Link a contact to the group
+curl -X POST https://api.openmail.win/api/v1/groups/grp_xxx/contacts \
+  -H "Authorization: Bearer om_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "contactId": "con_xxx" }'
+```
+
+### PostHog Compatible — `$groupidentify`
+
+<EndpointBadge method="POST" path="/api/ingest/capture" />
+
+PostHog sends `$groupidentify` events when you call `posthog.groupIdentify()`. OpenMail handles this correctly — it upserts the group and links the user.
+
+```json
+{
+  "api_key": "om_your_key",
+  "event": "$groupidentify",
+  "distinct_id": "alice@example.com",
+  "properties": {
+    "$group_type": "company",
+    "$group_key":  "acme-corp",
+    "$group_set": {
+      "name": "Acme Corp",
+      "plan": "enterprise",
+      "mrr": 5000
+    }
+  }
+}
+```
+
+Using the PostHog Node SDK (just change the host):
+
+```ts
+const posthog = new PostHog("om_your_key", {
+  host: "https://api.openmail.win/api/ingest",
+});
+
+posthog.groupIdentify({
+  groupType: "company",
+  groupKey:  "acme-corp",
+  properties: { name: "Acme Corp", plan: "enterprise" },
+});
+```
+
+### Customer.io Compatible — Objects API
+
+<EndpointBadge method="PUT" path="/api/ingest/cio/v1/objects/:objectTypeId/:objectId" />
+<EndpointBadge method="PUT" path="/api/ingest/cio/v1/objects/:objectTypeId/:objectId/relationships" />
+
+Customer.io's Objects API maps `objectTypeId` → `groupType`:
+
+| objectTypeId | groupType |
+|---|---|
+| `1` | `company` |
+| `2` | `account` |
+| `3` | `team` |
+| `4` | `project` |
+
+```ts
+const { TrackClient } = require("customerio-node");
+
+const cio = new TrackClient("workspace_id", "om_your_key", {
+  url: "https://api.openmail.win/api/ingest/cio/v1",
+});
+
+// Create / update a company
+cio.putObject("1", "acme-corp", {
+  name: "Acme Corp",
+  plan: "enterprise",
+  mrr: 5000,
+});
+
+// Link a contact to the company
+cio.putObjectRelationship("1", "acme-corp", {
+  identifiers: { email: "alice@example.com" },
+});
+```
+
+### OpenMail SDK
+
+```ts
+import { OpenMail } from "@openmail/sdk";
+const openmail = new OpenMail({ apiKey: "om_your_key" });
+
+await openmail.identify("alice@example.com", { plan: "pro" });
+
+// Group upsert + link user in one call
+await openmail.group("acme-corp", {
+  name: "Acme Corp",
+  plan: "enterprise",
+  mrr: 5000,
+}, { userId: "alice@example.com", groupType: "company" });
+
+// PostHog-style
+await openmail.groupPostHog("company", "acme-corp", { name: "Acme Corp" });
+
+// Full CRUD via sub-client
+const groups = await openmail.groups.list();
+const group  = await openmail.groups.upsert({
+  groupKey: "acme-corp",
+  groupType: "company",
+  attributes: { name: "Acme Corp" },
+});
+await openmail.groups.addContact(group.id, "con_xxx");
+```
 
 ---
 

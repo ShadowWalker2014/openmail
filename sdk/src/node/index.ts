@@ -42,6 +42,9 @@ import type {
   Properties,
   SegmentCompatible,
   PostHogCompatible,
+  Group,
+  CreateGroupInput,
+  GroupMembership,
 } from "../core/types.js";
 
 export * from "../core/types.js";
@@ -270,6 +273,50 @@ class TemplatesAPI {
   }
 }
 
+// ─── Groups API ───────────────────────────────────────────────────────────────
+
+class GroupsAPI {
+  constructor(private readonly http: HttpClient) {}
+
+  async list(options: { page?: number; pageSize?: number; groupType?: string } = {}): Promise<PaginatedResponse<Group>> {
+    const q = buildQuery({ page: options.page, pageSize: options.pageSize, groupType: options.groupType });
+    return this.http.get<PaginatedResponse<Group>>(`/api/v1/groups${q}`);
+  }
+
+  async create(input: CreateGroupInput): Promise<Group> {
+    return this.http.post<Group>("/api/v1/groups", { groupType: "company", ...input });
+  }
+
+  async upsert(input: CreateGroupInput): Promise<Group> {
+    return this.http.post<Group>("/api/v1/groups", { groupType: "company", ...input });
+  }
+
+  async get(id: string): Promise<Group> {
+    return this.http.get<Group>(`/api/v1/groups/${id}`);
+  }
+
+  async update(id: string, attributes: Record<string, unknown>): Promise<Group> {
+    return this.http.patch<Group>(`/api/v1/groups/${id}`, { attributes });
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.http.delete(`/api/v1/groups/${id}`);
+  }
+
+  async contacts(id: string, options: { page?: number; pageSize?: number } = {}): Promise<PaginatedResponse<GroupMembership>> {
+    const q = buildQuery({ page: options.page, pageSize: options.pageSize });
+    return this.http.get<PaginatedResponse<GroupMembership>>(`/api/v1/groups/${id}/contacts${q}`);
+  }
+
+  async addContact(groupId: string, contactId: string, role?: string): Promise<void> {
+    await this.http.post(`/api/v1/groups/${groupId}/contacts`, { contactId, role });
+  }
+
+  async removeContact(groupId: string, contactId: string): Promise<void> {
+    await this.http.delete(`/api/v1/groups/${groupId}/contacts/${contactId}`);
+  }
+}
+
 // ─── Analytics API ────────────────────────────────────────────────────────────
 
 class AnalyticsAPI {
@@ -344,6 +391,7 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
   readonly templates: TemplatesAPI;
   readonly analytics: AnalyticsAPI;
   readonly assets: AssetsAPI;
+  readonly groups: GroupsAPI;
 
   private readonly http: HttpClient;
   private readonly queue: BatchQueue<{ email: string; name: string; properties: Properties; occurredAt?: string }>;
@@ -375,6 +423,7 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
     this.templates = new TemplatesAPI(this.http);
     this.analytics = new AnalyticsAPI(this.http);
     this.assets = new AssetsAPI(this.http);
+    this.groups = new GroupsAPI(this.http);
 
     // Batching queue for high-volume event tracking
     this.queue = new BatchQueue({
@@ -517,29 +566,86 @@ export class OpenMail implements SegmentCompatible, PostHogCompatible {
   }
 
   /**
-   * Associate a user with a group (organization, company, team).
+   * Upsert a group (organisation, company, team) and optionally link the current user.
    *
-   * Tracks a `$group` event and stores group traits on the contact.
-   * Compatible with Segment's `analytics.group()` and PostHog's `posthog.group()`.
+   * Compatible with:
+   *   - Segment  : `analytics.group(groupId, traits)` — treats groupId as groupKey, groupType="company"
+   *   - PostHog  : `posthog.groupIdentify(type, key, properties)` — use `groupPostHog()`
    *
    * @example
    * ```ts
-   * // Segment style
-   * await openmail.group("acme-corp", { name: "Acme Corp", plan: "enterprise" });
+   * // Segment style — groupId is the key, type defaults to "company"
+   * await openmail.group("acme-corp", { name: "Acme Corp", plan: "enterprise" }, { userId: "alice@example.com" });
    *
-   * // PostHog style: group(type, key, traits)
-   * await openmail.group("company", "acme-corp", { name: "Acme Corp" });
+   * // Explicit type
+   * await openmail.group("acme-corp", { name: "Acme Corp" }, { userId: "alice@example.com", groupType: "company" });
    * ```
    */
-  async group(groupId: string, traits: Traits = {}, options: TrackOptions = {}): Promise<TrackResult> {
-    return this.track("$group", { groupId, ...traits }, options);
+  async group(
+    groupId: string,
+    traits: Traits = {},
+    options: TrackOptions & { groupType?: string } = {},
+  ): Promise<TrackResult> {
+    if (this.disabled || this._optedOut) return { id: "" };
+
+    const groupType = options.groupType ?? "company";
+    const email = options.userId ?? this._userId;
+
+    // Fire-and-forget group upsert to the native /api/ingest/group endpoint
+    this.http.post("/api/ingest/group", {
+      groupType,
+      groupKey: groupId,
+      attributes: traits,
+      ...(email ? { contactEmail: email } : {}),
+    }).catch((err: Error) => {
+      this.logger.error("group() upsert failed:", err.message);
+    });
+
+    this.logger.log("group()", { groupType, groupId, traits });
+    return Promise.resolve({ id: "" });
   }
 
   /**
-   * PostHog-style group: `group(type, key, properties)`
+   * PostHog-compatible group identify: `groupIdentify(type, key, properties)`.
+   *
+   * Fires a `$groupidentify` event to the PostHog-compatible ingest endpoint
+   * AND upserts the group entity directly.
+   *
+   * @example
+   * ```ts
+   * await openmail.groupPostHog("company", "acme-corp", { name: "Acme Corp", plan: "enterprise" });
+   * ```
    */
-  async groupPostHog(groupType: string, groupKey: string, groupProperties: Properties = {}): Promise<TrackResult> {
-    return this.track("$group", { groupType, groupKey, ...groupProperties });
+  async groupPostHog(
+    groupType: string,
+    groupKey: string,
+    groupProperties: Properties = {},
+  ): Promise<TrackResult> {
+    if (this.disabled || this._optedOut) return { id: "" };
+
+    // Upsert the group entity
+    this.http.post("/api/ingest/group", {
+      groupType,
+      groupKey,
+      attributes: groupProperties,
+      ...(this._userId ? { contactEmail: this._userId } : {}),
+    }).catch((err: Error) => {
+      this.logger.error("groupPostHog() upsert failed:", err.message);
+    });
+
+    // Also fire the $groupidentify event for PostHog compatibility
+    this.queue.push({
+      email: this._userId ?? groupKey,
+      name: "$groupidentify",
+      properties: {
+        $group_type: groupType,
+        $group_key:  groupKey,
+        $group_set:  groupProperties,
+      },
+    }).catch(() => {});
+
+    this.logger.log("groupPostHog()", { groupType, groupKey });
+    return Promise.resolve({ id: "" });
   }
 
   /**
