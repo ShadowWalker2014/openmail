@@ -49,6 +49,7 @@ function storageGet(key: string, persistence: Persistence, _domain?: string): st
     try { return localStorage.getItem(key); } catch { return null; }
   }
   if (persistence === "cookie") {
+    if (typeof document === "undefined") return null;
     const match = document.cookie.match(new RegExp(`(?:^|;)\\s*${key}=([^;]*)`));
     return match ? decodeURIComponent(match[1]) : null;
   }
@@ -61,6 +62,7 @@ function storageSet(key: string, value: string, persistence: Persistence, domain
     return;
   }
   if (persistence === "cookie") {
+    if (typeof document === "undefined") return;
     const exp = new Date();
     exp.setDate(exp.getDate() + expiry);
     let cookie = `${key}=${encodeURIComponent(value)};expires=${exp.toUTCString()};path=/;SameSite=Lax`;
@@ -75,6 +77,7 @@ function storageRemove(key: string, persistence: Persistence, domain?: string): 
     return;
   }
   if (persistence === "cookie") {
+    if (typeof document === "undefined") return;
     let cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Lax`;
     if (domain) cookie += `;domain=${domain}`;
     document.cookie = cookie;

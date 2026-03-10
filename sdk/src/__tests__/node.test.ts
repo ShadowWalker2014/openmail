@@ -206,19 +206,23 @@ describe("page() and screen()", () => {
 // ─── group() ──────────────────────────────────────────────────────────────────
 
 describe("group()", () => {
-  it("tracks $group event", async () => {
+  it("calls /api/ingest/group with correct payload", async () => {
     const sdk = createSDK({ flushAt: 1 });
     let captured: Record<string, unknown> | null = null;
     server.use(
-      http.post(`${BASE}/api/v1/events/track`, async ({ request }) => {
+      http.post(`${BASE}/api/ingest/group`, async ({ request }) => {
         captured = await request.json() as Record<string, unknown>;
-        return HttpResponse.json({ id: "evt_group" });
+        return HttpResponse.json({ success: true });
       })
     );
     await sdk.group("acme-corp", { name: "Acme Corp" }, { userId: "alice@example.com" });
     await new Promise((r) => setTimeout(r, 50));
-    await sdk.flush();
-    expect(captured).toMatchObject({ name: "$group", properties: { groupId: "acme-corp" } });
+    expect(captured).toMatchObject({
+      groupType: "company",
+      groupKey: "acme-corp",
+      attributes: { name: "Acme Corp" },
+      contactEmail: "alice@example.com",
+    });
   });
 });
 

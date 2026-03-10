@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * @openmail/sdk/react — React Provider + Hooks
  *

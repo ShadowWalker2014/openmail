@@ -231,6 +231,14 @@ export const handlers = [
     new HttpResponse(null, { status: 204 })
   ),
 
+  // Ingest endpoints (group upsert, PostHog capture, etc.)
+  http.post(`${BASE}/api/ingest/group`, () =>
+    HttpResponse.json({ success: true })
+  ),
+  http.post(`${BASE}/api/ingest/capture`, () =>
+    HttpResponse.json({ status: 1 })
+  ),
+
   // Analytics
   http.get(`${BASE}/api/v1/analytics/overview`, () =>
     HttpResponse.json(fixtures.analytics) // { contacts, sends, opens, clicks, unsubscribes, openRate, clickRate, period }
