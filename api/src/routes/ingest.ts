@@ -289,14 +289,14 @@ app.post("/track", async (c) => {
 // Customer.io SDK sends to: https://track.customer.io/api/v1/...
 // Replace host with: https://your-api/api/ingest/cio/v1/...
 
-// POST /cio/v1/customers/:id — identify / upsert contact
-// Basic auth: workspace_id:api_key
-// Body: { email?, name?, ...attributes }
-app.post("/cio/v1/customers/:id", async (c) => {
+// POST and PUT /cio/v1/customers/:id — identify / upsert contact
+// Customer.io SDK uses PUT; REST clients may use POST — both are supported.
+// Basic auth: workspace_id:api_key   Body: { email?, name?, ...attributes }
+async function handleCioIdentify(c: Context): Promise<Response> {
   const workspaceId = await resolveWorkspace(c);
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
 
-  const customerId = c.req.param("id");
+  const customerId = c.req.param("id") ?? "";
   const body = await c.req.json().catch(() => null);
   if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
 
@@ -319,7 +319,11 @@ app.post("/cio/v1/customers/:id", async (c) => {
     Object.keys(rest).length > 0 ? rest : undefined);
 
   return new Response(null, { status: 200 });
-});
+}
+
+// Customer.io SDK uses PUT; raw REST clients often use POST — support both
+app.post("/cio/v1/customers/:id", handleCioIdentify);
+app.put("/cio/v1/customers/:id", handleCioIdentify);
 
 // DELETE /cio/v1/customers/:id — delete contact (no-op or actual delete)
 app.delete("/cio/v1/customers/:id", async (c) => {
