@@ -185,7 +185,7 @@ function LandingPage() {
               { label: "Features", href: "#features" },
               { label: "AI Agents", href: "#ai" },
               { label: "Pricing",  href: "#pricing" },
-              { label: "Docs",     href: GITHUB_REPO },
+              { label: "Docs",     href: "/docs" },
             ].map(({ label, href }) => (
               <a
                 key={label}
