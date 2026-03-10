@@ -29,6 +29,8 @@ Base URL: `https://your-api.railway.app/api/v1/`
 MCP URL: `https://mcp.openmail.win/mcp` (POST)
 Auth: `Authorization: Bearer om_your_workspace_api_key`
 Total tools: 29 (Contacts×5, Broadcasts×7, Campaigns×4, Segments×2, Templates×4, Analytics×2, Assets×5)
+Prompts: 6 (create-campaign, create-broadcast, build-segment, analyze-performance, setup-event-tracking, group-identify)
+Resources: 4 (docs://openmail/index → live llms.txt, docs://openmail/page/{path}, docs://openmail/quickref, openmail://workspace/context)
 
 - [Overview](https://openmail.win/docs/mcp/overview): What the MCP server is, 29 available tools, and example use cases
 - [Quick Connect](https://openmail.win/docs/mcp/quickstart): Connect Claude, Cursor, or any AI agent in 2 minutes

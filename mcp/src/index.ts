@@ -8,6 +8,8 @@ import { registerTemplateTools } from "./tools/templates.js";
 import { registerSegmentTools } from "./tools/segments.js";
 import { registerAnalyticsTools } from "./tools/analytics.js";
 import { registerAssetTools } from "./tools/assets.js";
+import { registerPrompts } from "./prompts.js";
+import { registerResources } from "./resources.js";
 import { getApiClient } from "./lib/api-client.js";
 import pino from "pino";
 
@@ -31,6 +33,7 @@ app.post("/mcp", async (c) => {
     description: "OpenMail — email marketing automation platform API",
   });
 
+  // Tools (29 total — contacts, broadcasts, campaigns, templates, segments, analytics, assets)
   registerContactTools(server, () => client);
   registerBroadcastTools(server, () => client);
   registerCampaignTools(server, () => client);
@@ -38,6 +41,12 @@ app.post("/mcp", async (c) => {
   registerSegmentTools(server, () => client);
   registerAnalyticsTools(server, () => client);
   registerAssetTools(server, () => client);
+
+  // Prompts — reusable message templates for common OpenMail workflows
+  registerPrompts(server);
+
+  // Resources — docs index fetched live from llms.txt + quick-reference card
+  registerResources(server);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless — no session persistence
