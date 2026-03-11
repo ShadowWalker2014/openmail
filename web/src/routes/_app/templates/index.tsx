@@ -314,6 +314,7 @@ function TemplateEditor({
                   onChange={setContent}
                   placeholder="Start writing your email…"
                   className="min-h-[320px]"
+                  workspaceId={activeWorkspaceId ?? undefined}
                 />
               ) : (
                 <textarea

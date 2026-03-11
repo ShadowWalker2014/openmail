@@ -26,8 +26,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, CheckCircle2, Search, AlertCircle, Copy,
+  BarChart2, CheckCircle2, Search, AlertCircle, Copy, Code2,
 } from "lucide-react";
+import { EmailEditor } from "@/components/ui/email-editor";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import { cn } from "@/lib/utils";
@@ -241,8 +242,8 @@ function BroadcastDetailDialog({
   const [fromEmail, setFromEmail] = useState(broadcast.fromEmail ?? "");
   const [htmlContent, setHtmlContent] = useState(broadcast.htmlContent ?? "");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
-  const [contentMode, setContentMode] = useState<"html" | "template">(
-    broadcast.templateId ? "template" : "html"
+  const [contentMode, setContentMode] = useState<"visual" | "html" | "template">(
+    broadcast.templateId ? "template" : "visual"
   );
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(broadcast.templateId);
   const [previewMobile, setPreviewMobile] = useState(false);
@@ -592,13 +593,13 @@ function BroadcastDetailDialog({
               <div className="flex items-center justify-between">
                 <Label>Content</Label>
                 <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                  {(["html", "template"] as const).map((m) => (
+                  {(["visual", "html", "template"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => {
                         setContentMode(m);
-                        if (m === "html") setSelectedTemplateId(null);
+                        if (m !== "template") setSelectedTemplateId(null);
                       }}
                       className={cn(
                         "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
@@ -607,13 +608,21 @@ function BroadcastDetailDialog({
                           : "text-muted-foreground hover:text-foreground"
                       )}
                     >
-                      {m === "html" ? "Write HTML" : "Use Template"}
+                      {m === "visual" ? "Visual" : m === "html" ? "HTML" : "Template"}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {contentMode === "html" ? (
+              {contentMode === "visual" ? (
+                <EmailEditor
+                  value={htmlContent}
+                  onChange={setHtmlContent}
+                  placeholder="Start writing your broadcast…"
+                  workspaceId={workspaceId}
+                  minHeight="340px"
+                />
+              ) : contentMode === "html" ? (
                 <textarea
                   value={htmlContent}
                   onChange={(e) => setHtmlContent(e.target.value)}
@@ -1068,7 +1077,7 @@ function BroadcastsPage() {
   const [createFromName, setCreateFromName] = useState("");
   const [createFromEmail, setCreateFromEmail] = useState("");
   const [createPreviewText, setCreatePreviewText] = useState("");
-  const [createMode, setCreateMode] = useState<"html" | "template">("html");
+  const [createMode, setCreateMode] = useState<"visual" | "html" | "template">("visual");
   const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
   const [createScheduledAt, setCreateScheduledAt] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
@@ -1151,7 +1160,7 @@ function BroadcastsPage() {
       setCreateFromName("");
       setCreateFromEmail("");
       setCreatePreviewText("");
-      setCreateMode("html");
+      setCreateMode("visual");
       setCreateTemplateId(null);
       setCreateScheduledAt("");
       if (nameRef.current) nameRef.current.value = "";
@@ -1183,7 +1192,7 @@ function BroadcastsPage() {
               setCreateFromName("");
               setCreateFromEmail("");
               setCreatePreviewText("");
-              setCreateMode("html");
+              setCreateMode("visual");
               setCreateTemplateId(null);
               setCreateScheduledAt("");
             }
@@ -1329,22 +1338,30 @@ function BroadcastsPage() {
                     <div className="flex items-center justify-between">
                       <Label>Content</Label>
                       <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                        {(["html", "template"] as const).map((m) => (
+                        {(["visual", "html", "template"] as const).map((m) => (
                           <button
                             key={m}
                             type="button"
-                            onClick={() => { setCreateMode(m); if (m === "html") setCreateTemplateId(null); }}
+                            onClick={() => { setCreateMode(m); if (m !== "template") setCreateTemplateId(null); }}
                             className={cn(
                               "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
                               createMode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                             )}
                           >
-                            {m === "html" ? "Write HTML" : "Use Template"}
+                            {m === "visual" ? "Visual" : m === "html" ? "HTML" : "Template"}
                           </button>
                         ))}
                       </div>
                     </div>
-                    {createMode === "html" ? (
+                    {createMode === "visual" ? (
+                      <EmailEditor
+                        value={createHtml}
+                        onChange={setCreateHtml}
+                        placeholder="Start writing your broadcast…"
+                        workspaceId={activeWorkspaceId ?? undefined}
+                        minHeight="200px"
+                      />
+                    ) : createMode === "html" ? (
                       <textarea
                         required={createMode === "html"}
                         value={createHtml}
@@ -1386,7 +1403,7 @@ function BroadcastsPage() {
               {/* Right — live preview */}
               <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
                 {(() => {
-                  const previewHtml = createMode === "html"
+                  const previewHtml = (createMode === "html" || createMode === "visual")
                     ? createHtml
                     : (templates.find((t) => t.id === createTemplateId)?.htmlContent ?? "");
                   return (
