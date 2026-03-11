@@ -2,7 +2,48 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+
+// ── Email template helpers ────────────────────────────────────────────────────
+
+/** Extract the inner HTML of <body> from a full HTML document. */
+function extractBodyContent(html: string): string {
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match ? match[1].trim() : html;
+}
+
+/** Replace the <body> content of a template frame with edited body HTML. */
+function injectIntoFrame(frameHtml: string, bodyContent: string): string {
+  return frameHtml.replace(
+    /(<body[^>]*>)([\s\S]*?)(<\/body>)/i,
+    `$1\n${bodyContent}\n$3`,
+  );
+}
+
+/** Detect if a string is a full HTML document. */
+function isFullHtmlDoc(html: string): boolean {
+  const t = html.trimStart();
+  return t.startsWith("<!") || /^<html/i.test(t);
+}
+
+/** Substitute {{variable}} placeholders with real contact data for preview. */
+function substituteVars(
+  html: string,
+  contact: { email: string; firstName?: string | null; lastName?: string | null; attributes?: Record<string, unknown> | null },
+): string {
+  const attrs = (contact.attributes ?? {}) as Record<string, string>;
+  const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ");
+  return html
+    .replace(/\{\{firstName\}\}/gi, contact.firstName ?? "")
+    .replace(/\{\{lastName\}\}/gi, contact.lastName ?? "")
+    .replace(/\{\{fullName\}\}/gi, fullName)
+    .replace(/\{\{name\}\}/gi, fullName)
+    .replace(/\{\{email\}\}/gi, contact.email)
+    .replace(/\{\{(\w+)\}\}/gi, (_match, key: string) => {
+      const v = attrs[key] ?? attrs[key.charAt(0).toLowerCase() + key.slice(1)];
+      return v !== undefined ? String(v) : `{{${key}}}`;
+    });
+}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -240,23 +281,42 @@ function BroadcastDetailDialog({
   const [subject, setSubject] = useState(broadcast.subject);
   const [fromName, setFromName] = useState(broadcast.fromName ?? "");
   const [fromEmail, setFromEmail] = useState(broadcast.fromEmail ?? "");
-  const [htmlContent, setHtmlContent] = useState(broadcast.htmlContent ?? "");
-  const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
-  const [contentMode, setContentMode] = useState<"visual" | "html">(() => {
-    // If content looks like a full HTML document, default to HTML mode to avoid Tiptap mangling
-    const raw = broadcast.htmlContent?.trimStart() ?? "";
-    if (raw.startsWith("<!") || raw.toLowerCase().startsWith("<html")) return "html";
-    return "visual";
+  // templateFrame = full HTML document (with <head>/<style>) of the loaded template.
+  // htmlContent = body content only — what Tiptap and the textarea actually edit.
+  // Keeping them separate prevents Tiptap from stripping the template CSS on onChange.
+  const [templateFrame, setTemplateFrame] = useState<string | null>(() => {
+    const raw = broadcast.htmlContent ?? "";
+    return isFullHtmlDoc(raw) ? raw : null;
   });
+  const [htmlContent, setHtmlContent] = useState<string>(() => {
+    const raw = broadcast.htmlContent ?? "";
+    return isFullHtmlDoc(raw) ? extractBodyContent(raw) : raw;
+  });
+  const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
+  const [contentMode, setContentMode] = useState<"visual" | "html">("visual");
 
-  // If the broadcast was linked to a template (no htmlContent yet), populate from the template
-  // once the templates list has loaded. Templates are the HTML *frame* — user edits content within.
+  // Contact to use for variable substitution in the preview
+  const [previewContactId, setPreviewContactId] = useState<string | null>(null);
+
+  // Load template into frame + body content
+  const loadTemplate = useCallback((tpl: { htmlContent: string }) => {
+    if (isFullHtmlDoc(tpl.htmlContent)) {
+      setTemplateFrame(tpl.htmlContent);
+      setHtmlContent(extractBodyContent(tpl.htmlContent));
+    } else {
+      setTemplateFrame(null);
+      setHtmlContent(tpl.htmlContent);
+    }
+    setContentMode("visual");
+  }, []);
+
+  // If the broadcast was saved with only templateId (no htmlContent), load the template frame
+  // once the templates list has arrived.
   useEffect(() => {
     if (!broadcast.htmlContent && broadcast.templateId && templates.length > 0 && !htmlContent) {
       const tpl = templates.find((t) => t.id === broadcast.templateId);
-      if (tpl) setHtmlContent(tpl.htmlContent);
+      if (tpl) loadTemplate(tpl);
     }
-  // Only run once when templates first load
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templates]);
   const [previewMobile, setPreviewMobile] = useState(false);
@@ -275,18 +335,23 @@ function BroadcastDetailDialog({
   // ── Mutations ───────────────────────────────────────────────────────────────
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      sessionFetch(workspaceId, `/broadcasts/${broadcast.id}`, {
+    mutationFn: () => {
+      // Save the full HTML (template frame + edited body) so CSS is preserved on send
+      const htmlToSave = templateFrame
+        ? injectIntoFrame(templateFrame, htmlContent)
+        : htmlContent;
+      return sessionFetch(workspaceId, `/broadcasts/${broadcast.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           name,
           subject,
           fromName: fromName || undefined,
           fromEmail: fromEmail || undefined,
-          htmlContent,
+          htmlContent: htmlToSave,
           segmentIds: selectedSegmentIds,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["broadcasts", workspaceId] });
       toast.success("Saved");
@@ -388,8 +453,25 @@ function BroadcastDetailDialog({
   const clickRate = sentCount > 0 ? ((clickCount / sentCount) * 100).toFixed(1) : "0.0";
   const ctoRate = openCount > 0 ? ((clickCount / openCount) * 100).toFixed(1) : "0.0";
 
-  // Preview HTML for Overview/Content draft panels
-  const previewHtml = htmlContent;
+  // Contacts for "Preview as" substitution
+  const { data: previewContacts = [] } = useQuery<{ id: string; email: string; firstName: string | null; lastName: string | null; attributes: Record<string, unknown> | null }[]>({
+    queryKey: ["contacts-preview", workspaceId],
+    queryFn: async () => {
+      const res = await sessionFetch<{ data: { id: string; email: string; firstName: string | null; lastName: string | null; attributes: Record<string, unknown> | null }[] }>(
+        workspaceId, "/contacts?pageSize=30",
+      );
+      return res.data;
+    },
+    enabled: !!workspaceId,
+    staleTime: 60_000,
+  });
+  const previewContact = previewContacts.find((c) => c.id === previewContactId) ?? null;
+
+  // Preview HTML: reconstruct full document if a template frame is loaded, then substitute vars
+  const previewHtml = useMemo(() => {
+    const full = templateFrame ? injectIntoFrame(templateFrame, htmlContent) : htmlContent;
+    return previewContact ? substituteVars(full, previewContact) : full;
+  }, [templateFrame, htmlContent, previewContact]);
 
   // ── Tab content renderers ────────────────────────────────────────────────────
 
@@ -461,10 +543,24 @@ function BroadcastDetailDialog({
 
           {/* Right — preview */}
           <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-border">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
                 Preview
               </span>
+              {previewContacts.length > 0 && (
+                <select
+                  value={previewContactId ?? ""}
+                  onChange={(e) => setPreviewContactId(e.target.value || null)}
+                  className="flex-1 h-6 rounded border border-input bg-transparent px-1.5 text-[11px] text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer min-w-0"
+                >
+                  <option value="">Preview with placeholder values</option>
+                  {previewContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.firstName ? `${c.firstName} — ` : ""}{c.email}
+                    </option>
+                  ))}
+                </select>
+              )}
               <PreviewToggle previewMobile={previewMobile} setPreviewMobile={setPreviewMobile} />
             </div>
             <div className="flex-1 flex items-start justify-center overflow-auto p-6">
@@ -619,26 +715,35 @@ function BroadcastDetailDialog({
                 </div>
               </div>
 
-              {/* Template loader — pick a template as a starting point, then edit freely */}
+              {/* Template loader */}
               {templates.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground shrink-0">Start from template:</span>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Start from template</Label>
                   <select
                     value=""
                     onChange={(e) => {
                       const tpl = templates.find((t) => t.id === e.target.value);
-                      if (tpl) {
-                        setHtmlContent(tpl.htmlContent);
-                        setContentMode("visual");
-                      }
+                      if (tpl) loadTemplate(tpl);
                     }}
-                    className="flex-1 h-7 rounded border border-input bg-input px-2 text-[12px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                    className="w-full h-8 rounded-md border border-input bg-input px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
                   >
-                    <option value="" disabled>Pick a template…</option>
+                    <option value="" disabled>Pick a template to load…</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
+                  {templateFrame && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Template frame loaded — editing body content only.{" "}
+                      <button
+                        type="button"
+                        onClick={() => { setTemplateFrame(null); }}
+                        className="underline hover:text-foreground cursor-pointer"
+                      >
+                        Remove frame
+                      </button>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -646,7 +751,7 @@ function BroadcastDetailDialog({
                 <EmailEditor
                   value={htmlContent}
                   onChange={setHtmlContent}
-                  placeholder="Start writing your broadcast… or pick a template above to begin."
+                  placeholder="Start writing your broadcast…"
                   workspaceId={workspaceId}
                   minHeight="320px"
                 />
@@ -663,10 +768,24 @@ function BroadcastDetailDialog({
 
           {/* Right — preview */}
           <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-border">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
                 Preview
               </span>
+              {previewContacts.length > 0 && (
+                <select
+                  value={previewContactId ?? ""}
+                  onChange={(e) => setPreviewContactId(e.target.value || null)}
+                  className="flex-1 h-6 rounded border border-input bg-transparent px-1.5 text-[11px] text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer min-w-0"
+                >
+                  <option value="">Preview with placeholder values</option>
+                  {previewContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.firstName ? `${c.firstName} — ` : ""}{c.email}
+                    </option>
+                  ))}
+                </select>
+              )}
               <PreviewToggle previewMobile={previewMobile} setPreviewMobile={setPreviewMobile} />
             </div>
             <div className="flex-1 flex items-start justify-center overflow-auto p-6">
@@ -1081,6 +1200,7 @@ function BroadcastsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
   const [createHtml, setCreateHtml] = useState("");
+  const [createTemplateFrame, setCreateTemplateFrame] = useState<string | null>(null);
   const [createPreviewMobile, setCreatePreviewMobile] = useState(false);
   const [createFromName, setCreateFromName] = useState("");
   const [createFromEmail, setCreateFromEmail] = useState("");
@@ -1164,6 +1284,7 @@ function BroadcastsPage() {
       setCreateOpen(false);
       setSelectedSegmentIds([]);
       setCreateHtml("");
+      setCreateTemplateFrame(null);
       setCreateFromName("");
       setCreateFromEmail("");
       setCreatePreviewText("");
@@ -1195,6 +1316,7 @@ function BroadcastsPage() {
             if (!v) {
               setSelectedSegmentIds([]);
               setCreateHtml("");
+              setCreateTemplateFrame(null);
               setCreateFromName("");
               setCreateFromEmail("");
               setCreatePreviewText("");
@@ -1251,13 +1373,16 @@ function BroadcastsPage() {
                     toast.error("Add some content to your broadcast");
                     return;
                   }
+                  const createHtmlToSave = createTemplateFrame
+                    ? injectIntoFrame(createTemplateFrame, createHtml)
+                    : createHtml;
                   createMutation.mutate({
                     name: nameRef.current!.value,
                     subject: subjectRef.current!.value,
                     previewText: createPreviewText || undefined,
                     fromName: createFromName || undefined,
                     fromEmail: createFromEmail || undefined,
-                    htmlContent: createHtml,
+                    htmlContent: createHtmlToSave,
                     segmentIds: selectedSegmentIds,
                     scheduledAt: createScheduledAt || undefined,
                   });
@@ -1363,24 +1488,36 @@ function BroadcastsPage() {
 
                     {/* Template loader — pick any template as a starting point, then edit freely */}
                     {templates.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground shrink-0">Start from template:</span>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Start from template</Label>
                         <select
                           value=""
                           onChange={(e) => {
                             const tpl = templates.find((t) => t.id === e.target.value);
                             if (tpl) {
-                              setCreateHtml(tpl.htmlContent);
+                              if (isFullHtmlDoc(tpl.htmlContent)) {
+                                setCreateTemplateFrame(tpl.htmlContent);
+                                setCreateHtml(extractBodyContent(tpl.htmlContent));
+                              } else {
+                                setCreateTemplateFrame(null);
+                                setCreateHtml(tpl.htmlContent);
+                              }
                               setCreateMode("visual");
                             }
                           }}
-                          className="flex-1 h-7 rounded border border-input bg-input px-2 text-[12px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                          className="w-full h-8 rounded-md border border-input bg-input px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
                         >
-                          <option value="" disabled>Pick a template…</option>
+                          <option value="" disabled>Pick a template to load…</option>
                           {templates.map((t) => (
                             <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>
+                        {createTemplateFrame && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Template frame loaded — editing body content.{" "}
+                            <button type="button" onClick={() => setCreateTemplateFrame(null)} className="underline hover:text-foreground cursor-pointer">Remove frame</button>
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -1412,7 +1549,9 @@ function BroadcastsPage() {
               {/* Right — live preview */}
               <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
                 {(() => {
-                  const previewHtml = createHtml;
+                  const previewHtml = createTemplateFrame
+                    ? injectIntoFrame(createTemplateFrame, createHtml)
+                    : createHtml;
                   return (
                     <>
                       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
