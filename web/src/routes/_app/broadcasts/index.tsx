@@ -67,9 +67,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, CheckCircle2, Search, AlertCircle, Copy,
+  BarChart2, CheckCircle2, Search, AlertCircle, Copy, ChevronsUpDown, Check,
 } from "lucide-react";
 import { EmailEditor } from "@/components/ui/email-editor";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import { toast } from "sonner";
 import { useWorkspaceShape } from "@/hooks/use-workspace-shape";
 import { cn } from "@/lib/utils";
@@ -175,6 +179,81 @@ function SendProgress({
         />
       </div>
     </div>
+  );
+}
+
+// ── Template Picker — Combobox using Popover + Command ───────────────────────
+
+interface TemplatePickerProps {
+  templates: { id: string; name: string; htmlContent: string }[];
+  onSelect: (tpl: { id: string; name: string; htmlContent: string }) => void;
+  /** Name of the currently loaded template — shown in the trigger button */
+  loadedName?: string | null;
+}
+
+function TemplatePicker({ templates, onSelect, loadedName }: TemplatePickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filtered = templates.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "flex items-center justify-between w-full h-8 rounded-md border border-input bg-input px-3",
+            "text-[13px] cursor-pointer hover:bg-accent transition-colors",
+            loadedName ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span className="truncate">{loadedName ?? "Pick a template to load…"}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50 ml-2" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search templates…"
+            value={search}
+            onValueChange={setSearch}
+            className="h-8 text-[13px]"
+          />
+          <CommandList className="max-h-48">
+            <CommandEmpty className="py-4 text-center text-[12px] text-muted-foreground">
+              No templates found.
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map((t) => (
+                <CommandItem
+                  key={t.id}
+                  value={t.name}
+                  onSelect={() => {
+                    onSelect(t);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className="text-[13px] cursor-pointer"
+                >
+                  <Check
+                    className={cn(
+                      "h-3.5 w-3.5 mr-2 shrink-0",
+                      loadedName === t.name ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  {t.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -298,8 +377,16 @@ function BroadcastDetailDialog({
   // Contact to use for variable substitution in the preview
   const [previewContactId, setPreviewContactId] = useState<string | null>(null);
 
+  // Track which template name is currently loaded (for the picker button label)
+  const [loadedTemplateName, setLoadedTemplateName] = useState<string | null>(() => {
+    if (broadcast.templateId) {
+      return templates.find((t) => t.id === broadcast.templateId)?.name ?? null;
+    }
+    return null;
+  });
+
   // Load template into frame + body content
-  const loadTemplate = useCallback((tpl: { htmlContent: string }) => {
+  const loadTemplate = useCallback((tpl: { id: string; name: string; htmlContent: string }) => {
     if (isFullHtmlDoc(tpl.htmlContent)) {
       setTemplateFrame(tpl.htmlContent);
       setHtmlContent(extractBodyContent(tpl.htmlContent));
@@ -307,8 +394,18 @@ function BroadcastDetailDialog({
       setTemplateFrame(null);
       setHtmlContent(tpl.htmlContent);
     }
+    setLoadedTemplateName(tpl.name);
     setContentMode("visual");
   }, []);
+
+  // Sync loadedTemplateName once templates list loads (the initial useState ran before templates)
+  useEffect(() => {
+    if (broadcast.templateId && templates.length > 0 && !loadedTemplateName) {
+      const tpl = templates.find((t) => t.id === broadcast.templateId);
+      if (tpl) setLoadedTemplateName(tpl.name);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates]);
 
   // If the broadcast was saved with only templateId (no htmlContent), load the template frame
   // once the templates list has arrived.
@@ -719,28 +816,20 @@ function BroadcastDetailDialog({
               {templates.length > 0 && (
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Start from template</Label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const tpl = templates.find((t) => t.id === e.target.value);
-                      if (tpl) loadTemplate(tpl);
-                    }}
-                    className="w-full h-8 rounded-md border border-input bg-input px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-                  >
-                    <option value="" disabled>Pick a template to load…</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                  <TemplatePicker
+                    templates={templates}
+                    onSelect={loadTemplate}
+                    loadedName={loadedTemplateName}
+                  />
                   {templateFrame && (
                     <p className="text-[10px] text-muted-foreground">
-                      Template frame loaded — editing body content only.{" "}
+                      Frame loaded.{" "}
                       <button
                         type="button"
-                        onClick={() => { setTemplateFrame(null); }}
+                        onClick={() => { setTemplateFrame(null); setLoadedTemplateName(null); }}
                         className="underline hover:text-foreground cursor-pointer"
                       >
-                        Remove frame
+                        Remove
                       </button>
                     </p>
                   )}
@@ -1201,6 +1290,7 @@ function BroadcastsPage() {
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([]);
   const [createHtml, setCreateHtml] = useState("");
   const [createTemplateFrame, setCreateTemplateFrame] = useState<string | null>(null);
+  const [createLoadedTemplateName, setCreateLoadedTemplateName] = useState<string | null>(null);
   const [createPreviewMobile, setCreatePreviewMobile] = useState(false);
   const [createFromName, setCreateFromName] = useState("");
   const [createFromEmail, setCreateFromEmail] = useState("");
@@ -1285,6 +1375,7 @@ function BroadcastsPage() {
       setSelectedSegmentIds([]);
       setCreateHtml("");
       setCreateTemplateFrame(null);
+      setCreateLoadedTemplateName(null);
       setCreateFromName("");
       setCreateFromEmail("");
       setCreatePreviewText("");
@@ -1317,6 +1408,7 @@ function BroadcastsPage() {
               setSelectedSegmentIds([]);
               setCreateHtml("");
               setCreateTemplateFrame(null);
+      setCreateLoadedTemplateName(null);
               setCreateFromName("");
               setCreateFromEmail("");
               setCreatePreviewText("");
@@ -1490,32 +1582,26 @@ function BroadcastsPage() {
                     {templates.length > 0 && (
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">Start from template</Label>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            const tpl = templates.find((t) => t.id === e.target.value);
-                            if (tpl) {
-                              if (isFullHtmlDoc(tpl.htmlContent)) {
-                                setCreateTemplateFrame(tpl.htmlContent);
-                                setCreateHtml(extractBodyContent(tpl.htmlContent));
-                              } else {
-                                setCreateTemplateFrame(null);
-                                setCreateHtml(tpl.htmlContent);
-                              }
-                              setCreateMode("visual");
+                        <TemplatePicker
+                          templates={templates}
+                          loadedName={createLoadedTemplateName}
+                          onSelect={(tpl) => {
+                            if (isFullHtmlDoc(tpl.htmlContent)) {
+                              setCreateTemplateFrame(tpl.htmlContent);
+                              setCreateHtml(extractBodyContent(tpl.htmlContent));
+                            } else {
+                              setCreateTemplateFrame(null);
+                              setCreateLoadedTemplateName(null);
+                              setCreateHtml(tpl.htmlContent);
                             }
+                            setCreateLoadedTemplateName(tpl.name);
+                            setCreateMode("visual");
                           }}
-                          className="w-full h-8 rounded-md border border-input bg-input px-2.5 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-                        >
-                          <option value="" disabled>Pick a template to load…</option>
-                          {templates.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
+                        />
                         {createTemplateFrame && (
                           <p className="text-[10px] text-muted-foreground">
-                            Template frame loaded — editing body content.{" "}
-                            <button type="button" onClick={() => setCreateTemplateFrame(null)} className="underline hover:text-foreground cursor-pointer">Remove frame</button>
+                            Frame loaded.{" "}
+                            <button type="button" onClick={() => { setCreateTemplateFrame(null); setCreateLoadedTemplateName(null); }} className="underline hover:text-foreground cursor-pointer">Remove</button>
                           </p>
                         )}
                       </div>
