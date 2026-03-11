@@ -4,25 +4,25 @@
 
 ## Getting Started
 
-- [Introduction](https://openmail.win/docs/getting-started/introduction): What OpenMail is, core concepts, and architecture overview
-- [Quick Start](https://openmail.win/docs/getting-started/quickstart): Get running in minutes with Docker Compose, Railway, or manual setup
-- [Configuration](https://openmail.win/docs/getting-started/configuration): Complete environment variable reference for all services
-- [Email Setup](https://openmail.win/docs/getting-started/email-setup): Configure Resend for platform and workspace email sending
+- [Introduction](https://openmail.win/docs/getting-started/introduction.md): What OpenMail is, core concepts, and architecture overview
+- [Quick Start](https://openmail.win/docs/getting-started/quickstart.md): Get running in minutes with Docker Compose, Railway, or manual setup
+- [Configuration](https://openmail.win/docs/getting-started/configuration.md): Complete environment variable reference for all services
+- [Email Setup](https://openmail.win/docs/getting-started/email-setup.md): Configure Resend for platform and workspace email sending
 
 ## REST API
 
 Authentication: Bearer token using workspace API keys (format: `om_{12chars}`)
 Base URL: `https://your-api.railway.app/api/v1/`
 
-- [Authentication](https://openmail.win/docs/api/authentication): API key creation, usage, and security best practices
-- [Contacts](https://openmail.win/docs/api/contacts): Create/upsert/update/delete contacts, list with pagination and search
-- [Broadcasts](https://openmail.win/docs/api/broadcasts): One-off email campaigns — create, send, schedule, track
-- [Campaigns](https://openmail.win/docs/api/campaigns): Event-triggered automation flows with status machine
-- [Segments](https://openmail.win/docs/api/segments): Rule-based dynamic contact groups with flexible operators
-- [Templates](https://openmail.win/docs/api/templates): Reusable HTML email templates
-- [Events](https://openmail.win/docs/api/events): Track customer activity to trigger campaigns
-- [Analytics](https://openmail.win/docs/api/analytics): Workspace and broadcast performance metrics
-- [Assets](https://openmail.win/docs/api/assets): Upload images and files for email embedding
+- [Authentication](https://openmail.win/docs/api/authentication.md): API key creation, usage, and security best practices
+- [Contacts](https://openmail.win/docs/api/contacts.md): Create/upsert/update/delete contacts, list with pagination and search
+- [Broadcasts](https://openmail.win/docs/api/broadcasts.md): One-off email campaigns — create, send, schedule, track
+- [Campaigns](https://openmail.win/docs/api/campaigns.md): Event-triggered automation flows with status machine
+- [Segments](https://openmail.win/docs/api/segments.md): Rule-based dynamic contact groups with flexible operators
+- [Templates](https://openmail.win/docs/api/templates.md): Reusable HTML email templates
+- [Events](https://openmail.win/docs/api/events.md): Track customer activity to trigger campaigns
+- [Analytics](https://openmail.win/docs/api/analytics.md): Workspace and broadcast performance metrics
+- [Assets](https://openmail.win/docs/api/assets.md): Upload images and files for email embedding
 
 ## MCP Server
 
@@ -30,32 +30,32 @@ MCP URL: `https://mcp.openmail.win/mcp` (POST)
 Auth: `Authorization: Bearer om_your_workspace_api_key`
 Capabilities: tools, prompts, resources — call `tools/list`, `prompts/list`, `resources/list` to discover all available items
 
-- [Overview](https://openmail.win/docs/mcp/overview): What the MCP server is, available tools, and example use cases
-- [Quick Connect](https://openmail.win/docs/mcp/quickstart): Connect Claude, Cursor, or any AI agent in 2 minutes
-- [Contacts](https://openmail.win/docs/mcp/contacts): list_contacts, create_contact, update_contact, delete_contact, track_event
-- [Broadcasts](https://openmail.win/docs/mcp/broadcasts): list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast
-- [Campaigns](https://openmail.win/docs/mcp/campaigns): list_campaigns, create_campaign, update_campaign, pause_campaign
-- [Segments](https://openmail.win/docs/mcp/segments): list_segments, create_segment
-- [Templates](https://openmail.win/docs/mcp/templates): list_templates, create_template, update_template, delete_template
-- [Analytics](https://openmail.win/docs/mcp/analytics): get_analytics, get_broadcast_analytics
-- [Assets](https://openmail.win/docs/mcp/assets): list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
+- [Overview](https://openmail.win/docs/mcp/overview.md): What the MCP server is, available tools, and example use cases
+- [Quick Connect](https://openmail.win/docs/mcp/quickstart.md): Connect Claude, Cursor, or any AI agent in 2 minutes
+- [Contacts](https://openmail.win/docs/mcp/contacts.md): list_contacts, create_contact, update_contact, delete_contact, track_event
+- [Broadcasts](https://openmail.win/docs/mcp/broadcasts.md): list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast
+- [Campaigns](https://openmail.win/docs/mcp/campaigns.md): list_campaigns, create_campaign, update_campaign, pause_campaign
+- [Segments](https://openmail.win/docs/mcp/segments.md): list_segments, create_segment
+- [Templates](https://openmail.win/docs/mcp/templates.md): list_templates, create_template, update_template, delete_template
+- [Analytics](https://openmail.win/docs/mcp/analytics.md): get_analytics, get_broadcast_analytics
+- [Assets](https://openmail.win/docs/mcp/assets.md): list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
 
 ## SDK
 
 Package: `@openmail/sdk` — TypeScript SDK compatible with Segment Analytics 2.0 and PostHog Node interfaces.
 
-- [SDK Overview](https://openmail.win/docs/sdk/overview): Entry points, Segment/PostHog compatibility, error codes
-- [Event Ingestion](https://openmail.win/docs/sdk/event-ingestion): Track events from any language — PostHog, Customer.io, cURL, Python, Ruby, Go compatible
-- [Node.js SDK](https://openmail.win/docs/sdk/node): Server-side tracking, full API coverage, batching, retry
-- [Browser SDK](https://openmail.win/docs/sdk/browser): Client-side tracking, anonymous IDs, auto page views
-- [React SDK](https://openmail.win/docs/sdk/react): OpenMailProvider, useTrack, useIdentify, useAutoIdentify hooks
-- [Next.js SDK](https://openmail.win/docs/sdk/nextjs): serverTrack, serverIdentify, App Router + Pages Router
+- [SDK Overview](https://openmail.win/docs/sdk/overview.md): Entry points, Segment/PostHog compatibility, error codes
+- [Event Ingestion](https://openmail.win/docs/sdk/event-ingestion.md): Track events from any language — PostHog, Customer.io, cURL, Python, Ruby, Go compatible
+- [Node.js SDK](https://openmail.win/docs/sdk/node.md): Server-side tracking, full API coverage, batching, retry
+- [Browser SDK](https://openmail.win/docs/sdk/browser.md): Client-side tracking, anonymous IDs, auto page views
+- [React SDK](https://openmail.win/docs/sdk/react.md): OpenMailProvider, useTrack, useIdentify, useAutoIdentify hooks
+- [Next.js SDK](https://openmail.win/docs/sdk/nextjs.md): serverTrack, serverIdentify, App Router + Pages Router
 
 ## Self-Hosting
 
-- [Overview](https://openmail.win/docs/self-hosting/overview): Architecture overview, service matrix, and resource requirements
-- [Railway](https://openmail.win/docs/self-hosting/railway): Step-by-step Railway deployment guide
-- [Docker Compose](https://openmail.win/docs/self-hosting/docker): Local and single-server Docker deployment
+- [Overview](https://openmail.win/docs/self-hosting/overview.md): Architecture overview, service matrix, and resource requirements
+- [Railway](https://openmail.win/docs/self-hosting/railway.md): Step-by-step Railway deployment guide
+- [Docker Compose](https://openmail.win/docs/self-hosting/docker.md): Local and single-server Docker deployment
 
 ## Key Information
 
