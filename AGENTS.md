@@ -130,6 +130,21 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
   → Dashboard: live activity feed (opens, clicks, unsubscribes as they happen)
 - @electric-sql/react + @electric-sql/client v1.0.41
 
+## Resend Webhooks
+- Registered at: https://openmail.win/api/webhooks/resend (ID: fe8851ec-9475-47d5-a721-b7624712c70b)
+- Events: email.bounced, email.complained
+- Handler: api/src/routes/webhooks.ts — mounted as PUBLIC route (no auth guard), Svix signature verified
+- RESEND_WEBHOOK_SECRET set in Railway api service
+- On bounce: emailSends.status → "bounced", contact.unsubscribed = true, broadcasts.bounceCount++
+- On complaint: emailSends.status → "failed", contact.unsubscribed = true, broadcasts.complaintCount++
+- Signature: uses `svix` package, onError handler returns 401 on WebhookVerificationError
+- Analytics: bounces/complaints/bounceRate/complaintRate now in GET /analytics/overview + /analytics/broadcasts/:id
+
+## Nginx / Private Networking
+- web/start.sh extracts nameserver from /etc/resolv.conf at startup (Railway uses IPv6: fd12::10)
+- Injects into nginx.conf __DNS_RESOLVER__ placeholder before starting nginx
+- This fixes api.railway.internal DNS resolution (127.0.0.11 is NOT available in Railway containers)
+
 ## Feature Flags / Notes
 - Self-hosted (single tenant) + hosted SaaS (multi-tenant) both supported
 - Template builder: visual drag-and-drop + raw HTML/code mode
