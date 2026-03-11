@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -242,15 +242,23 @@ function BroadcastDetailDialog({
   const [fromEmail, setFromEmail] = useState(broadcast.fromEmail ?? "");
   const [htmlContent, setHtmlContent] = useState(broadcast.htmlContent ?? "");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
-  const [contentMode, setContentMode] = useState<"visual" | "html" | "template">(() => {
-    if (broadcast.templateId) return "template";
-    // If content looks like a full HTML document (raw-authored), default to HTML mode
-    // to avoid Tiptap mangling <html>, <head>, <style> tags it doesn't support
+  const [contentMode, setContentMode] = useState<"visual" | "html">(() => {
+    // If content looks like a full HTML document, default to HTML mode to avoid Tiptap mangling
     const raw = broadcast.htmlContent?.trimStart() ?? "";
     if (raw.startsWith("<!") || raw.toLowerCase().startsWith("<html")) return "html";
     return "visual";
   });
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(broadcast.templateId);
+
+  // If the broadcast was linked to a template (no htmlContent yet), populate from the template
+  // once the templates list has loaded. Templates are the HTML *frame* — user edits content within.
+  useEffect(() => {
+    if (!broadcast.htmlContent && broadcast.templateId && templates.length > 0 && !htmlContent) {
+      const tpl = templates.find((t) => t.id === broadcast.templateId);
+      if (tpl) setHtmlContent(tpl.htmlContent);
+    }
+  // Only run once when templates first load
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates]);
   const [previewMobile, setPreviewMobile] = useState(false);
 
   // Confirmation dialogs
@@ -275,9 +283,7 @@ function BroadcastDetailDialog({
           subject,
           fromName: fromName || undefined,
           fromEmail: fromEmail || undefined,
-          ...(contentMode === "template" && selectedTemplateId
-            ? { templateId: selectedTemplateId }
-            : { htmlContent }),
+          htmlContent,
           segmentIds: selectedSegmentIds,
         }),
       }),
@@ -383,10 +389,7 @@ function BroadcastDetailDialog({
   const ctoRate = openCount > 0 ? ((clickCount / openCount) * 100).toFixed(1) : "0.0";
 
   // Preview HTML for Overview/Content draft panels
-  const previewHtml =
-    contentMode === "template"
-      ? (templates.find((t) => t.id === selectedTemplateId)?.htmlContent ?? "")
-      : htmlContent;
+  const previewHtml = htmlContent;
 
   // ── Tab content renderers ────────────────────────────────────────────────────
 
@@ -598,14 +601,11 @@ function BroadcastDetailDialog({
               <div className="flex items-center justify-between">
                 <Label>Content</Label>
                 <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                  {(["visual", "html", "template"] as const).map((m) => (
+                  {(["visual", "html"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
-                      onClick={() => {
-                        setContentMode(m);
-                        if (m !== "template") setSelectedTemplateId(null);
-                      }}
+                      onClick={() => setContentMode(m)}
                       className={cn(
                         "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
                         contentMode === m
@@ -613,47 +613,50 @@ function BroadcastDetailDialog({
                           : "text-muted-foreground hover:text-foreground"
                       )}
                     >
-                      {m === "visual" ? "Visual" : m === "html" ? "HTML" : "Template"}
+                      {m === "visual" ? "Visual" : "HTML"}
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Template loader — pick a template as a starting point, then edit freely */}
+              {templates.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground shrink-0">Start from template:</span>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const tpl = templates.find((t) => t.id === e.target.value);
+                      if (tpl) {
+                        setHtmlContent(tpl.htmlContent);
+                        setContentMode("visual");
+                      }
+                    }}
+                    className="flex-1 h-7 rounded border border-input bg-input px-2 text-[12px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                  >
+                    <option value="" disabled>Pick a template…</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {contentMode === "visual" ? (
                 <EmailEditor
                   value={htmlContent}
                   onChange={setHtmlContent}
-                  placeholder="Start writing your broadcast…"
+                  placeholder="Start writing your broadcast… or pick a template above to begin."
                   workspaceId={workspaceId}
-                  minHeight="340px"
+                  minHeight="320px"
                 />
-              ) : contentMode === "html" ? (
+              ) : (
                 <textarea
                   value={htmlContent}
                   onChange={(e) => setHtmlContent(e.target.value)}
                   placeholder="<h1>Hello {{firstName}}!</h1>"
                   className="w-full min-h-[400px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
-              ) : templates.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
-                  No templates yet.{" "}
-                  <Link to="/templates" onClick={onClose} className="font-medium text-foreground hover:underline">
-                    Create one first.
-                  </Link>
-                </p>
-              ) : (
-                <select
-                  value={selectedTemplateId ?? ""}
-                  onChange={(e) => setSelectedTemplateId(e.target.value || null)}
-                  className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-                >
-                  <option value="">Select a template…</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
               )}
             </div>
           </div>
@@ -960,11 +963,7 @@ function BroadcastDetailDialog({
                     size="sm"
                     disabled={saveMutation.isPending}
                     onClick={() => {
-                      if (contentMode === "template" && !selectedTemplateId) {
-                        toast.error("Select a template first");
-                        return;
-                      }
-                      if ((contentMode === "visual" || contentMode === "html") && !htmlContent.trim()) {
+                      if (!htmlContent.trim()) {
                         toast.error("Add some content before saving");
                         return;
                       }
@@ -1086,8 +1085,7 @@ function BroadcastsPage() {
   const [createFromName, setCreateFromName] = useState("");
   const [createFromEmail, setCreateFromEmail] = useState("");
   const [createPreviewText, setCreatePreviewText] = useState("");
-  const [createMode, setCreateMode] = useState<"visual" | "html" | "template">("visual");
-  const [createTemplateId, setCreateTemplateId] = useState<string | null>(null);
+  const [createMode, setCreateMode] = useState<"visual" | "html">("visual");
   const [createScheduledAt, setCreateScheduledAt] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -1170,7 +1168,6 @@ function BroadcastsPage() {
       setCreateFromEmail("");
       setCreatePreviewText("");
       setCreateMode("visual");
-      setCreateTemplateId(null);
       setCreateScheduledAt("");
       if (nameRef.current) nameRef.current.value = "";
       if (subjectRef.current) subjectRef.current.value = "";
@@ -1202,7 +1199,6 @@ function BroadcastsPage() {
               setCreateFromEmail("");
               setCreatePreviewText("");
               setCreateMode("visual");
-              setCreateTemplateId(null);
               setCreateScheduledAt("");
             }
           }}
@@ -1251,12 +1247,8 @@ function BroadcastsPage() {
                     toast.error("Select at least one segment");
                     return;
                   }
-                  if ((createMode === "visual" || createMode === "html") && !createHtml.trim()) {
+                  if (!createHtml.trim()) {
                     toast.error("Add some content to your broadcast");
-                    return;
-                  }
-                  if (createMode === "template" && !createTemplateId) {
-                    toast.error("Select a template first");
                     return;
                   }
                   createMutation.mutate({
@@ -1265,9 +1257,7 @@ function BroadcastsPage() {
                     previewText: createPreviewText || undefined,
                     fromName: createFromName || undefined,
                     fromEmail: createFromEmail || undefined,
-                    ...(createMode === "template"
-                      ? { templateId: createTemplateId! }
-                      : { htmlContent: createHtml }),
+                    htmlContent: createHtml,
                     segmentIds: selectedSegmentIds,
                     scheduledAt: createScheduledAt || undefined,
                   });
@@ -1355,58 +1345,60 @@ function BroadcastsPage() {
                     <div className="flex items-center justify-between">
                       <Label>Content</Label>
                       <div className="flex items-center rounded-md border border-border p-0.5 gap-0.5">
-                        {(["visual", "html", "template"] as const).map((m) => (
+                        {(["visual", "html"] as const).map((m) => (
                           <button
                             key={m}
                             type="button"
-                            onClick={() => { setCreateMode(m); if (m !== "template") setCreateTemplateId(null); }}
+                            onClick={() => setCreateMode(m)}
                             className={cn(
                               "rounded px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer",
                               createMode === m ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                             )}
                           >
-                            {m === "visual" ? "Visual" : m === "html" ? "HTML" : "Template"}
+                            {m === "visual" ? "Visual" : "HTML"}
                           </button>
                         ))}
                       </div>
                     </div>
+
+                    {/* Template loader — pick any template as a starting point, then edit freely */}
+                    {templates.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground shrink-0">Start from template:</span>
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const tpl = templates.find((t) => t.id === e.target.value);
+                            if (tpl) {
+                              setCreateHtml(tpl.htmlContent);
+                              setCreateMode("visual");
+                            }
+                          }}
+                          className="flex-1 h-7 rounded border border-input bg-input px-2 text-[12px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                        >
+                          <option value="" disabled>Pick a template…</option>
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {createMode === "visual" ? (
                       <EmailEditor
                         value={createHtml}
                         onChange={setCreateHtml}
-                        placeholder="Start writing your broadcast…"
+                        placeholder="Start writing your broadcast… or pick a template above."
                         workspaceId={activeWorkspaceId ?? undefined}
                         minHeight="200px"
                       />
-                    ) : createMode === "html" ? (
+                    ) : (
                       <textarea
-                        required={createMode === "html"}
                         value={createHtml}
                         onChange={(e) => setCreateHtml(e.target.value)}
                         placeholder="<h1>Hello {{firstName}}!</h1>"
                         className="flex-1 w-full min-h-[200px] resize-none rounded-md border border-input bg-input px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       />
-                    ) : (
-                      <div className="space-y-2">
-                        {templates.length === 0 ? (
-                          <p className="text-[12px] text-muted-foreground rounded-lg border border-dashed px-3 py-2">
-                            No templates yet.{" "}
-                            <Link to="/templates" onClick={() => setCreateOpen(false)} className="font-medium text-foreground hover:underline">Create one first.</Link>
-                          </p>
-                        ) : (
-                          <select
-                            value={createTemplateId ?? ""}
-                            onChange={(e) => setCreateTemplateId(e.target.value || null)}
-                            required={createMode === "template"}
-                            className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
-                          >
-                            <option value="">Select a template…</option>
-                            {templates.map((t) => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
                     )}
                   </div>
                 </div>
@@ -1420,9 +1412,7 @@ function BroadcastsPage() {
               {/* Right — live preview */}
               <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
                 {(() => {
-                  const previewHtml = (createMode === "html" || createMode === "visual")
-                    ? createHtml
-                    : (templates.find((t) => t.id === createTemplateId)?.htmlContent ?? "");
+                  const previewHtml = createHtml;
                   return (
                     <>
                       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border">
