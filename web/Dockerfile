@@ -55,5 +55,8 @@ COPY --from=builder /app/docs/dist /usr/share/nginx/html/docs
 # and nginx's own $uri / $uri/ variables are preserved correctly.
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
+COPY web/start.sh /start.sh
+RUN chmod +x /start.sh
+
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/start.sh"]
