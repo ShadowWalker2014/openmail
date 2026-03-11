@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, Send, Mail, Zap, Trash2, Monitor, Smartphone,
-  BarChart2, CheckCircle2, Search, AlertCircle, Copy, Code2,
+  BarChart2, CheckCircle2, Search, AlertCircle, Copy,
 } from "lucide-react";
 import { EmailEditor } from "@/components/ui/email-editor";
 import { toast } from "sonner";
@@ -242,9 +242,14 @@ function BroadcastDetailDialog({
   const [fromEmail, setFromEmail] = useState(broadcast.fromEmail ?? "");
   const [htmlContent, setHtmlContent] = useState(broadcast.htmlContent ?? "");
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>(broadcast.segmentIds ?? []);
-  const [contentMode, setContentMode] = useState<"visual" | "html" | "template">(
-    broadcast.templateId ? "template" : "visual"
-  );
+  const [contentMode, setContentMode] = useState<"visual" | "html" | "template">(() => {
+    if (broadcast.templateId) return "template";
+    // If content looks like a full HTML document (raw-authored), default to HTML mode
+    // to avoid Tiptap mangling <html>, <head>, <style> tags it doesn't support
+    const raw = broadcast.htmlContent?.trimStart() ?? "";
+    if (raw.startsWith("<!") || raw.toLowerCase().startsWith("<html")) return "html";
+    return "visual";
+  });
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(broadcast.templateId);
   const [previewMobile, setPreviewMobile] = useState(false);
 
@@ -478,7 +483,7 @@ function BroadcastDetailDialog({
                 <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
                   <BarChart2 className="h-8 w-8 text-muted-foreground" />
                   <p className="text-[12px] text-muted-foreground">
-                    Add HTML content in the Content tab to see a preview
+                    Add content in the Content tab to see a preview
                   </p>
                 </div>
               )}
@@ -680,7 +685,7 @@ function BroadcastDetailDialog({
                 <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
                   <Monitor className="h-8 w-8 text-muted-foreground" />
                   <p className="text-[12px] text-muted-foreground">
-                    Start typing HTML to see a live preview
+                    {contentMode === "visual" ? "Start writing to see a live preview" : "Start typing HTML to see a live preview"}
                   </p>
                 </div>
               )}
@@ -957,6 +962,10 @@ function BroadcastDetailDialog({
                     onClick={() => {
                       if (contentMode === "template" && !selectedTemplateId) {
                         toast.error("Select a template first");
+                        return;
+                      }
+                      if ((contentMode === "visual" || contentMode === "html") && !htmlContent.trim()) {
+                        toast.error("Add some content before saving");
                         return;
                       }
                       saveMutation.mutate();
@@ -1242,6 +1251,14 @@ function BroadcastsPage() {
                     toast.error("Select at least one segment");
                     return;
                   }
+                  if ((createMode === "visual" || createMode === "html") && !createHtml.trim()) {
+                    toast.error("Add some content to your broadcast");
+                    return;
+                  }
+                  if (createMode === "template" && !createTemplateId) {
+                    toast.error("Select a template first");
+                    return;
+                  }
                   createMutation.mutate({
                     name: nameRef.current!.value,
                     subject: subjectRef.current!.value,
@@ -1425,7 +1442,7 @@ function BroadcastsPage() {
                         ) : (
                           <div className="flex flex-col items-center justify-center h-full text-center gap-2 opacity-40">
                             <Monitor className="h-8 w-8 text-muted-foreground" />
-                            <p className="text-[12px] text-muted-foreground">Start typing HTML to see a live preview</p>
+                            <p className="text-[12px] text-muted-foreground">{createMode === "visual" ? "Start writing to see a live preview" : "Start typing HTML to see a live preview"}</p>
                           </div>
                         )}
                       </div>

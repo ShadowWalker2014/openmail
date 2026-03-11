@@ -39,7 +39,7 @@ import {
   Type, Check, X,
 } from "lucide-react";
 import {
-  Popover, PopoverContent, PopoverTrigger,
+  Popover, PopoverContent, PopoverTrigger, PopoverAnchor,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -106,7 +106,8 @@ function TBtn({ onClick, active, disabled, title, children, className }: Toolbar
             active
               ? "bg-foreground text-background"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            disabled && "opacity-30 cursor-not-allowed pointer-events-none",
+            // NOTE: Only opacity-30 here — don't add pointer-events-none which hides the cursor style
+            disabled && "opacity-30 cursor-not-allowed",
             className,
           )}
         >
@@ -125,9 +126,10 @@ function Sep() {
 // ── Block type selector ────────────────────────────────────────────────────────
 
 function BlockTypeSelector({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null;
-
+  // Hooks MUST be called before any early return (Rules of Hooks)
   const [open, setOpen] = useState(false);
+
+  if (!editor) return null;
 
   const current =
     editor.isActive("heading", { level: 1 }) ? "H1" :
@@ -139,9 +141,10 @@ function BlockTypeSelector({ editor }: { editor: ReturnType<typeof useEditor> })
 
   const options = [
     { label: "Text",  icon: <Pilcrow className="h-3.5 w-3.5" />,  action: () => editor.chain().focus().setParagraph().run() },
-    { label: "H1",    icon: <Heading1 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
-    { label: "H2",    icon: <Heading2 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
-    { label: "H3",    icon: <Heading3 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
+    // Use setHeading (not toggle) — idempotent, doesn't remove heading when already active
+    { label: "H1",    icon: <Heading1 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().setHeading({ level: 1 }).run() },
+    { label: "H2",    icon: <Heading2 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().setHeading({ level: 2 }).run() },
+    { label: "H3",    icon: <Heading3 className="h-3.5 w-3.5" />, action: () => editor.chain().focus().setHeading({ level: 3 }).run() },
     { label: "Quote", icon: <Quote className="h-3.5 w-3.5" />,    action: () => editor.chain().focus().toggleBlockquote().run() },
     { label: "Code",  icon: <Code2 className="h-3.5 w-3.5" />,   action: () => editor.chain().focus().toggleCodeBlock().run() },
   ];
@@ -193,8 +196,11 @@ function BlockTypeSelector({ editor }: { editor: ReturnType<typeof useEditor> })
 // ── Color picker ───────────────────────────────────────────────────────────────
 
 function ColorPicker({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null;
+  // Hooks MUST be called before any early return (Rules of Hooks)
   const [open, setOpen] = useState(false);
+
+  if (!editor) return null;
+
   const current = editor.getAttributes("textStyle").color as string | undefined;
 
   return (
@@ -221,7 +227,7 @@ function ColorPicker({ editor }: { editor: ReturnType<typeof useEditor> }) {
         <div className="grid grid-cols-7 gap-1">
           {TEXT_COLORS.map((c) => (
             <button
-              key={c.value}
+              key={c.value || "default"}
               type="button"
               title={c.label}
               onMouseDown={(e: React.MouseEvent) => {
@@ -236,7 +242,9 @@ function ColorPicker({ editor }: { editor: ReturnType<typeof useEditor> }) {
               className={cn(
                 "w-5 h-5 rounded-full border transition-transform hover:scale-110 cursor-pointer",
                 c.value === "" && "border-border bg-gradient-to-br from-gray-100 to-gray-300",
-                current === c.value && "ring-2 ring-offset-1 ring-foreground",
+                // Active check: "default" color maps to !current, named colors compare directly
+                (c.value === "" ? !current : current === c.value) &&
+                  "ring-2 ring-offset-1 ring-foreground",
               )}
               style={c.value ? { backgroundColor: c.value, borderColor: c.value } : undefined}
             />
@@ -250,45 +258,56 @@ function ColorPicker({ editor }: { editor: ReturnType<typeof useEditor> }) {
 // ── Link popover ───────────────────────────────────────────────────────────────
 
 function LinkPopover({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null;
+  // All hooks MUST be called before any early return (Rules of Hooks)
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const openPopover = useCallback(() => {
+    if (!editor) return;
     const current = editor.getAttributes("link").href as string || "";
     setUrl(current);
     setOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    // Let Radix handle focus via onOpenAutoFocus (no setTimeout needed)
   }, [editor]);
 
   const applyLink = useCallback(() => {
-    if (!url.trim()) {
+    if (!editor) return;
+    const trimmed = url.trim();
+    if (!trimmed) {
       editor.chain().focus().unsetLink().run();
     } else {
-      const href = url.startsWith("http") ? url : `https://${url}`;
+      // Normalize: allow http://, https://, mailto:, tel:, ftp:// as-is; prefix others with https://
+      const href = /^(https?|mailto|tel|ftp):/.test(trimmed)
+        ? trimmed
+        : `https://${trimmed}`;
       editor.chain().focus().setLink({ href, target: "_blank" }).run();
     }
     setOpen(false);
   }, [editor, url]);
 
   const removeLink = useCallback(() => {
+    if (!editor) return;
     editor.chain().focus().unsetLink().run();
     setOpen(false);
   }, [editor]);
 
+  if (!editor) return null;
+
   return (
+    // Use PopoverAnchor so TBtn controls open state exclusively — PopoverTrigger would
+    // fight with TBtn's click handler, causing the popover to flash open then close.
     <Popover open={open} onOpenChange={setOpen}>
-      <TBtn
-        onClick={openPopover}
-        active={editor.isActive("link")}
-        title="Add / edit link"
-      >
-        <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
+        <TBtn
+          onClick={openPopover}
+          active={editor.isActive("link")}
+          title="Add / edit link"
+        >
           <Link2 className="h-3.5 w-3.5" />
-        </PopoverTrigger>
-      </TBtn>
-      <PopoverContent className="w-72 p-2" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+        </TBtn>
+      </PopoverAnchor>
+      <PopoverContent className="w-72 p-2" align="start">
         <div className="flex items-center gap-1.5">
           <Input
             ref={inputRef}
@@ -353,6 +372,12 @@ export function EmailEditor({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  // Track mounted state to avoid calling editor.chain() after unmount
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -387,8 +412,10 @@ export function EmailEditor({
     editable: true,
     editorProps: {
       attributes: {
+        // `relative` is required so before:absolute (placeholder) positions correctly
+        // `min-h` inline style is applied below via style prop on EditorContent
         class: cn(
-          "prose prose-sm dark:prose-invert max-w-none focus:outline-none px-4 py-3",
+          "relative prose prose-sm dark:prose-invert max-w-none focus:outline-none px-4 py-3",
           "prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5",
           "[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6",
           "prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg",
@@ -397,8 +424,10 @@ export function EmailEditor({
           "prose-pre:bg-muted prose-pre:rounded-md",
           "prose-a:text-primary prose-a:underline prose-a:underline-offset-2",
           "prose-hr:border-border",
-          "[&_.tiptap-image]:max-w-full",
         ),
+        // Apply min-height directly to the ProseMirror editable element so empty-space
+        // clicks land on the editable region and correctly focus the editor
+        style: `min-height: ${minHeight}`,
       },
     },
     onUpdate: ({ editor }) => {
@@ -411,7 +440,8 @@ export function EmailEditor({
   useEffect(() => {
     if (!editor) return;
     const currentHtml = editor.getHTML();
-    const normalized = value || "";
+    // Normalize both sides: treat empty paragraph as empty string
+    const normalized = (value === "<p></p>" ? "" : value) || "";
     const currentNormalized = currentHtml === "<p></p>" ? "" : currentHtml;
     if (normalized !== currentNormalized) {
       editor.commands.setContent(value || "");
@@ -423,14 +453,25 @@ export function EmailEditor({
   const handleImageUpload = useCallback(async (file: File) => {
     if (!workspaceId || !editor) return;
     setUploading(true);
-    const resp = await sessionFetch(workspaceId, "assets/upload-url", {
-      method: "POST",
-      body: JSON.stringify({ name: file.name, mimeType: file.type, fileSize: file.size }),
-    }) as Response;
-    const { uploadUrl, proxyUrl } = await resp.json() as { uploadUrl: string; proxyUrl: string };
-    await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-    editor.chain().focus().setImage({ src: proxyUrl, alt: file.name }).run();
-    setUploading(false);
+    try {
+      // sessionFetch returns already-parsed JSON — no .json() call needed
+      const { uploadUrl, proxyUrl } = await sessionFetch<{ uploadUrl: string; proxyUrl: string }>(
+        workspaceId, "/assets/upload-url", {
+          method: "POST",
+          body: JSON.stringify({ fileName: file.name, mimeType: file.type, fileSize: file.size }),
+        },
+      );
+      const putResp = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!putResp.ok) throw new Error(`Upload failed: ${putResp.status}`);
+      if (!mountedRef.current) return;
+      editor.chain().focus().setImage({ src: proxyUrl, alt: file.name }).run();
+    } finally {
+      setUploading(false);
+    }
   }, [workspaceId, editor]);
 
   if (!editor) return null;
@@ -479,7 +520,7 @@ export function EmailEditor({
                 onMouseDown={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
                 className={cn(
                   "flex items-center justify-center w-7 h-7 rounded text-sm transition-colors cursor-pointer text-muted-foreground hover:bg-accent hover:text-foreground",
-                  uploading && "opacity-50 cursor-wait pointer-events-none",
+                  uploading && "opacity-50 cursor-wait",
                 )}
               >
                 <ImageIcon className="h-3.5 w-3.5" />
@@ -495,15 +536,6 @@ export function EmailEditor({
         >
           <Minus className="h-3.5 w-3.5" />
         </TBtn>
-
-        {editor.isActive("link") && (
-          <TBtn
-            onClick={() => editor.chain().focus().unsetLink().run()}
-            title="Remove link"
-          >
-            <Link2Off className="h-3.5 w-3.5" />
-          </TBtn>
-        )}
         <Sep />
 
         {/* History */}
@@ -533,24 +565,34 @@ export function EmailEditor({
           <Strikethrough className="h-3 w-3" />
         </button>
         <div className="w-px h-4 bg-border mx-0.5" />
+        {/* Link button in bubble menu — opens the same inline popover as the toolbar */}
         <button type="button" onMouseDown={(e) => {
           e.preventDefault();
+          // Find and click the toolbar Link2 button by triggering its popover via a shared ref
+          // Simple approach: use the same URL normalization as LinkPopover
           const prev = editor.getAttributes("link").href as string || "";
           const url = window.prompt("URL:", prev || "https://");
           if (url === null) return;
-          if (!url) { editor.chain().focus().unsetLink().run(); return; }
-          editor.chain().focus().setLink({ href: url.startsWith("http") ? url : `https://${url}`, target: "_blank" }).run();
+          const trimmed = url.trim();
+          if (!trimmed) { editor.chain().focus().unsetLink().run(); return; }
+          const href = /^(https?|mailto|tel|ftp):/.test(trimmed) ? trimmed : `https://${trimmed}`;
+          editor.chain().focus().setLink({ href, target: "_blank" }).run();
         }}
           className={cn("flex items-center justify-center w-6 h-6 rounded text-xs transition-colors cursor-pointer", editor.isActive("link") ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
           <Link2 className="h-3 w-3" />
         </button>
+        {editor.isActive("link") && (
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().unsetLink().run(); }}
+            className="flex items-center justify-center w-6 h-6 rounded text-xs transition-colors cursor-pointer text-muted-foreground hover:text-destructive hover:bg-accent">
+            <Link2Off className="h-3 w-3" />
+          </button>
+        )}
       </BubbleMenu>
 
       {/* ── Editor content area ──────────────────────────────────────────────── */}
       <EditorContent
         editor={editor}
         className="flex-1 overflow-y-auto"
-        style={{ minHeight }}
       />
 
       {/* Hidden file input for image upload */}

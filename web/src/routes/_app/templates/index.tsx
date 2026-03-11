@@ -166,9 +166,7 @@ function TemplateEditor({
         method: "POST",
         body: JSON.stringify({
           to: testEmail,
-          subject: nameRef.current?.value
-            ? (subjectRef.current?.value || "Test email")
-            : "Test email",
+          subject: subjectRef.current?.value || "Test email",
           htmlContent: activeHtml,
           prependTest,
         }),
