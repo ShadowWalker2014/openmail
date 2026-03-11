@@ -108,7 +108,13 @@ export function createSendBroadcastWorker() {
           broadcastId,
           workspaceId,
         };
-        await sendBatchQueue.add("send-batch", jobData, { removeOnComplete: 100 });
+        await sendBatchQueue.add("send-batch", jobData, {
+          removeOnComplete: 100,
+          // Retry up to 5 times on transient Resend errors (429, 5xx).
+          // Exponential backoff: 10s → 20s → 40s → 80s → 160s between attempts.
+          attempts: 5,
+          backoff: { type: "exponential", delay: 10_000 },
+        });
       }
 
       logger.info(

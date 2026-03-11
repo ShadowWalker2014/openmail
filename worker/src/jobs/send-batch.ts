@@ -15,6 +15,13 @@
  *   send-batch     → resolves HTML, injects per-contact tracking, calls
  *                    resend.batch.send([...]) → updates emailSends rows
  *                    → increments broadcast sentCount
+ *
+ * Rate limiting:
+ *   The worker's BullMQ limiter caps throughput at BATCH_RATE_PER_SEC
+ *   batches/second (= BATCH_RATE_PER_SEC × 100 emails/second) so we
+ *   stay well within Resend's batch API rate limit on any plan tier.
+ *   Jobs are retried with exponential backoff on transient errors (429,
+ *   5xx) so a temporary rate-limit spike never permanently loses emails.
  */
 
 import { Worker } from "bullmq";
@@ -37,6 +44,36 @@ export interface SendBatchJobData {
   sendIds: string[];
   broadcastId: string;
   workspaceId: string;
+}
+
+/**
+ * Resend batch API rate: max jobs/second processed by this worker.
+ * 2 batches/s × 100 emails/batch = 200 emails/second.
+ * Adjust upward if your Resend plan's batch endpoint allows it.
+ */
+const BATCH_RATE_PER_SEC = 2;
+
+/**
+ * Return true for transient Resend errors that should be retried.
+ * On 429 / 5xx: BullMQ will back off and retry. On 4xx (bad email
+ * address, auth failure, etc.) we mark the emails as permanently failed.
+ */
+function isTransientResendError(
+  error: { name?: string; message?: string; statusCode?: number } | null | undefined,
+): boolean {
+  if (!error) return false;
+  const { statusCode, name = "", message = "" } = error;
+  return (
+    statusCode === 429 ||
+    statusCode === 500 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504 ||
+    name === "rate_limit_exceeded" ||
+    name === "RateLimitExceeded" ||
+    message.toLowerCase().includes("rate limit") ||
+    message.toLowerCase().includes("too many requests")
+  );
 }
 
 export function createSendBatchWorker() {
@@ -63,6 +100,8 @@ export function createSendBatchWorker() {
       const orderedSends = sendIds
         .map((id) => sendsMap.get(id))
         .filter((s): s is (typeof sends)[number] => s !== undefined);
+
+      const processedCount = orderedSends.length;
 
       // ── Fetch workspace once ─────────────────────────────────────────────
       const [workspace] = await db
@@ -110,52 +149,68 @@ export function createSendBatchWorker() {
       // events are correctly attributed to the individual contact.
       const batchPayload = orderedSends.map((send) => ({
         from,
-        to: send.contactEmail,
+        to:      send.contactEmail,
         subject: broadcast.subject,
-        html: injectTracking(htmlContent, send.id, trackerUrl),
+        html:    injectTracking(htmlContent, send.id, trackerUrl),
       }));
 
-      const processedCount = orderedSends.length;
+      // ── Send via Resend batch API ────────────────────────────────────────
+      // CRITICAL: distinguish transient errors (429, 5xx) from permanent
+      // failures (4xx). On transient errors we MUST NOT mark emails failed
+      // and MUST NOT advance sentCount — BullMQ will retry with backoff and
+      // the same sendIds will be re-sent on the next attempt.
+      let transientError: Error | null = null;
 
-      // ── Send via Resend batch API (up to 100 per call) ─────────────────
-      // Always increment sentCount in the finally block so the broadcast
-      // never gets stuck in "sending" due to a Resend API failure.
       try {
         const result = await resendClient.batch.send(batchPayload);
 
         if (result.error || !result.data) {
           const errMsg = result.error?.message ?? "Batch send failed";
-          await db
-            .update(emailSends)
-            .set({ status: "failed", failedAt: new Date(), failureReason: errMsg })
-            .where(inArray(emailSends.id, sendIds));
-          logger.warn(
-            { broadcastId, batchSize: processedCount, error: errMsg },
-            "Resend batch send failed"
-          );
+
+          if (isTransientResendError(result.error)) {
+            // Transient — do NOT mark emails failed, do NOT advance sentCount.
+            // Throw so BullMQ retries this job with exponential backoff.
+            transientError = new Error(`Resend transient error (will retry): ${errMsg}`);
+            logger.warn(
+              { broadcastId, batchSize: processedCount, error: errMsg },
+              "Transient Resend error — job will be retried"
+            );
+          } else {
+            // Permanent error (invalid address, auth failure, etc.) — mark failed.
+            await db
+              .update(emailSends)
+              .set({ status: "failed", failedAt: new Date(), failureReason: errMsg })
+              .where(inArray(emailSends.id, sendIds));
+            logger.warn(
+              { broadcastId, batchSize: processedCount, error: errMsg },
+              "Permanent Resend error — emails marked failed"
+            );
+          }
         } else {
-          // result.data.data is the ordered array of { id } objects.
-          // data[i].id is the Resend message ID for orderedSends[i].
-          const responseIds = result.data.data;
-          const now = new Date();
+          // ── Success: mark all sends as sent ──────────────────────────────
           await db
             .update(emailSends)
-            .set({ status: "sent", sentAt: now })
+            .set({ status: "sent", sentAt: new Date() })
             .where(inArray(emailSends.id, sendIds));
 
-          // Back-fill individual Resend message IDs where available.
-          // Done as separate updates so a partial write failure here doesn't
-          // fail the whole batch — the status is already correct above.
-          await Promise.all(
-            orderedSends.map((send, i) => {
-              const resendMessageId = responseIds[i]?.id;
-              if (!resendMessageId) return Promise.resolve();
-              return db
-                .update(emailSends)
-                .set({ resendMessageId })
-                .where(eq(emailSends.id, send.id));
-            })
-          );
+          // Back-fill Resend message IDs in a single bulk UPDATE using unnest.
+          // Replaces the previous pattern of N individual UPDATE queries.
+          const responseIds = result.data.data ?? [];
+          const pairs = orderedSends
+            .map((send, i) => ({ id: send.id, msgId: responseIds[i]?.id }))
+            .filter((p): p is { id: string; msgId: string } => !!p.msgId);
+
+          if (pairs.length > 0) {
+            await db.execute(sql`
+              UPDATE email_sends
+              SET resend_message_id = vals.msg_id
+              FROM unnest(
+                ARRAY[${sql.join(pairs.map((p) => sql`${p.id}`), sql`, `)}]::text[],
+                ARRAY[${sql.join(pairs.map((p) => sql`${p.msgId}`), sql`, `)}]::text[]
+              ) AS vals(sid, msg_id)
+              WHERE email_sends.id = vals.sid
+            `);
+          }
 
           logger.info(
             { broadcastId, batchSize: processedCount },
@@ -163,37 +218,49 @@ export function createSendBatchWorker() {
           );
         }
       } finally {
-        // Always count the batch as processed, regardless of Resend outcome.
-        // sentCount represents "processed" not "delivered" — query
-        // emailSends.status = 'sent' for accurate delivery counts.
-        await db
-          .update(broadcasts)
-          .set({
-            sentCount: sql`${broadcasts.sentCount} + ${processedCount}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(broadcasts.id, broadcastId));
+        // Only advance sentCount when the batch has been definitively processed
+        // (success OR permanent failure). Skip on transient errors — the job
+        // will be retried and these emails counted when they eventually succeed.
+        if (!transientError) {
+          await db
+            .update(broadcasts)
+            .set({
+              sentCount: sql`${broadcasts.sentCount} + ${processedCount}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(broadcasts.id, broadcastId));
 
-        // Flip broadcast status to "sent" when all recipients have been processed.
-        const [bcast] = await db
-          .select({ sentCount: broadcasts.sentCount, recipientCount: broadcasts.recipientCount })
-          .from(broadcasts)
-          .where(eq(broadcasts.id, broadcastId))
-          .limit(1);
-
-        if (
-          bcast &&
-          bcast.sentCount !== null &&
-          bcast.recipientCount !== null &&
-          bcast.sentCount >= bcast.recipientCount
-        ) {
+          // Flip broadcast status to "sent" when all recipients are processed.
+          // Use a single UPDATE with a WHERE condition to avoid a read-then-write.
           await db
             .update(broadcasts)
             .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
-            .where(eq(broadcasts.id, broadcastId));
+            .where(
+              sql`${broadcasts.id} = ${broadcastId}
+                AND ${broadcasts.sentCount} >= ${broadcasts.recipientCount}
+                AND ${broadcasts.status} = 'sending'`
+            );
         }
       }
+
+      // Re-throw transient errors AFTER the finally block so BullMQ sees a
+      // failed job and applies retry/backoff. (The finally block is a no-op
+      // for transient errors, so no sentCount was advanced.)
+      if (transientError) throw transientError;
     },
-    { connection: getWorkerRedisConnection(), concurrency: 5 }
+    {
+      connection: getWorkerRedisConnection(),
+      // concurrency: how many jobs can run in parallel within one worker process.
+      // Combined with the limiter below this caps peak throughput safely.
+      concurrency: 10,
+      // Rate limiter: at most BATCH_RATE_PER_SEC jobs processed per second
+      // across ALL worker instances (BullMQ coordinates via Redis).
+      // 2 batches/s × 100 emails/batch = 200 emails/second — well within
+      // Resend's batch endpoint limits on any paid plan.
+      limiter: {
+        max:      BATCH_RATE_PER_SEC,
+        duration: 1000, // ms
+      },
+    }
   );
 }
