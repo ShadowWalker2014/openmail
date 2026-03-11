@@ -21,6 +21,7 @@ import assetsRouter from "./routes/assets.js";
 import sendsRouter from "./routes/sends.js";
 import ingestRouter from "./routes/ingest.js";
 import groupsRouter from "./routes/groups.js";
+import { webhooksRouter } from "./routes/webhooks.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -173,6 +174,10 @@ app.route("/api/v1", apiKeyApi);
 // Compatible with PostHog and Customer.io SDK formats
 app.route("/api/ingest", ingestRouter);
 
+// Resend webhook — public-facing, auth via Svix signature (RESEND_WEBHOOK_SECRET)
+// Handles email.bounced and email.complained events
+app.route("/api/webhooks/resend", webhooksRouter);
+
 // Exported for integration tests — same app instance used in production
 export { app };
 
@@ -229,6 +234,10 @@ async function runStartupMigrations() {
   `);
   await db.execute(`CREATE INDEX IF NOT EXISTS seg_mem_workspace_idx ON segment_memberships (workspace_id)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS seg_mem_contact_idx   ON segment_memberships (contact_id)`);
+
+  // Resend webhook counters on broadcasts (added for bounce/complaint tracking)
+  await db.execute(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS bounce_count INTEGER NOT NULL DEFAULT 0`);
+  await db.execute(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS complaint_count INTEGER NOT NULL DEFAULT 0`);
 
   logger.info("Startup migrations OK");
 }

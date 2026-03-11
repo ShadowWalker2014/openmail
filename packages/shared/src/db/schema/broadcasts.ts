@@ -18,6 +18,8 @@ export const broadcasts = pgTable("broadcasts", {
   sentCount: integer("sent_count").default(0),
   openCount: integer("open_count").default(0),
   clickCount: integer("click_count").default(0),
+  bounceCount: integer("bounce_count").default(0),
+  complaintCount: integer("complaint_count").default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
