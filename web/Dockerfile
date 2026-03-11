@@ -20,6 +20,7 @@ COPY docs/bun.lock* ./docs/
 RUN cd docs && bun install --frozen-lockfile
 
 COPY docs/src ./docs/src
+COPY docs/scripts ./docs/scripts
 COPY docs/index.html ./docs/index.html
 COPY docs/vite.config.ts docs/tailwind.config.ts docs/postcss.config.js docs/tsconfig.json ./docs/
 COPY docs/public ./docs/public
