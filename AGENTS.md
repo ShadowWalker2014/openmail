@@ -50,16 +50,22 @@ openmail/
 - `api_keys` (workspace-scoped for API + MCP access)
 - `assets` (uploaded files: images/video/PDF — stored in Railway Object Storage S3)
 
-## MCP Server Tools (exposed to AI agents)
+## MCP Server (exposed to AI agents)
 Auth: Bearer workspace API key
 Public URL: https://mcp.openmail.win/mcp
-Tools (27): list_campaigns, create_campaign, update_campaign, pause_campaign,
- list_broadcasts, get_broadcast, create_broadcast, update_broadcast, schedule_broadcast, send_broadcast, delete_broadcast,
- list_contacts, create_contact, update_contact, delete_contact, track_event,
- list_segments, create_segment,
- list_templates, create_template, update_template, delete_template,
- get_analytics, get_broadcast_analytics,
- list_assets, get_asset, upload_asset_from_url, upload_asset_base64, delete_asset
+Source: mcp/src/index.ts — tools in mcp/src/tools/, prompts in mcp/src/prompts.ts, resources in mcp/src/resources.ts
+Capabilities: tools (CRUD for contacts/broadcasts/campaigns/segments/templates/analytics/assets),
+              prompts (workflow templates for common tasks),
+              resources (live docs via llms.txt, dynamic page lookup)
+
+### MCP Maintenance Rules (MUST follow when changing the underlying system)
+- **New API route added?** → Add a corresponding MCP tool in mcp/src/tools/
+- **API route removed/renamed?** → Remove/rename the MCP tool — stale tools confuse AI agents
+- **New feature (e.g. new entity type)?** → Consider adding a prompt template in mcp/src/prompts.ts
+- **DO NOT hardcode** tool names, API endpoint lists, or counts in prompts.ts or resources.ts
+  — these go stale instantly. Reference the live docs URL instead: https://openmail.win/docs/llms.txt
+- **DO NOT hardcode** tool/prompt/resource counts in docs or llms.txt — use "call list endpoints to discover"
+- After MCP changes: run `bun run mcp:test` (if available) or verify with a real MCP client
 
 ## ID Format
 `{prefix}_{12-char-random}` — e.g. `ws_abc123def456`, `con_xyz789`, `cmp_...`

@@ -28,19 +28,23 @@ With OpenMail's MCP server, your AI agent can:
 | **Authentication** | Bearer token (workspace API key) |
 | **Method** | `POST /mcp` |
 
-## Available Tools (29 total)
+## Available Tools
 
-| Category | Tools |
-|----------|-------|
-| **Contacts** | `list_contacts`, `create_contact`, `update_contact`, `delete_contact`, `track_event` |
-| **Broadcasts** | `list_broadcasts`, `get_broadcast`, `create_broadcast`, `update_broadcast`, `schedule_broadcast`, `send_broadcast`, `delete_broadcast` |
-| **Campaigns** | `list_campaigns`, `create_campaign`, `update_campaign`, `pause_campaign` |
-| **Segments** | `list_segments`, `create_segment` |
-| **Templates** | `list_templates`, `create_template`, `update_template`, `delete_template` |
-| **Analytics** | `get_analytics`, `get_broadcast_analytics` |
-| **Assets** | `list_assets`, `get_asset`, `upload_asset_from_url`, `upload_asset_base64`, `delete_asset` |
+The server exposes tools across these categories:
 
-Total: Contacts (5) + Broadcasts (7) + Campaigns (4) + Segments (2) + Templates (4) + Analytics (2) + Assets (5) = **29 tools**
+| Category | Description |
+|----------|-------------|
+| **Contacts** | Create, update, delete contacts and track events |
+| **Broadcasts** | Draft, send, schedule, and analyze broadcast emails |
+| **Campaigns** | Create and manage automation campaign flows |
+| **Segments** | Build and manage audience segments |
+| **Templates** | Create and manage reusable email templates |
+| **Analytics** | Workspace-level and per-broadcast performance metrics |
+| **Assets** | Upload and manage images and files for emails |
+
+<Callout type="tip">
+Call `tools/list` on the MCP server to get the current, complete list of tools with their parameters.
+</Callout>
 
 ## How It Works
 

@@ -1,19 +1,24 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+const DOCS_URL = process.env.OPENMAIL_DOCS_URL ?? "https://openmail.win/docs";
+
 /**
  * Register reusable prompt templates on the MCP server.
- * These appear in Claude's "Prompts" panel and help users
- * quickly scaffold common OpenMail workflows.
+ * These appear in Claude's "Prompts" panel and scaffold common OpenMail workflows.
+ *
+ * IMPORTANT: prompts describe WHAT to achieve, not which specific tool names to call.
+ * Tool names and API endpoints change — the AI discovers them via the tool list
+ * and the live documentation at ${DOCS_URL}/llms.txt.
  */
 export function registerPrompts(server: McpServer) {
-  // ── 1. Create a campaign ─────────────────────────────────────────────────────
+  // ── 1. Create a campaign ─────────────────────────────────────────────────
   server.registerPrompt(
     "create-campaign",
     {
       title: "Create Email Campaign",
       description:
-        "Design a complete event-triggered email campaign: define the trigger event, write the email sequence, set up segments, and activate it.",
+        "Design a complete event-triggered email campaign: define the trigger, write the email sequence, and activate it.",
       argsSchema: {
         goal: z.string().describe("What should this campaign achieve? e.g. 'onboard new users', 'recover churned customers'"),
         triggerEvent: z.string().optional().describe("The event that starts the campaign, e.g. 'user_signed_up'"),
@@ -32,12 +37,14 @@ export function registerPrompts(server: McpServer) {
 ${triggerEvent ? `**Trigger event:** \`${triggerEvent}\`` : ""}
 **Email count:** ${emailCount} emails in the sequence
 
-Use the OpenMail MCP tools to:
-1. First, call \`list_templates\` to see available templates
+Use the available MCP tools to:
+1. Check what templates already exist in the workspace
 2. Create or reuse email templates for each step
 3. Create a campaign with the appropriate trigger (event, segment_enter, or manual)
-4. Add campaign steps (email + wait nodes) in the right sequence
-5. Activate the campaign
+4. Add campaign steps with email sends and wait delays in the right sequence
+5. Activate the campaign when ready
+
+For full API and tool reference, read the docs: ${DOCS_URL}/llms.txt
 
 Suggest realistic timing between emails and write compelling subject lines and preview text for each.`,
           },
@@ -46,7 +53,7 @@ Suggest realistic timing between emails and write compelling subject lines and p
     })
   );
 
-  // ── 2. Write and send a broadcast ───────────────────────────────────────────
+  // ── 2. Write and send a broadcast ────────────────────────────────────────
   server.registerPrompt(
     "create-broadcast",
     {
@@ -73,21 +80,23 @@ Suggest realistic timing between emails and write compelling subject lines and p
 **Tone:** ${tone}
 ${scheduledAt ? `**Schedule for:** ${scheduledAt}` : "**Send:** immediately"}
 
-Use the OpenMail MCP tools to:
-1. \`list_segments\` — find the right segment for this audience (create one with \`create_segment\` if needed)
+Use the available MCP tools to:
+1. Find or create the right audience segment for this email
 2. Write the full HTML email with a compelling subject line, preview text, and clear CTA
-3. \`create_broadcast\` — create the draft with the HTML content
-4. \`send_broadcast\` (or schedule with \`scheduledAt\`) when ready
-5. After sending, call \`get_broadcast_analytics\` to check performance
+3. Create the broadcast draft
+4. Send immediately or schedule it for the specified time
+5. Check analytics after sending to measure performance
 
-Write professional, concise copy that respects the subscriber's time. Include an unsubscribe link in the footer.`,
+For full API and tool reference, read the docs: ${DOCS_URL}/llms.txt
+
+Write professional, concise copy. Include an unsubscribe link in the footer.`,
           },
         },
       ],
     })
   );
 
-  // ── 3. Build a segment ───────────────────────────────────────────────────────
+  // ── 3. Build a segment ───────────────────────────────────────────────────
   server.registerPrompt(
     "build-segment",
     {
@@ -110,15 +119,18 @@ Write professional, concise copy that respects the subscriber's time. Include an
 **Audience:** ${description}
 ${purpose ? `**Purpose:** ${purpose}` : ""}
 
-Use the OpenMail MCP tools to:
-1. \`get_analytics\` — understand the current workspace data
-2. Translate the description into segment conditions using these field types:
-   - \`attributes.<key>\` — contact attributes (eq, ne, contains, gt, lt, gte, lte, is_set, is_not_set)
-   - \`event.<event_name>\` — whether a contact has triggered an event (is_set / is_not_set)
-   - \`group.<group_type>\` — group membership (eq with group_key value)
-   - Standard fields: \`email\`, \`firstName\`, \`lastName\`, \`unsubscribed\`
-3. \`create_segment\` — create the segment with conditionLogic "and" or "or"
-4. \`list_segments\` with the new segment id to verify it returns the expected contacts
+Use the available MCP tools to:
+1. Check current workspace analytics to understand the data
+2. Translate the description into segment conditions. Supported field types:
+   - \`attributes.<key>\` — contact attributes with operators: eq, ne, gt, lt, gte, lte, contains, not_contains, is_set, is_not_set
+   - \`event.<event_name>\` — whether a contact has triggered a named event: is_set, is_not_set
+   - \`group.<group_type>\` — group membership: eq (specific group key), is_set, is_not_set, ne
+   - Standard contact fields: email, firstName, lastName, phone, unsubscribed
+3. Create the segment with conditionLogic "and" or "or" as appropriate
+4. Verify the segment returns the expected contacts
+
+For full segment condition docs, see: ${DOCS_URL}/api/segments
+For full API and tool reference: ${DOCS_URL}/llms.txt
 
 Explain your condition logic and estimated audience size.`,
           },
@@ -127,7 +139,7 @@ Explain your condition logic and estimated audience size.`,
     })
   );
 
-  // ── 4. Analyze performance ───────────────────────────────────────────────────
+  // ── 4. Analyze performance ───────────────────────────────────────────────
   server.registerPrompt(
     "analyze-performance",
     {
@@ -135,7 +147,7 @@ Explain your condition logic and estimated audience size.`,
       description: "Pull analytics data and provide actionable recommendations to improve open rates, click rates, and conversions.",
       argsSchema: {
         scope: z.enum(["workspace", "broadcast"]).optional().describe("Analyze the whole workspace or a specific broadcast"),
-        broadcastId: z.string().optional().describe("Broadcast ID if scope=broadcast"),
+        broadcastId: z.string().optional().describe("Broadcast ID to analyze (required if scope=broadcast)"),
       },
     },
     ({ scope = "workspace", broadcastId }) => ({
@@ -148,32 +160,26 @@ Explain your condition logic and estimated audience size.`,
 
 **Scope:** ${scope}${broadcastId ? ` — broadcast ${broadcastId}` : ""}
 
-Use the OpenMail MCP tools to:
-${
-  scope === "broadcast" && broadcastId
-    ? `1. \`get_broadcast_analytics\` for broadcast ${broadcastId}
-2. \`get_analytics\` for workspace baseline comparison`
-    : `1. \`get_analytics\` for 30-day workspace overview
-2. \`list_broadcasts\` — review recent broadcasts`
-}
+Use the available MCP tools to pull the relevant analytics data${broadcastId ? ` for broadcast ${broadcastId}` : " for the workspace"}, then provide:
 
-Then provide:
 - **Summary**: Key metrics (open rate %, click rate %, unsubscribes)
 - **Benchmarks**: Compare to industry averages (SaaS: ~25% open, ~3% click)
 - **Top issues**: What's underperforming and why
-- **3 concrete actions**: Specific changes to improve results (subject lines, send times, segmentation, etc.)`,
+- **3 concrete actions**: Specific changes to improve results (subject lines, send times, segmentation, etc.)
+
+For full API and tool reference, read the docs: ${DOCS_URL}/llms.txt`,
           },
         },
       ],
     })
   );
 
-  // ── 5. Track events setup ────────────────────────────────────────────────────
+  // ── 5. Set up event tracking ─────────────────────────────────────────────
   server.registerPrompt(
     "setup-event-tracking",
     {
       title: "Set Up Event Tracking",
-      description: "Generate the exact code to track user events from your app to trigger OpenMail campaigns.",
+      description: "Generate production-ready code to track user events from your app and trigger OpenMail campaigns.",
       argsSchema: {
         stack: z.enum(["nextjs", "react", "node", "python", "curl"]).describe("Your tech stack"),
         events: z.string().describe("Comma-separated events to track, e.g. 'user_signed_up, plan_upgraded, feature_used'"),
@@ -194,31 +200,32 @@ Then provide:
 
 Requirements:
 - Use the @openmail/sdk package (npm install @openmail/sdk)
-- Show identify() call on user login/signup
-- Show track() calls for each event with relevant properties
-- Show group() call if tracking workspace/org memberships
+- Show identify() on user login/signup to create/update the contact profile
+- Show track() for each event with relevant properties
+- Show group() if tracking workspace/org memberships
 - Include proper error handling and flush() before process exit
-- Add comments explaining WHAT triggers each event
+- Use environment variables for the API key (OPENMAIL_API_KEY server-side, NEXT_PUBLIC_OPENMAIL_KEY client-side)
 
-For Next.js: show both client-side (useTrack hook) and server-side (serverTrack) patterns.
+For Next.js: show both client-side (React hooks) and server-side (server actions / route handlers) patterns.
 For Node: show the singleton pattern with flush on shutdown.
 
-The API key should come from environment variables (OPENMAIL_API_KEY server-side, NEXT_PUBLIC_OPENMAIL_KEY client-side).`,
+SDK documentation: ${DOCS_URL}/sdk/event-ingestion
+Full SDK guide: ${DOCS_URL}/sdk/overview`,
           },
         },
       ],
     })
   );
 
-  // ── 6. Group identify workflow ───────────────────────────────────────────────
+  // ── 6. Group identify workflow ───────────────────────────────────────────
   server.registerPrompt(
     "group-identify",
     {
       title: "Group Identify Workflow",
-      description: "Set up group/organization tracking: link contacts to companies or teams, and use group membership in segments.",
+      description: "Set up group/organization tracking: link contacts to companies or teams and use group membership in segments.",
       argsSchema: {
         groupType: z.string().optional().describe("Type of group: company, team, project (default: company)"),
-        useCase: z.string().describe("What are you grouping? e.g. 'SaaS customers by company', 'users by team within a company'"),
+        useCase: z.string().describe("What are you grouping? e.g. 'SaaS customers by company', 'users by team'"),
       },
     },
     ({ groupType = "company", useCase }) => ({
@@ -232,26 +239,26 @@ The API key should come from environment variables (OPENMAIL_API_KEY server-side
 **Group type:** ${groupType}
 **Use case:** ${useCase}
 
-Use the OpenMail MCP tools to:
-1. Check existing groups: \`list_contacts\` to understand your data model
-2. Create a sample group to test the workflow — use the \`create_group\` tool if available or the /api/v1/groups REST endpoint
+Use the available MCP tools to:
+1. Understand the current workspace contacts and data model
+2. Create a group entity of type "${groupType}" with relevant attributes (name, plan, etc.)
 3. Link contacts to the group
-4. Create a segment that filters by group membership:
-   - Field: \`group.${groupType}\`
-   - Operator: \`eq\` with the group key as value
+4. Create a segment that filters by group membership — use field \`group.${groupType}\` with operator \`eq\` and the group key as value
 5. Verify the segment returns the right contacts
 
-Also explain how to track group identify from code:
+From application code, use the SDK to track group membership:
 \`\`\`ts
-// Server-side
 await openmail.group("acme-corp", { name: "Acme Corp", plan: "enterprise" }, {
   userId: "alice@example.com",
   groupType: "${groupType}",
 });
 
-// Then use in segments:
+// Then filter contacts in a segment:
 // { field: "group.${groupType}", operator: "eq", value: "acme-corp" }
-\`\`\``,
+\`\`\`
+
+Group tracking docs: ${DOCS_URL}/sdk/event-ingestion
+Full API and tool reference: ${DOCS_URL}/llms.txt`,
           },
         },
       ],
