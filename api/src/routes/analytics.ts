@@ -36,6 +36,16 @@ app.get("/overview", async (c) => {
     .from(emailEvents)
     .where(and(eq(emailEvents.workspaceId, workspaceId), eq(emailEvents.eventType, "unsubscribe"), gte(emailEvents.occurredAt, since)));
 
+  const [bounces] = await db
+    .select({ count: count() })
+    .from(emailEvents)
+    .where(and(eq(emailEvents.workspaceId, workspaceId), eq(emailEvents.eventType, "bounce"), gte(emailEvents.occurredAt, since)));
+
+  const [complaints] = await db
+    .select({ count: count() })
+    .from(emailEvents)
+    .where(and(eq(emailEvents.workspaceId, workspaceId), eq(emailEvents.eventType, "complaint"), gte(emailEvents.occurredAt, since)));
+
   const totalSendsCount = totalSends.count;
   return c.json({
     contacts: totalContacts.count,
@@ -43,8 +53,12 @@ app.get("/overview", async (c) => {
     opens: opens.count,
     clicks: clicks.count,
     unsubscribes: unsubscribes.count,
-    openRate: totalSendsCount > 0 ? Number((opens.count / totalSendsCount * 100).toFixed(1)) : 0,
-    clickRate: totalSendsCount > 0 ? Number((clicks.count / totalSendsCount * 100).toFixed(1)) : 0,
+    bounces: bounces.count,
+    complaints: complaints.count,
+    openRate:       totalSendsCount > 0 ? Number((opens.count      / totalSendsCount * 100).toFixed(1)) : 0,
+    clickRate:      totalSendsCount > 0 ? Number((clicks.count     / totalSendsCount * 100).toFixed(1)) : 0,
+    bounceRate:     totalSendsCount > 0 ? Number((bounces.count    / totalSendsCount * 100).toFixed(1)) : 0,
+    complaintRate:  totalSendsCount > 0 ? Number((complaints.count / totalSendsCount * 100).toFixed(1)) : 0,
     period: "30d",
   });
 });
@@ -70,13 +84,18 @@ app.get("/broadcasts/:id", async (c) => {
     .groupBy(emailEvents.eventType);
 
   const stats = Object.fromEntries(eventCounts.map((e) => [e.eventType, e.count]));
+  const sentCount = bcast.sentCount ?? 0;
   return c.json({
     broadcastId,
-    sentCount: bcast.sentCount,
-    openCount: bcast.openCount,
-    clickCount: bcast.clickCount,
-    openRate: (bcast.sentCount ?? 0) > 0 ? Number(((bcast.openCount ?? 0) / bcast.sentCount! * 100).toFixed(1)) : 0,
-    clickRate: (bcast.sentCount ?? 0) > 0 ? Number(((bcast.clickCount ?? 0) / bcast.sentCount! * 100).toFixed(1)) : 0,
+    sentCount,
+    openCount:      bcast.openCount,
+    clickCount:     bcast.clickCount,
+    bounceCount:    bcast.bounceCount,
+    complaintCount: bcast.complaintCount,
+    openRate:       sentCount > 0 ? Number(((bcast.openCount      ?? 0) / sentCount * 100).toFixed(1)) : 0,
+    clickRate:      sentCount > 0 ? Number(((bcast.clickCount     ?? 0) / sentCount * 100).toFixed(1)) : 0,
+    bounceRate:     sentCount > 0 ? Number(((bcast.bounceCount    ?? 0) / sentCount * 100).toFixed(1)) : 0,
+    complaintRate:  sentCount > 0 ? Number(((bcast.complaintCount ?? 0) / sentCount * 100).toFixed(1)) : 0,
     ...stats,
   });
 });
