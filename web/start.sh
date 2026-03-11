@@ -3,13 +3,18 @@
 # into nginx.conf so nginx can re-resolve Railway private hostnames
 # (api.railway.internal) without caching stale IPs across service restarts.
 #
-# Railway containers use a non-Docker DNS (not 127.0.0.11) — the correct
-# nameserver is in /etc/resolv.conf at runtime.
+# Railway uses IPv6 DNS (e.g. fd12::10) — nginx requires IPv6 addresses
+# to be wrapped in brackets: [fd12::10]
 
 NS=$(grep -m1 nameserver /etc/resolv.conf | awk '{print $2}')
 if [ -z "$NS" ]; then
   echo "WARN: Could not read nameserver from /etc/resolv.conf, defaulting to 8.8.8.8"
   NS="8.8.8.8"
+fi
+
+# Wrap IPv6 addresses in brackets for nginx resolver directive
+if echo "$NS" | grep -q ':'; then
+  NS="[$NS]"
 fi
 
 echo "INFO: Using DNS resolver: $NS"
