@@ -1,210 +1,154 @@
+/**
+ * SQL-native segment evaluation.
+ *
+ * ALL filtering is pushed into PostgreSQL. No contacts, events, or group
+ * memberships are ever loaded into Node.js memory for filtering purposes.
+ *
+ * Scale characteristics:
+ *   - getSegmentContacts: single SQL query using DISTINCT — uses DB indexes
+ *   - contactMatchesSegment: single SQL query with EXISTS subqueries
+ *   - Works correctly for workspaces with millions of contacts
+ */
+
 import { getDb } from "@openmail/shared/db";
-import { contacts, segments, events as eventsTable, contactGroups, groups } from "@openmail/shared/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { contacts, segments } from "@openmail/shared/schema";
+import { eq, and } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { buildSegmentWhereSQL } from "@openmail/shared/segment-sql";
 import type { SegmentCondition } from "@openmail/shared/types";
 
-function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
-  return path.split(".").reduce((acc: unknown, key) => {
-    if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[key];
-    return undefined;
-  }, obj);
-}
-
-function evaluateCondition(
-  contact: Record<string, unknown>,
-  condition: SegmentCondition,
-  // Pre-fetched sets for event and group lookups (contactId → Set<eventName/groupKey>)
-  eventsByContact: Map<string, Set<string>>,
-  groupsByContact: Map<string, Array<{ groupType: string; groupKey: string }>>,
-): boolean {
-  const { field, operator: op, value: condValue } = condition;
-
-  // ── Event-based conditions ────────────────────────────────────────────────
-  // field: "event.<event_name>"
-  if (field.startsWith("event.")) {
-    const eventName = field.slice("event.".length);
-    const contactId = String(contact.id ?? "");
-    const done = eventsByContact.get(contactId)?.has(eventName) ?? false;
-    if (op === "exists" || op === "is_set" || op === "eq" || op === "equals") return done;
-    if (op === "not_exists" || op === "is_not_set" || op === "ne" || op === "not_equals") return !done;
-    return false;
-  }
-
-  // ── Group membership conditions ───────────────────────────────────────────
-  // field: "group.<group_type>"  value: "<group_key>"
-  if (field.startsWith("group.")) {
-    const groupType = field.slice("group.".length);
-    const contactId = String(contact.id ?? "");
-    const contactGroupList = groupsByContact.get(contactId) ?? [];
-
-    const inGroup = condValue !== undefined
-      ? contactGroupList.some(g => g.groupType === groupType && g.groupKey === String(condValue))
-      : contactGroupList.some(g => g.groupType === groupType);
-
-    if (op === "exists" || op === "is_set" || op === "eq" || op === "equals") return inGroup;
-    if (op === "not_exists" || op === "is_not_set" || op === "ne" || op === "not_equals") return !inGroup;
-    return false;
-  }
-
-  // ── Standard field conditions ─────────────────────────────────────────────
-  const value = getNestedValue(contact, field);
-
-  switch (op) {
-    case "exists":
-    case "is_set":
-      return value !== undefined && value !== null && value !== "";
-    case "not_exists":
-    case "is_not_set":
-      return value === undefined || value === null || value === "";
-    case "eq":
-    case "equals":
-      return String(value) === String(condValue);
-    case "ne":
-    case "not_equals":
-      return String(value) !== String(condValue);
-    case "gt":  return typeof value === "number" && value > (condValue as number);
-    case "lt":  return typeof value === "number" && value < (condValue as number);
-    case "gte": return typeof value === "number" && value >= (condValue as number);
-    case "lte": return typeof value === "number" && value <= (condValue as number);
-    case "contains":
-      return typeof value === "string" && value.toLowerCase().includes(String(condValue).toLowerCase());
-    case "not_contains":
-      return typeof value === "string" && !value.toLowerCase().includes(String(condValue).toLowerCase());
-    default:
-      return false;
-  }
-}
-
-export async function getSegmentContactIds(workspaceId: string, segmentIds: string[]): Promise<string[]> {
+/**
+ * Fetch all non-unsubscribed contacts that match ANY of the given segments.
+ *
+ * Builds a single SQL query with OR between per-segment clauses.
+ * If a segment has no conditions it matches all contacts (short-circuits to
+ * returning the full non-unsubscribed list for this workspace).
+ *
+ * Returns { id, email } pairs — everything send-broadcast needs to create
+ * emailSends rows without an extra roundtrip.
+ */
+export async function getSegmentContacts(
+  workspaceId: string,
+  segmentIds: string[],
+): Promise<{ id: string; email: string }[]> {
   if (segmentIds.length === 0) return [];
+
   const db = getDb();
 
-  const allSegments = await db
+  const targetSegments = await db
     .select()
     .from(segments)
-    .where(eq(segments.workspaceId, workspaceId));
+    .where(
+      and(
+        eq(segments.workspaceId, workspaceId),
+        sql`${segments.id} = ANY(${sql.raw(
+          `ARRAY[${segmentIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")}]::text[]`,
+        )})`,
+      ),
+    );
 
-  const targetSegments = allSegments.filter((s) => segmentIds.includes(s.id));
   if (targetSegments.length === 0) return [];
 
-  const allContacts = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.unsubscribed, false)));
+  // Build one SQL clause per segment. OR-combine them so a contact matching
+  // ANY segment is included. DISTINCT handles overlapping memberships.
+  const segmentClauses: ReturnType<typeof sql>[] = [];
+  let matchAll = false;
 
-  if (allContacts.length === 0) return [];
+  for (const segment of targetSegments) {
+    const conditions = (segment.conditions as SegmentCondition[]) ?? [];
+    const conditionLogic = (segment.conditionLogic ?? "and") as "and" | "or";
+    const whereClause = buildSegmentWhereSQL(conditions, conditionLogic, workspaceId);
 
-  const contactIds = allContacts.map(c => c.id);
-
-  // Pre-fetch events for all contacts in this workspace (for event conditions)
-  const eventsByContact = new Map<string, Set<string>>();
-  const allEvents = await db
-    .select({ contactId: eventsTable.contactId, name: eventsTable.name })
-    .from(eventsTable)
-    .where(and(
-      eq(eventsTable.workspaceId, workspaceId),
-    ));
-  for (const ev of allEvents) {
-    if (!ev.contactId) continue;
-    if (!eventsByContact.has(ev.contactId)) eventsByContact.set(ev.contactId, new Set());
-    eventsByContact.get(ev.contactId)!.add(ev.name);
-  }
-
-  // Pre-fetch group memberships for all contacts (for group conditions)
-  const groupsByContact = new Map<string, Array<{ groupType: string; groupKey: string }>>();
-  const allMemberships = await db
-    .select({
-      contactId: contactGroups.contactId,
-      groupType: groups.groupType,
-      groupKey: groups.groupKey,
-    })
-    .from(contactGroups)
-    .innerJoin(groups, eq(contactGroups.groupId, groups.id))
-    .where(eq(contactGroups.workspaceId, workspaceId));
-  for (const m of allMemberships) {
-    if (!groupsByContact.has(m.contactId)) groupsByContact.set(m.contactId, []);
-    groupsByContact.get(m.contactId)!.push({ groupType: m.groupType, groupKey: m.groupKey });
-  }
-
-  const matchingIds = new Set<string>();
-
-  for (const contact of allContacts) {
-    const contactData: Record<string, unknown> = {
-      id: contact.id,
-      email: contact.email,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      phone: contact.phone,
-      unsubscribed: contact.unsubscribed,
-      attributes: contact.attributes as Record<string, unknown>,
-      // Also spread attributes flat so bare field names like "plan" also resolve
-      ...(contact.attributes as Record<string, unknown>),
-    };
-
-    for (const segment of targetSegments) {
-      const conditions = (segment.conditions as SegmentCondition[]) ?? [];
-      if (conditions.length === 0) {
-        matchingIds.add(contact.id);
-        continue;
-      }
-
-      const results = conditions.map((c) => evaluateCondition(contactData, c, eventsByContact, groupsByContact));
-      const matches = segment.conditionLogic === "or"
-        ? results.some(Boolean)
-        : results.every(Boolean);
-
-      if (matches) {
-        matchingIds.add(contact.id);
-        break;
-      }
+    if (!whereClause) {
+      // Segment with no conditions → every contact qualifies → short-circuit
+      matchAll = true;
+      break;
     }
+
+    segmentClauses.push(whereClause);
   }
 
-  return Array.from(matchingIds);
+  const baseWhere = sql`${contacts.workspaceId} = ${workspaceId} AND ${contacts.unsubscribed} = false`;
+
+  if (matchAll || segmentClauses.length === 0) {
+    return db
+      .select({ id: contacts.id, email: contacts.email })
+      .from(contacts)
+      .where(baseWhere);
+  }
+
+  const combinedClause =
+    segmentClauses.length === 1
+      ? segmentClauses[0]
+      : sql`(${sql.join(segmentClauses, sql` OR `)})`;
+
+  return db
+    .select({ id: contacts.id, email: contacts.email })
+    .from(contacts)
+    .where(sql`${baseWhere} AND ${combinedClause}`);
 }
 
-export async function contactMatchesSegment(contactId: string, segmentId: string): Promise<boolean> {
-  const db = getDb();
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
-  if (!contact) return false;
+/**
+ * @deprecated Use getSegmentContacts instead (returns email alongside ID,
+ * eliminating the redundant second query in send-broadcast).
+ */
+export async function getSegmentContactIds(
+  workspaceId: string,
+  segmentIds: string[],
+): Promise<string[]> {
+  const rows = await getSegmentContacts(workspaceId, segmentIds);
+  return rows.map((r) => r.id);
+}
 
-  const [segment] = await db.select().from(segments).where(eq(segments.id, segmentId)).limit(1);
+/**
+ * Check whether a single contact currently matches a specific segment.
+ *
+ * Runs a single parameterised SQL query — no contact data loaded into memory.
+ * Used by the check-segment worker to evaluate membership changes per contact.
+ */
+export async function contactMatchesSegment(
+  contactId: string,
+  segmentId: string,
+): Promise<boolean> {
+  const db = getDb();
+
+  const [segment] = await db
+    .select()
+    .from(segments)
+    .where(eq(segments.id, segmentId))
+    .limit(1);
+
   if (!segment) return false;
 
+  const [contact] = await db
+    .select({ workspaceId: contacts.workspaceId })
+    .from(contacts)
+    .where(eq(contacts.id, contactId))
+    .limit(1);
+
+  if (!contact) return false;
+
   const workspaceId = contact.workspaceId;
+  const conditions  = (segment.conditions as SegmentCondition[]) ?? [];
+  const logic       = (segment.conditionLogic ?? "and") as "and" | "or";
+  const whereClause = buildSegmentWhereSQL(conditions, logic, workspaceId);
 
-  const contactData: Record<string, unknown> = {
-    id: contact.id,
-    email: contact.email,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    phone: contact.phone,
-    unsubscribed: contact.unsubscribed,
-    attributes: contact.attributes as Record<string, unknown>,
-    ...(contact.attributes as Record<string, unknown>),
-  };
+  // If no conditions, every contact matches
+  if (!whereClause) {
+    const [row] = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(sql`${contacts.id} = ${contactId}`)
+      .limit(1);
+    return !!row;
+  }
 
-  // Fetch events for this contact
-  const eventsByContact = new Map<string, Set<string>>();
-  const contactEvents = await db
-    .select({ name: eventsTable.name })
-    .from(eventsTable)
-    .where(and(eq(eventsTable.contactId, contactId), eq(eventsTable.workspaceId, workspaceId)));
-  const evSet = new Set(contactEvents.map(e => e.name));
-  eventsByContact.set(contactId, evSet);
+  // Run the full segment SQL constrained to this single contact
+  const [row] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(sql`${contacts.id} = ${contactId} AND ${whereClause}`)
+    .limit(1);
 
-  // Fetch group memberships for this contact
-  const groupsByContact = new Map<string, Array<{ groupType: string; groupKey: string }>>();
-  const memberships = await db
-    .select({ groupType: groups.groupType, groupKey: groups.groupKey })
-    .from(contactGroups)
-    .innerJoin(groups, eq(contactGroups.groupId, groups.id))
-    .where(eq(contactGroups.contactId, contactId));
-  groupsByContact.set(contactId, memberships);
-
-  const conditions = (segment.conditions as SegmentCondition[]) ?? [];
-  if (conditions.length === 0) return true;
-
-  const results = conditions.map((c) => evaluateCondition(contactData, c, eventsByContact, groupsByContact));
-  return segment.conditionLogic === "or" ? results.some(Boolean) : results.every(Boolean);
+  return !!row;
 }

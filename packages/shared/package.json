@@ -8,7 +8,8 @@
     "./schema": "./src/db/schema/index.ts",
     "./db": "./src/db/client.ts",
     "./types": "./src/types/index.ts",
-    "./ids": "./src/ids.ts"
+    "./ids": "./src/ids.ts",
+    "./segment-sql": "./src/segment-sql.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

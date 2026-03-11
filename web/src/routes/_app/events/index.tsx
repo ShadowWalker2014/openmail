@@ -304,8 +304,8 @@ function EventsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            to="/docs/sdk/event-ingestion" 
+          <a
+            href="/docs/sdk/event-ingestion"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground
@@ -314,7 +314,7 @@ function EventsPage() {
             <BookOpen className="h-3.5 w-3.5" />
             <span>Docs</span>
             <ExternalLink className="h-3 w-3 opacity-50" />
-          </Link>
+          </a>
           <Button size="sm" onClick={() => setTestOpen(true)} className="gap-1.5">
             <Send className="h-3.5 w-3.5" />
             Send Test Event
@@ -423,8 +423,8 @@ function EventsPage() {
           ))}
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <Link
-              to="/docs/sdk/event-ingestion"
+            <a
+              href="/docs/sdk/event-ingestion"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
@@ -432,7 +432,7 @@ function EventsPage() {
               <BookOpen className="h-3.5 w-3.5" />
               <span>Full docs</span>
               <ExternalLink className="h-3 w-3 opacity-50" />
-            </Link>
+            </a>
             <CopyBtn text={snippet} label="Copy" />
           </div>
         </div>

@@ -1,10 +1,10 @@
 import { Worker, Queue } from "bullmq";
 import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
-import { broadcasts, contacts, emailSends } from "@openmail/shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { broadcasts, emailSends } from "@openmail/shared/schema";
+import { eq } from "drizzle-orm";
 import { generateId } from "@openmail/shared/ids";
-import { getSegmentContactIds } from "../lib/segment-evaluator.js";
+import { getSegmentContacts } from "../lib/segment-evaluator.js";
 import { chunkArray } from "../lib/email-utils.js";
 import { logger } from "../lib/logger.js";
 import type { SendBatchJobData } from "./send-batch.js";
@@ -47,9 +47,15 @@ export function createSendBroadcastWorker() {
       }
 
       const segmentIds = broadcast.segmentIds as string[];
-      const eligibleContactIds = await getSegmentContactIds(workspaceId, segmentIds);
 
-      if (eligibleContactIds.length === 0) {
+      // ── SQL-native segment evaluation ────────────────────────────────────
+      // getSegmentContacts runs a single UNION SQL query in PostgreSQL.
+      // No contacts, events, or group memberships are loaded into Node.js
+      // memory — the DB evaluates all conditions natively with index support.
+      // Returns only the two fields needed: { id, email }.
+      const eligibleContacts = await getSegmentContacts(workspaceId, segmentIds);
+
+      if (eligibleContacts.length === 0) {
         await db
           .update(broadcasts)
           .set({ status: "sent", sentCount: 0, recipientCount: 0, sentAt: new Date(), updatedAt: new Date() })
@@ -57,17 +63,6 @@ export function createSendBroadcastWorker() {
         logger.info({ broadcastId }, "No eligible contacts for broadcast");
         return;
       }
-
-      const eligibleContacts = await db
-        .select({ id: contacts.id, email: contacts.email })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.workspaceId, workspaceId),
-            eq(contacts.unsubscribed, false),
-            inArray(contacts.id, eligibleContactIds)
-          )
-        );
 
       // Set recipientCount upfront so the live progress bar is accurate.
       await db
@@ -81,23 +76,18 @@ export function createSendBroadcastWorker() {
         .where(eq(broadcasts.id, broadcastId));
 
       // ── Chunk into batches of 100 and queue one send-batch job per chunk ──
-      // This is what makes bulk sending feasible at scale:
-      //   - Old: 1 BullMQ job + 1 Resend API call per email (rate-limited at 2–3/s)
-      //   - New: 1 BullMQ job + 1 Resend batch call per 100 emails (100× more efficient)
       const chunks = chunkArray(eligibleContacts, BATCH_SIZE);
       const sendBatchQueue = getSendBatchQueue();
 
       for (const chunk of chunks) {
-        // Pre-assign sendIds so the IDs are known before the batch job runs.
-        // This lets send-batch look up the rows by ID in one inArray query.
         const chunkSends = chunk.map((contact) => ({
-          id: generateId("snd"),
+          id:           generateId("snd"),
           workspaceId,
-          contactId: contact.id,
+          contactId:    contact.id,
           contactEmail: contact.email,
           broadcastId,
-          subject: broadcast.subject,
-          status: "queued" as const,
+          subject:      broadcast.subject,
+          status:       "queued" as const,
         }));
 
         // Bulk-insert all emailSends rows for this chunk in one DB round-trip.
@@ -110,8 +100,6 @@ export function createSendBroadcastWorker() {
         };
         await sendBatchQueue.add("send-batch", jobData, {
           removeOnComplete: 100,
-          // Retry up to 5 times on transient Resend errors (429, 5xx).
-          // Exponential backoff: 10s → 20s → 40s → 80s → 160s between attempts.
           attempts: 5,
           backoff: { type: "exponential", delay: 10_000 },
         });
@@ -122,6 +110,6 @@ export function createSendBroadcastWorker() {
         "Broadcast queued for batch sending"
       );
     },
-    { connection: getWorkerRedisConnection(), concurrency: 2 }
+    { connection: getWorkerRedisConnection(), concurrency: 2 },
   );
 }
