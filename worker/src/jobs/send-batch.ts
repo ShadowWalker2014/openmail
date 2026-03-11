@@ -47,11 +47,22 @@ export interface SendBatchJobData {
 }
 
 /**
- * Resend batch API rate: max jobs/second processed by this worker.
- * 2 batches/s × 100 emails/batch = 200 emails/second.
- * Adjust upward if your Resend plan's batch endpoint allows it.
+ * Resend batch API rate limit — how many batch jobs (each = 100 emails)
+ * this worker processes per second across all instances.
+ *
+ * Resend's batch endpoint limits (approx):
+ *   Free plan:       ~1  req/s →   100 emails/s
+ *   Pro  ($20/mo):  ~10  req/s → 1,000 emails/s   ← default
+ *   Business:       ~30  req/s → 3,000 emails/s
+ *   Enterprise:     higher — contact Resend
+ *
+ * Override with RESEND_BATCH_RATE_PER_SEC env var.
+ * Example: RESEND_BATCH_RATE_PER_SEC=30 for Business plan.
+ *
+ * At 10 req/s: 100k emails ≈ 1,000 batches ÷ 10 = ~100s (~2 min).
+ * At 30 req/s: 100k emails ≈ 1,000 batches ÷ 30 = ~33s  (< 1 min).
  */
-const BATCH_RATE_PER_SEC = 2;
+const BATCH_RATE_PER_SEC = Number(process.env.RESEND_BATCH_RATE_PER_SEC ?? 10);
 
 /**
  * Return true for transient Resend errors that should be retried.
