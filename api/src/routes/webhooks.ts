@@ -22,6 +22,17 @@ import pino from "pino";
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const app = new Hono();
 
+// Return 401 on bad Svix signature (not 500) so Resend doesn't retry.
+// A valid Resend delivery always has a valid signature — 401 = attacker probe.
+app.onError((err, c) => {
+  if (err.name === "WebhookVerificationError" || err.message?.toLowerCase().includes("signature")) {
+    logger.warn({ err: err.message }, "Invalid Resend webhook signature");
+    return c.json({ error: "Invalid signature" }, 401);
+  }
+  logger.error({ err: err.message }, "Webhook handler error");
+  return c.json({ error: "Internal server error" }, 500);
+});
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface ResendWebhookData {
@@ -63,10 +74,12 @@ app.post("/", async (c) => {
     "svix-signature": c.req.header("svix-signature")  ?? "",
   };
 
+  // Verify Svix signature — throws WebhookVerificationError on failure.
+  // onError above converts that to a clean 401.
   let payload: ResendWebhookPayload;
   const wh = new Webhook(secret);
-  wh.verify(rawBody, svixHeaders); // throws WebhookVerificationError if invalid
-  payload = JSON.parse(rawBody) as ResendWebhookPayload;
+  const verified = wh.verify(rawBody, svixHeaders);
+  payload = verified as unknown as ResendWebhookPayload;
 
   const { type, data } = payload;
   logger.info({ type, emailId: data.email_id }, "Resend webhook received");
