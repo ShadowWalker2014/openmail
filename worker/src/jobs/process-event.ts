@@ -80,7 +80,8 @@ export function createProcessEventWorker() {
           set: { status: "active", currentStepId: firstStep.id, startedAt: new Date(), completedAt: null, updatedAt: new Date() },
         });
 
-        if (firstStep.stepType === "send_email") {
+        // The DB stores "email" (not "send_email") — match accordingly.
+        if (firstStep.stepType === "email") {
           const stepConfig = firstStep.config as { templateId?: string; subject?: string };
           const [contact] = await db.select().from(contacts).where(eq(contacts.id, event.contactId)).limit(1);
           if (contact && !contact.unsubscribed) {

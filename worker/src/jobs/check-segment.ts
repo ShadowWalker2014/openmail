@@ -180,7 +180,8 @@ export function createCheckSegmentWorker() {
             });
 
           // Queue first email step if applicable and contact is not unsubscribed
-          if (firstStep.stepType === "send_email" && !contact.unsubscribed) {
+          // Note: the DB stores "email" (not "send_email") — match accordingly.
+          if (firstStep.stepType === "email" && !contact.unsubscribed) {
             const stepConfig = firstStep.config as { templateId?: string; subject?: string };
             const sendId = generateId("snd");
             await db.insert(emailSends).values({
