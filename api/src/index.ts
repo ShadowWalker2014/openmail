@@ -217,6 +217,19 @@ async function runStartupMigrations() {
   await db.execute(`CREATE INDEX IF NOT EXISTS contact_groups_group_idx      ON contact_groups (group_id)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS contact_groups_workspace_idx   ON contact_groups (workspace_id)`);
 
+  // Segment membership snapshot (for segment_enter / segment_exit campaign triggers)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS segment_memberships (
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      segment_id   TEXT NOT NULL REFERENCES segments(id)   ON DELETE CASCADE,
+      contact_id   TEXT NOT NULL REFERENCES contacts(id)   ON DELETE CASCADE,
+      created_at   TIMESTAMP NOT NULL DEFAULT now(),
+      PRIMARY KEY (segment_id, contact_id)
+    )
+  `);
+  await db.execute(`CREATE INDEX IF NOT EXISTS seg_mem_workspace_idx ON segment_memberships (workspace_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS seg_mem_contact_idx   ON segment_memberships (contact_id)`);
+
   logger.info("Startup migrations OK");
 }
 

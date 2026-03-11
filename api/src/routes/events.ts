@@ -7,6 +7,7 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, desc, ilike, isNotNull } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
+import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
@@ -86,6 +87,12 @@ app.post(
     });
 
     await getEventQueue().add("process-event", { eventId: id, workspaceId }, { removeOnComplete: 100 });
+
+    // A new event may flip event.* segment conditions — queue a check if
+    // the contact is known (events from unrecognised emails have no contactId).
+    if (contact?.id) {
+      enqueueSegmentCheck(contact.id, workspaceId, "event_tracked").catch(() => {});
+    }
 
     return c.json({ id }, 201);
   }

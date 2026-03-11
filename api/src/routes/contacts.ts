@@ -5,6 +5,7 @@ import { getDb } from "@openmail/shared/db";
 import { contacts, events, emailSends } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and, ilike, count, desc } from "drizzle-orm";
+import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
@@ -104,6 +105,9 @@ app.patch(
       .where(and(eq(contacts.id, c.req.param("id")), eq(contacts.workspaceId, workspaceId)))
       .returning();
     if (!contact) return c.json({ error: "Not found" }, 404);
+    // Fire-and-forget: evaluate segment_enter/exit triggers for this contact.
+    // Errors are non-fatal — the response is already committed.
+    enqueueSegmentCheck(contact.id, workspaceId, "contact_updated").catch(() => {});
     return c.json(contact);
   }
 );

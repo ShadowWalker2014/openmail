@@ -2,13 +2,15 @@ import { createSendEmailWorker } from "./jobs/send-email.js";
 import { createSendBroadcastWorker } from "./jobs/send-broadcast.js";
 import { createSendBatchWorker } from "./jobs/send-batch.js";
 import { createProcessEventWorker } from "./jobs/process-event.js";
+import { createCheckSegmentWorker } from "./jobs/check-segment.js";
 import { logger } from "./lib/logger.js";
 
 const workers = [
-  createSendEmailWorker(),    // campaign/transactional emails — single send
-  createSendBroadcastWorker(), // resolves contacts, chunks into 100, queues send-batch jobs
-  createSendBatchWorker(),     // sends ≤100 emails per Resend batch API call
-  createProcessEventWorker(),  // event-triggered campaign enrollment
+  createSendEmailWorker(),      // campaign/transactional emails — single send
+  createSendBroadcastWorker(),  // resolves contacts, chunks into 100, queues send-batch jobs
+  createSendBatchWorker(),      // sends ≤100 emails per Resend batch API call
+  createProcessEventWorker(),   // event-triggered campaign enrollment
+  createCheckSegmentWorker(),   // segment_enter / segment_exit campaign enrollment
 ];
 
 logger.info({ count: workers.length }, "Workers started");

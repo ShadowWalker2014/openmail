@@ -13,6 +13,7 @@ import { getDb } from "@openmail/shared/db";
 import { groups, contactGroups, contacts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, desc } from "drizzle-orm";
+import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
@@ -173,6 +174,9 @@ app.post("/:id/contacts", zValidator("json", z.object({
     .values({ workspaceId, contactId: contact.id, groupId: group.id, role })
     .onConflictDoNothing();
 
+  // Group membership change may affect group.* segment conditions
+  enqueueSegmentCheck(contact.id, workspaceId, "group_changed").catch(() => {});
+
   // Return 200 (idempotent — link may already exist; returning 201 when it was a no-op is wrong)
   return c.json({ success: true }, 200);
 });
@@ -193,6 +197,8 @@ app.delete("/:id/contacts/:contactId", async (c) => {
     .returning({ contactId: contactGroups.contactId });
 
   if (!deleted) return c.json({ error: "Not found" }, 404);
+  // Group removal may flip group.* segment conditions (segment_exit)
+  enqueueSegmentCheck(deleted.contactId, workspaceId, "group_changed").catch(() => {});
   return c.json({ success: true });
 });
 

@@ -30,6 +30,7 @@ import { getQueueRedisConnection } from "../lib/redis.js";
 import type { Context } from "hono";
 import type { ApiVariables } from "../types.js";
 import { upsertGroup, linkContactToGroup } from "./groups.js";
+import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -143,15 +144,16 @@ async function storeEvent(
 
 // ── Core: upsert contact ──────────────────────────────────────────────────────
 
+/** Upsert a contact and return its ID (for segment-check queuing). */
 async function upsertContact(
   workspaceId: string,
   email: string,
   firstName?: string,
   lastName?: string,
   attributes?: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
   const db = getDb();
-  await db
+  const [row] = await db
     .insert(contacts)
     .values({
       id: generateId("con"),
@@ -169,7 +171,9 @@ async function upsertContact(
         ...(attributes !== undefined && { attributes }),
         updatedAt: new Date(),
       },
-    });
+    })
+    .returning({ id: contacts.id });
+  return row.id;
 }
 
 // ── POST /capture — PostHog single-event format ───────────────────────────────
@@ -285,7 +289,8 @@ app.post("/identify", async (c) => {
     if (!skip.has(k)) attributes[k] = v;
   }
 
-  await upsertContact(workspaceId, email, firstName, lastName, attributes);
+  const contactId = await upsertContact(workspaceId, email, firstName, lastName, attributes);
+  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch(() => {});
   return c.json({ status: 1 }, 200);
 });
 
@@ -363,8 +368,9 @@ async function handleCioIdentify(c: Context): Promise<Response> {
     if (!CIO_CONTACT_SKIP.has(k)) attributes[k] = v;
   }
 
-  await upsertContact(workspaceId, email, firstName, lastName,
+  const contactId = await upsertContact(workspaceId, email, firstName, lastName,
     Object.keys(attributes).length > 0 ? attributes : undefined);
+  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch(() => {});
 
   return new Response(null, { status: 200 });
 }
