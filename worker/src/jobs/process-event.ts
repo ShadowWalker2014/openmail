@@ -96,13 +96,23 @@ export function createProcessEventWorker() {
               subject: stepConfig.subject ?? "Message from us",
               status: "queued",
             });
-            await getSendEmailQueue().add("send-email", { sendId }, { removeOnComplete: 100 });
+            await getSendEmailQueue().add("send-email", { sendId }, {
+              jobId: `send-email:${sendId}`, // deduplicate: prevent double-sends on concurrent workers
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5_000 },
+              removeOnComplete: { count: 100 },
+              removeOnFail: { count: 50 },
+            });
           }
         }
 
         logger.info({ campaignId: campaign.id, contactId: event.contactId, enrollmentId }, "Contact enrolled in campaign");
       }
     },
-    { connection: getWorkerRedisConnection(), concurrency: 20 }
+    {
+      connection: getWorkerRedisConnection(),
+      concurrency: 20,
+      removeOnFail: { count: 50 },
+    }
   );
 }
