@@ -23,6 +23,7 @@ import sendsRouter from "./routes/sends.js";
 import ingestRouter from "./routes/ingest.js";
 import groupsRouter from "./routes/groups.js";
 import { webhooksRouter } from "./routes/webhooks.js";
+import { mountBullBoard } from "./lib/bull-board.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
 import { eq, and, gt, sql } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
@@ -190,6 +191,10 @@ app.route("/api/ingest", ingestRouter);
 // Resend webhook — public-facing, auth via Svix signature (RESEND_WEBHOOK_SECRET)
 // Handles email.bounced and email.complained events
 app.route("/api/webhooks/resend", webhooksRouter);
+
+// Bull Board — BullMQ queue monitor at /admin/queues
+// Disabled if BULL_BOARD_PASSWORD env var is not set
+mountBullBoard(app as never);
 
 // Exported for integration tests — same app instance used in production
 export { app };

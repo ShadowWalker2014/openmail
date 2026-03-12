@@ -94,8 +94,9 @@ Prefixes: ws_ (workspace), usr_ (user), con_ (contact), seg_ (segment),
 ## Dev Commands
 - `bun install` at root to install all workspace deps
 - Each service: `bun dev` to run locally
-- DB migrations: `bun db:migrate` in `api/` or `packages/shared/`
-- Drizzle Studio (prod DB admin UI): `cd packages/shared && DATABASE_URL="postgresql://postgres:fecf91ffa1c07973e52f3e1ca1684be763fe78f6@maglev.proxy.rlwy.net:22853/openmail" bun drizzle-kit studio` → open https://local.drizzle.studio
+- DB migrations: `bun db:migrate` in `api/` or `packages/shared/` (use DIRECT_DATABASE_URL or direct Postgres URL — NOT PgBouncer URL)
+- Drizzle Studio (prod DB admin UI): `cd packages/shared && DIRECT_DATABASE_URL="postgresql://postgres:fecf91ffa1c07973e52f3e1ca1684be763fe78f6@maglev.proxy.rlwy.net:22853/openmail" bun drizzle-kit studio` → open https://local.drizzle.studio
+- PgBouncer: All app services connect via pgbouncer.railway.internal:6432 (transaction pool mode). `prepare: false` set in db/client.ts. Direct Postgres URL needed for drizzle-kit and ElectricSQL only.
 
 ## Key Conventions
 - No server actions — API routes only on client
