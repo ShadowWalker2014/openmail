@@ -143,12 +143,17 @@ export function createSendBatchWorker() {
       }
       if (!htmlContent) throw new Error(`No HTML content for broadcast ${broadcastId}`);
 
+      // Priority: broadcast override → workspace default → env default → platform fallback
       const fromEmail =
+        broadcast.fromEmail ??
         workspace.resendFromEmail ??
         process.env.DEFAULT_FROM_EMAIL ??
-        "noreply@openmail.dev";
+        "noreply@openmail.win";
       const fromName =
-        workspace.resendFromName ?? process.env.DEFAULT_FROM_NAME ?? "OpenMail";
+        broadcast.fromName ??
+        workspace.resendFromName ??
+        process.env.DEFAULT_FROM_NAME ??
+        "OpenMail";
       const from = `${fromName} <${fromEmail}>`;
 
       const resendClient = workspace.resendApiKey

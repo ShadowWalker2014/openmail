@@ -57,6 +57,8 @@ export function createSendEmailWorker() {
 
       let htmlContent = "";
       let subject = send.subject;
+      let broadcastFromEmail: string | null = null;
+      let broadcastFromName: string | null = null;
 
       if (send.broadcastId) {
         const [broadcast] = await db
@@ -66,6 +68,8 @@ export function createSendEmailWorker() {
           .limit(1);
         if (broadcast) {
           subject = broadcast.subject;
+          broadcastFromEmail = broadcast.fromEmail;
+          broadcastFromName = broadcast.fromName;
           if (broadcast.templateId) {
             const [tmpl] = await db
               .select()
@@ -107,8 +111,17 @@ export function createSendEmailWorker() {
         ? new Resend(workspace.resendApiKey)
         : getResend();
 
-      const fromEmail = workspace.resendFromEmail ?? process.env.DEFAULT_FROM_EMAIL ?? "noreply@openmail.dev";
-      const fromName = workspace.resendFromName ?? process.env.DEFAULT_FROM_NAME ?? "OpenMail";
+      // Priority: broadcast override → workspace default → env default → platform fallback
+      const fromEmail =
+        broadcastFromEmail ??
+        workspace.resendFromEmail ??
+        process.env.DEFAULT_FROM_EMAIL ??
+        "noreply@openmail.win";
+      const fromName =
+        broadcastFromName ??
+        workspace.resendFromName ??
+        process.env.DEFAULT_FROM_NAME ??
+        "OpenMail";
 
       const effectiveBroadcastId = broadcastId ?? send.broadcastId;
 
