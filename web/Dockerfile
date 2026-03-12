@@ -32,6 +32,7 @@ RUN bun run build
 WORKDIR /app
 
 COPY web/src ./web/src
+COPY web/public ./web/public
 COPY web/index.html ./web/index.html
 COPY web/vite.config.ts web/tailwind.config.js web/postcss.config.js web/tsconfig.json ./web/
 
