@@ -239,12 +239,20 @@ async function runStartupMigrations() {
   await db.execute(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS bounce_count INTEGER NOT NULL DEFAULT 0`);
   await db.execute(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS complaint_count INTEGER NOT NULL DEFAULT 0`);
 
+  // Performance indexes (DB-1 through DB-5)
+  await db.execute(`CREATE INDEX IF NOT EXISTS email_sends_resend_msg_idx  ON email_sends (resend_message_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS email_sends_campaign_idx    ON email_sends (campaign_id)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS email_sends_created_at_idx  ON email_sends (created_at)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS email_events_occurred_at_idx ON email_events (occurred_at)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS contacts_unsubscribed_idx   ON contacts (unsubscribed)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS broadcasts_status_idx       ON broadcasts (status)`);
+
   logger.info("Startup migrations OK");
 }
 
 const port = Number(process.env.PORT ?? 3001);
 logger.info({ port }, "API server starting");
 
-runStartupMigrations().catch((err) => logger.warn({ err }, "Startup migration failed (non-fatal)"));
+runStartupMigrations().catch((err) => { logger.fatal({ err }, "Startup migration failed — exiting"); process.exit(1); });
 
 export default { port, fetch: app.fetch };

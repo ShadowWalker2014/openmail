@@ -21,6 +21,9 @@ export const emailSends = pgTable("email_sends", {
   index("email_sends_workspace_idx").on(t.workspaceId),
   index("email_sends_contact_idx").on(t.contactId),
   index("email_sends_broadcast_idx").on(t.broadcastId),
+  index("email_sends_resend_msg_idx").on(t.resendMessageId),
+  index("email_sends_campaign_idx").on(t.campaignId),
+  index("email_sends_created_at_idx").on(t.createdAt),
 ]);
 
 export const emailEvents = pgTable("email_events", {
@@ -35,4 +38,5 @@ export const emailEvents = pgTable("email_events", {
 }, (t) => [
   index("email_events_send_idx").on(t.sendId),
   index("email_events_workspace_type_idx").on(t.workspaceId, t.eventType),
+  index("email_events_occurred_at_idx").on(t.occurredAt),
 ]);

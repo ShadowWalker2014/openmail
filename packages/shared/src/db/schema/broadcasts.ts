@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, index } from "drizzle-orm/pg-core";
 import { workspaces } from "./workspaces";
 
 export const broadcasts = pgTable("broadcasts", {
@@ -22,4 +22,6 @@ export const broadcasts = pgTable("broadcasts", {
   complaintCount: integer("complaint_count").default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => [
+  index("broadcasts_status_idx").on(t.status),
+]);

@@ -15,6 +15,7 @@ export const contacts = pgTable("contacts", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("contacts_workspace_email_idx").on(t.workspaceId, t.email),
+  index("contacts_unsubscribed_idx").on(t.unsubscribed),
 ]);
 
 export const events = pgTable("events", {
