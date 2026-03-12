@@ -369,6 +369,37 @@
    CSS animations override inline styles, causing a visible position-flash.
    Animate the inner content element instead (each component does this itself). */
 
+/* ── Force dark palette for landing page island ── */
+/* Apply class="force-dark" to a wrapper to lock dark CSS vars regardless of :root.light */
+.force-dark {
+  --background: 240 6% 6%;
+  --foreground: 240 5% 93%;
+  --card: 240 4% 9%;
+  --card-foreground: 240 5% 93%;
+  --popover: 240 5% 10%;
+  --popover-foreground: 240 5% 93%;
+  --muted: 240 4% 14%;
+  --muted-foreground: 240 4% 54%;
+  --primary: 240 5% 93%;
+  --primary-foreground: 240 6% 6%;
+  --secondary: 240 4% 13%;
+  --secondary-foreground: 240 5% 93%;
+  --accent: 240 4% 14%;
+  --accent-foreground: 240 5% 93%;
+  --destructive: 3 74% 61%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 4% 17%;
+  --input: 240 4% 11%;
+  --ring: 240 4% 42%;
+  --sidebar: 240 7% 7%;
+  --sidebar-foreground: 240 5% 93%;
+  --sidebar-border: 240 4% 13%;
+  --sidebar-accent: 240 4% 12%;
+  --sidebar-accent-foreground: 240 5% 93%;
+  --violet: 250 89% 70%;
+  color-scheme: dark;
+}
+
 /* ── Sonner toasts ── */
 [data-sonner-toaster] {
   --toast-bg: hsl(var(--popover));
