@@ -272,7 +272,8 @@ export function createSendBatchWorker() {
         max:      BATCH_RATE_PER_SEC,
         duration: 1000, // ms
       },
-      removeOnFail: { count: 50 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 100 },
     }
   );
 }

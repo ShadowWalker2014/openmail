@@ -199,7 +199,7 @@ export function createCheckSegmentWorker() {
               attempts: 3,
               backoff: { type: "exponential", delay: 5_000 },
               removeOnComplete: { count: 100 },
-              removeOnFail: { count: 50 },
+              removeOnFail: { count: 100 },
             });
           }
 
@@ -216,7 +216,8 @@ export function createCheckSegmentWorker() {
       // Rate limit prevents thundering-herd on bulk contact imports.
       // 100 contacts/sec × (N segments × ~5 DB queries) stays manageable.
       limiter: { max: 100, duration: 1000 },
-      removeOnFail: { count: 50 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 100 },
     },
   );
 }
