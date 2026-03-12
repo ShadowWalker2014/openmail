@@ -34,3 +34,6 @@ jobs:
 
       - name: Check web/
         run: cd web && bun x tsc --noEmit
+
+      - name: Typecheck packages/shared
+        run: cd packages/shared && bun x tsc --noEmit

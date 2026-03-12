@@ -1,4 +1,5 @@
 FROM node:22-alpine
+ENV NODE_ENV=production
 RUN npm install -g bun
 WORKDIR /app
 
@@ -18,4 +19,6 @@ COPY mcp/tsconfig.json ./mcp/tsconfig.json
 
 EXPOSE 3002
 WORKDIR /app/mcp
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-3002}/health || exit 1
 CMD ["bun", "run", "src/index.ts"]

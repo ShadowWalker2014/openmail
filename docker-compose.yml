@@ -35,9 +35,10 @@ services:
     ports:
       - "3001:3001"
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
       REDIS_URL: redis://redis:6379
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-me-to-a-random-32-char-secret}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set — generate with: openssl rand -hex 32}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
       RESEND_API_KEY: ${RESEND_API_KEY}
       WEB_URL: ${WEB_URL:-http://localhost:5173}
@@ -54,6 +55,7 @@ services:
       dockerfile: worker/Dockerfile
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
       REDIS_URL: redis://redis:6379
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -74,6 +76,7 @@ services:
     ports:
       - "3003:3003"
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
       PORT: 3003
     depends_on:
@@ -88,6 +91,7 @@ services:
     ports:
       - "3002:3002"
     environment:
+      NODE_ENV: production
       API_URL: http://api:3001
       PORT: 3002
     depends_on:
@@ -102,6 +106,8 @@ services:
     restart: unless-stopped
     ports:
       - "5173:80"
+    environment:
+      NODE_ENV: production
     depends_on:
       - api
 

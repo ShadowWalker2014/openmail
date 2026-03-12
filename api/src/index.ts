@@ -255,4 +255,12 @@ logger.info({ port }, "API server starting");
 
 runStartupMigrations().catch((err) => { logger.fatal({ err }, "Startup migration failed — exiting"); process.exit(1); });
 
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received — shutting down gracefully");
+  setTimeout(() => {
+    logger.info("Shutdown complete");
+    process.exit(0);
+  }, 10_000).unref();
+});
+
 export default { port, fetch: app.fetch };
