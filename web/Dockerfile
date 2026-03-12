@@ -44,6 +44,7 @@ RUN bun run build
 
 # ── Final nginx image ──────────────────────────────────────────────────────────
 FROM nginx:alpine
+ENV NODE_ENV=production
 
 # Web dashboard — served at /
 COPY --from=builder /app/web/dist /usr/share/nginx/html
@@ -59,4 +60,6 @@ COPY web/start.sh /start.sh
 RUN chmod +x /start.sh
 
 EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:80/ || exit 1
 CMD ["/start.sh"]

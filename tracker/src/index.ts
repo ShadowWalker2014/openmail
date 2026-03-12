@@ -8,6 +8,9 @@ import pino from "pino";
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const app = new Hono();
 
+// Deduplicate opens within a 10-second window to reduce Apple MPP inflation
+const recentOpenIds = new Set<string>();
+
 // 1x1 transparent GIF pixel
 const PIXEL = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
@@ -23,19 +26,23 @@ app.get("/t/open/:sendId", async (c) => {
 
   const [send] = await db.select().from(emailSends).where(eq(emailSends.id, sendId)).limit(1);
   if (send) {
-    await db.insert(emailEvents).values({
-      id: generateId("eev"),
-      workspaceId: send.workspaceId,
-      sendId: send.id,
-      contactId: send.contactId,
-      eventType: "open",
-      metadata: { userAgent: c.req.header("User-Agent"), ip: c.req.header("CF-Connecting-IP") ?? c.req.header("X-Forwarded-For") },
-    });
-    // Update broadcast open count
-    if (send.broadcastId) {
-      await db.update(broadcasts)
-        .set({ openCount: sql`${broadcasts.openCount} + 1` })
-        .where(eq(broadcasts.id, send.broadcastId));
+    if (!recentOpenIds.has(sendId)) {
+      recentOpenIds.add(sendId);
+      setTimeout(() => recentOpenIds.delete(sendId), 10_000);
+      await db.insert(emailEvents).values({
+        id: generateId("eev"),
+        workspaceId: send.workspaceId,
+        sendId: send.id,
+        contactId: send.contactId,
+        eventType: "open",
+        metadata: { userAgent: c.req.header("User-Agent"), ip: c.req.header("CF-Connecting-IP") ?? c.req.header("X-Forwarded-For") },
+      });
+      // Update broadcast open count
+      if (send.broadcastId) {
+        await db.update(broadcasts)
+          .set({ openCount: sql`${broadcasts.openCount} + 1` })
+          .where(eq(broadcasts.id, send.broadcastId));
+      }
     }
   }
 
@@ -99,23 +106,8 @@ app.get("/t/unsub/:sendId", async (c) => {
     logger.info({ sendId, contactId: send.contactId }, "Contact unsubscribed");
   }
 
-  return c.html(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Unsubscribed</title>
-    <style>
-      body { font-family: -apple-system, sans-serif; text-align: center; padding: 80px 20px; color: #111; }
-      h2 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
-      p { color: #666; font-size: 16px; }
-    </style>
-  </head>
-  <body>
-    <h2>You've been unsubscribed</h2>
-    <p>You will no longer receive these emails.</p>
-  </body>
-</html>`);
+  const webUrl = process.env.WEB_URL ?? "";
+  return c.redirect(`${webUrl}/unsubscribe`, 302);
 });
 
 const port = Number(process.env.PORT ?? 3003);
