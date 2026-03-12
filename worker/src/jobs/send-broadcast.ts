@@ -110,6 +110,10 @@ export function createSendBroadcastWorker() {
         "Broadcast queued for batch sending"
       );
     },
-    { connection: getWorkerRedisConnection(), concurrency: 2 },
+    {
+      connection: getWorkerRedisConnection(),
+      concurrency: 2,
+      removeOnFail: { count: 50 },
+    },
   );
 }

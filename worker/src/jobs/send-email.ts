@@ -14,6 +14,29 @@ export interface SendEmailJobData {
   broadcastId?: string;
 }
 
+/**
+ * Return true for transient Resend errors that should be retried.
+ * On 429 / 5xx: BullMQ will back off and retry. On 4xx (bad email
+ * address, auth failure, etc.) we mark the email as permanently failed.
+ */
+function isTransientResendError(
+  error: { name?: string; message?: string; statusCode?: number } | null | undefined,
+): boolean {
+  if (!error) return false;
+  const { statusCode, name = "", message = "" } = error;
+  return (
+    statusCode === 429 ||
+    statusCode === 500 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504 ||
+    name === "rate_limit_exceeded" ||
+    name === "RateLimitExceeded" ||
+    message.toLowerCase().includes("rate limit") ||
+    message.toLowerCase().includes("too many requests")
+  );
+}
+
 export function createSendEmailWorker() {
   return new Worker<SendEmailJobData>(
     "send-email",
@@ -89,9 +112,12 @@ export function createSendEmailWorker() {
 
       const effectiveBroadcastId = broadcastId ?? send.broadcastId;
 
-      // Attempt the send, then unconditionally increment sentCount in `finally`
-      // so failed sends don't leave the broadcast permanently stuck in "sending".
+      // Track send outcome for post-finally logic.
+      // transientError: set when Resend returns 429/5xx — job will be retried,
+      // sentCount must NOT be incremented until the eventual success attempt.
       let sendSuccess = false;
+      let transientError: Error | null = null;
+
       try {
         const result = await resendClient.emails.send({
           from: `${fromName} <${fromEmail}>`,
@@ -101,12 +127,26 @@ export function createSendEmailWorker() {
         });
 
         if (result.error) {
-          await db.update(emailSends).set({
-            status: "failed",
-            failedAt: new Date(),
-            failureReason: result.error.message,
-          }).where(eq(emailSends.id, sendId));
-          logger.warn({ sendId, error: result.error.message }, "Email send failed");
+          if (isTransientResendError(result.error)) {
+            // Transient (rate limit / server error) — do NOT mark failed yet,
+            // do NOT advance sentCount. Throw after the finally block so BullMQ
+            // retries with exponential backoff.
+            transientError = new Error(
+              `Resend transient error (will retry): ${result.error.message}`,
+            );
+            logger.warn(
+              { sendId, error: result.error.message },
+              "Transient Resend error — job will be retried",
+            );
+          } else {
+            // Permanent failure (bad address, auth, etc.) — record immediately.
+            await db.update(emailSends).set({
+              status: "failed",
+              failedAt: new Date(),
+              failureReason: result.error.message,
+            }).where(eq(emailSends.id, sendId));
+            logger.warn({ sendId, error: result.error.message }, "Email send failed (permanent)");
+          }
         } else {
           await db.update(emailSends).set({
             status: "sent",
@@ -117,12 +157,10 @@ export function createSendEmailWorker() {
           logger.info({ sendId, resendMessageId: result.data!.id }, "Email sent successfully");
         }
       } finally {
-        // Always count this email as processed toward broadcast completion,
-        // regardless of whether it succeeded or failed. This prevents broadcasts
-        // from getting stuck in "sending" due to transient delivery failures.
-        // (sentCount represents "processed" not "successfully delivered" — query
-        //  emailSends.status = 'sent' for accurate delivery counts.)
-        if (effectiveBroadcastId) {
+        // Advance broadcast sentCount only when definitively processed (success or
+        // permanent failure). Skip on transient errors — the job will be retried
+        // and the count will be advanced when it eventually succeeds or permanently fails.
+        if (effectiveBroadcastId && !transientError) {
           await db.update(broadcasts).set({
             sentCount: sql`${broadcasts.sentCount} + 1`,
             updatedAt: new Date(),
@@ -150,15 +188,25 @@ export function createSendEmailWorker() {
         }
       }
 
-      // Re-throw after the finally block has run so BullMQ marks the job as failed
-      // and applies retry logic — the sentCount increment has already been committed.
-      if (!sendSuccess && send.broadcastId) {
-        // Don't re-throw for broadcast emails — the finally block handled completion.
-        // Individual failures are recorded in emailSends; we don't want BullMQ to
-        // retry the entire send (which would re-deliver to already-processed contacts).
-        return;
+      // Re-throw transient errors AFTER the finally block so BullMQ retries
+      // with backoff. (The finally block was a no-op for transient errors.)
+      if (transientError) throw transientError;
+
+      // Broadcast email failures: sentCount already incremented in finally —
+      // don't retry (would double-count) and don't throw.
+      if (!sendSuccess && send.broadcastId) return;
+
+      // Campaign email failures: throw so BullMQ marks the job FAILED (not
+      // COMPLETED) and applies retry logic.
+      if (!sendSuccess && !send.broadcastId) {
+        throw new Error(send.failureReason ?? "Send failed");
       }
     },
-    { connection: getWorkerRedisConnection(), concurrency: 10 }
+    {
+      connection: getWorkerRedisConnection(),
+      concurrency: 10,
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 50 },
+    }
   );
 }

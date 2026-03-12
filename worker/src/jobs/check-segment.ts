@@ -194,7 +194,13 @@ export function createCheckSegmentWorker() {
               subject:         stepConfig.subject ?? "Message from us",
               status:          "queued",
             });
-            await getSendEmailQueue().add("send-email", { sendId }, { removeOnComplete: 100 });
+            await getSendEmailQueue().add("send-email", { sendId }, {
+              jobId: `send-email:${sendId}`, // deduplicate: prevent double-sends on concurrent workers
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5_000 },
+              removeOnComplete: { count: 100 },
+              removeOnFail: { count: 50 },
+            });
           }
 
           logger.info(
@@ -210,6 +216,7 @@ export function createCheckSegmentWorker() {
       // Rate limit prevents thundering-herd on bulk contact imports.
       // 100 contacts/sec × (N segments × ~5 DB queries) stays manageable.
       limiter: { max: 100, duration: 1000 },
+      removeOnFail: { count: 50 },
     },
   );
 }
