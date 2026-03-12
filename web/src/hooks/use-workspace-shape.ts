@@ -12,7 +12,7 @@ export function useWorkspaceShape<T extends Record<string, unknown>>(
   options?: ShapeOptions
 ) {
   const { activeWorkspaceId } = useWorkspaceStore();
-  const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001"; // pragma: allowlist secret
+  const apiUrl = import.meta.env.VITE_API_URL ?? "";
 
   // When no workspace is active, use a URL that will cleanly fail
   // rather than fetching the current page (url: "")

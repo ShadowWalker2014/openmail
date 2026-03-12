@@ -20,6 +20,8 @@ function EmailSettingsPage() {
   const { activeWorkspace } = useWorkspaces();
   const qc = useQueryClient();
 
+  if (!activeWorkspaceId) return null;
+
   const resendKeyRef = useRef<HTMLInputElement>(null);
   const fromEmailRef = useRef<HTMLInputElement>(null);
   const fromNameRef = useRef<HTMLInputElement>(null);
@@ -55,12 +57,7 @@ function EmailSettingsPage() {
           className="space-y-3.5"
         >
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Resend API Key</Label>
-              {activeWorkspace?.resendFromEmail && (
-                <span className="text-[11px] text-emerald-400 font-medium">✓ Configured</span>
-              )}
-            </div>
+            <Label>Resend API Key</Label>
             <Input ref={resendKeyRef} type="password" placeholder="re_••••••••••••••••" />
             <p className="text-[11px] text-muted-foreground">
               Enter a new key to update. Leave blank to use the platform default.
@@ -68,7 +65,12 @@ function EmailSettingsPage() {
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1.5">
-              <Label>From Email</Label>
+              <div className="flex items-center justify-between">
+                <Label>From Email</Label>
+                {activeWorkspace?.resendFromEmail && (
+                  <span className="text-[11px] text-emerald-400 font-medium">✓ Configured</span>
+                )}
+              </div>
               <Input
                 ref={fromEmailRef}
                 type="email"

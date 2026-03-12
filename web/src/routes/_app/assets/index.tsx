@@ -30,7 +30,7 @@ interface Asset {
   createdAt: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 function assetProxyUrl(workspaceId: string, assetId: string) {
   return `${API_URL}/api/public/assets/${workspaceId}/${assetId}`;

@@ -155,7 +155,8 @@ function SegmentSizeCell({ segmentId, workspaceId }: { segmentId: string; worksp
   const { data } = useQuery<{ total: number }>({
     queryKey: ["segment-size", segmentId],
     queryFn: () => sessionFetch(workspaceId, `/segments/${segmentId}/people?page=1&pageSize=1`),
-    staleTime: 5 * 60_000,
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
   if (!data) return <div className="h-3 w-12 rounded shimmer ml-auto" />;
   return (
