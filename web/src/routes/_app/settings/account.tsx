@@ -130,8 +130,12 @@ function AccountSettingsPage() {
               size="sm"
               disabled={!currentPassword || !newPassword || changePasswordMutation.isPending}
               onClick={() => {
-                if (currentPassword && newPassword)
-                  changePasswordMutation.mutate({ currentPassword, newPassword });
+                if (!currentPassword || !newPassword) return;
+                if (newPassword.length < 8) {
+                  toast.error("Password must be at least 8 characters");
+                  return;
+                }
+                changePasswordMutation.mutate({ currentPassword, newPassword });
               }}
             >
               {changePasswordMutation.isPending ? "Updating…" : "Change Password"}

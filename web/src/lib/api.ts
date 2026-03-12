@@ -12,6 +12,10 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     credentials: "include",
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      window.location.href = "/login";
+      throw new Error("Session expired");
+    }
     const text = await res.text();
     let message = text;
     try { message = JSON.parse(text).error ?? text; } catch {}

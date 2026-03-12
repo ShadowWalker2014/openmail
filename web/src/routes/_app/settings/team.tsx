@@ -44,6 +44,7 @@ function TeamSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
   const [removeMember, setRemoveMember] = useState<Member | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const { data: members = [], isLoading: membersLoading } = useQuery<Member[]>({
     queryKey: ["members", activeWorkspaceId],
@@ -87,13 +88,16 @@ function TeamSettingsPage() {
   });
 
   const cancelInviteMutation = useMutation({
-    mutationFn: (inviteId: string) =>
-      sessionFetch(activeWorkspaceId!, `/invites/${inviteId}`, { method: "DELETE" }),
+    mutationFn: (inviteId: string) => {
+      setCancellingId(inviteId);
+      return sessionFetch(activeWorkspaceId!, `/invites/${inviteId}`, { method: "DELETE" });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invites", activeWorkspaceId] });
       toast.success("Invite cancelled");
     },
     onError: (e: Error) => toast.error(e.message),
+    onSettled: () => setCancellingId(null),
   });
 
   return (
@@ -177,7 +181,7 @@ function TeamSettingsPage() {
                 {canManageMembers && (
                   <button
                     onClick={() => cancelInviteMutation.mutate(invite.id)}
-                    disabled={cancelInviteMutation.isPending}
+                    disabled={cancellingId === invite.id}
                     className="shrink-0 rounded p-1.5 text-muted-foreground/30 opacity-0 transition-all duration-100 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 cursor-pointer disabled:cursor-not-allowed"
                   >
                     <X className="h-3.5 w-3.5" />
