@@ -347,7 +347,7 @@ function DeliveriesPage() {
 
   const { data: drafts = [], isLoading: draftsLoading, isError: draftsError } = useQuery<BroadcastDraft[]>({
     queryKey: ["broadcasts-drafts", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/broadcasts"),
+    queryFn: () => sessionFetch<{ data: BroadcastDraft[] }>(activeWorkspaceId!, "/broadcasts?pageSize=100").then((res) => res.data),
     select: (all: BroadcastDraft[]) => all.filter((b) => b.status === "draft"),
     enabled: !!activeWorkspaceId && activeTab === "drafts",
   });

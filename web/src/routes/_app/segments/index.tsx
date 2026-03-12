@@ -722,7 +722,7 @@ function SegmentsPage() {
 
   const { data: segments = [], isLoading, isError } = useQuery<Segment[]>({
     queryKey: ["segments", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
+    queryFn: () => sessionFetch<{ data: Segment[] }>(activeWorkspaceId!, "/segments?pageSize=100").then((res) => res.data),
     enabled: !!activeWorkspaceId,
   });
 

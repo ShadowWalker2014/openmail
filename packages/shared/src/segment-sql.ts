@@ -92,7 +92,11 @@ export function buildConditionClause(
     if (!attrKey) return null;
     fieldExpr = sql`(${contacts.attributes}->>${attrKey})`;
   } else {
-    return null; // Unknown field — skip silently (avoids crashing on new fields)
+    // Unknown field — log and skip (prevents silent segment broadening if schema changes)
+    if (typeof process !== "undefined" && process.env.LOG_LEVEL !== "silent") {
+      console.warn(`[segment-sql] Unknown field '${field}' in segment condition — skipping`);
+    }
+    return null;
   }
 
   if (op === "eq" || op === "equals") {
