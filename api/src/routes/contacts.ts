@@ -7,12 +7,13 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, ilike, count, desc } from "drizzle-orm";
 import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
 function parsePagination(pageStr?: string, pageSizeStr?: string) {
   const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
   return { page, pageSize };
 }
 
@@ -107,7 +108,7 @@ app.patch(
     if (!contact) return c.json({ error: "Not found" }, 404);
     // Fire-and-forget: evaluate segment_enter/exit triggers for this contact.
     // Errors are non-fatal — the response is already committed.
-    enqueueSegmentCheck(contact.id, workspaceId, "contact_updated").catch(() => {});
+    enqueueSegmentCheck(contact.id, workspaceId, "contact_updated").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
     return c.json(contact);
   }
 );

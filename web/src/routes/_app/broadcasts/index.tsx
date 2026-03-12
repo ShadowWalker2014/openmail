@@ -1310,8 +1310,8 @@ function BroadcastsPage() {
   const { data: restBroadcasts = [], isLoading, isError } = useQuery<Broadcast[]>({
     queryKey: ["broadcasts", activeWorkspaceId],
     queryFn: () =>
-      sessionFetch<Record<string, unknown>[]>(activeWorkspaceId!, "/broadcasts").then(
-        (data) => data.map(normalizeBroadcast)
+      sessionFetch<{ data: Record<string, unknown>[] }>(activeWorkspaceId!, "/broadcasts?pageSize=100").then(
+        (res) => res.data.map(normalizeBroadcast)
       ),
     enabled: !!activeWorkspaceId,
   });
@@ -1353,13 +1353,13 @@ function BroadcastsPage() {
 
   const { data: segments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["segments", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/segments"),
+    queryFn: () => sessionFetch<{ data: { id: string; name: string }[] }>(activeWorkspaceId!, "/segments?pageSize=100").then((res) => res.data),
     enabled: !!activeWorkspaceId,
   });
 
   const { data: templates = [] } = useQuery<{ id: string; name: string; subject: string; htmlContent: string }[]>({
     queryKey: ["templates", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
+    queryFn: () => sessionFetch<{ data: { id: string; name: string; subject: string; htmlContent: string }[] }>(activeWorkspaceId!, "/templates?pageSize=100").then((res) => res.data),
     enabled: !!activeWorkspaceId,
   });
 

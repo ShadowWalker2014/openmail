@@ -8,6 +8,7 @@ import { sendWorkspaceInviteEmail } from "../lib/mailer.js";
 import { eq, and, gt } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -73,9 +74,9 @@ app.post(
       inviteUrl,
       workspaceName: workspace?.name ?? "a workspace",
       role,
-    }).catch(() => {}); // don't block the response on email failure
+    }).catch((err) => logger.warn({ err }, "Failed to send workspace invite email"));
 
-    return c.json({ id, email, role, token, expiresAt }, 201);
+    return c.json({ id, email, role, expiresAt }, 201);
   }
 );
 

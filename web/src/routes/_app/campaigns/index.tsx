@@ -143,7 +143,7 @@ function StepConfigPanel({
 
   const { data: templates = [] } = useQuery<{ id: string; name: string; htmlContent: string }[]>({
     queryKey: ["templates", workspaceId],
-    queryFn: () => sessionFetch(workspaceId, "/templates"),
+    queryFn: () => sessionFetch<{ data: { id: string; name: string; htmlContent: string }[] }>(workspaceId, "/templates?pageSize=100").then((res) => res.data),
     enabled: step?.stepType === "email",
   });
 
@@ -660,7 +660,7 @@ function CampaignsPage() {
 
   const { data: campaigns = [], isLoading, isError } = useQuery<Campaign[]>({
     queryKey: ["campaigns", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/campaigns"),
+    queryFn: () => sessionFetch<{ data: Campaign[] }>(activeWorkspaceId!, "/campaigns?pageSize=100").then((res) => res.data),
     enabled: !!activeWorkspaceId,
   });
 

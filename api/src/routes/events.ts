@@ -9,6 +9,7 @@ import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -91,7 +92,7 @@ app.post(
     // A new event may flip event.* segment conditions — queue a check if
     // the contact is known (events from unrecognised emails have no contactId).
     if (contact?.id) {
-      enqueueSegmentCheck(contact.id, workspaceId, "event_tracked").catch(() => {});
+      enqueueSegmentCheck(contact.id, workspaceId, "event_tracked").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
     }
 
     return c.json({ id }, 201);

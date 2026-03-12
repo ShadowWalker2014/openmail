@@ -15,6 +15,7 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, desc } from "drizzle-orm";
 import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -175,7 +176,7 @@ app.post("/:id/contacts", zValidator("json", z.object({
     .onConflictDoNothing();
 
   // Group membership change may affect group.* segment conditions
-  enqueueSegmentCheck(contact.id, workspaceId, "group_changed").catch(() => {});
+  enqueueSegmentCheck(contact.id, workspaceId, "group_changed").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
 
   // Return 200 (idempotent — link may already exist; returning 201 when it was a no-op is wrong)
   return c.json({ success: true }, 200);
@@ -198,7 +199,7 @@ app.delete("/:id/contacts/:contactId", async (c) => {
 
   if (!deleted) return c.json({ error: "Not found" }, 404);
   // Group removal may flip group.* segment conditions (segment_exit)
-  enqueueSegmentCheck(deleted.contactId, workspaceId, "group_changed").catch(() => {});
+  enqueueSegmentCheck(deleted.contactId, workspaceId, "group_changed").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
   return c.json({ success: true });
 });
 

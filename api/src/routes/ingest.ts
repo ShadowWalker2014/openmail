@@ -24,18 +24,52 @@ import { createHash } from "crypto";
 import { getDb } from "@openmail/shared/db";
 import { apiKeys, events, contacts } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { Context } from "hono";
 import type { ApiVariables } from "../types.js";
 import { upsertGroup, linkContactToGroup } from "./groups.js";
 import { enqueueSegmentCheck } from "../lib/segment-check-queue.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
 // CORS for this router is configured at the app level in index.ts (before the global cors).
 // No need for a duplicate cors() call here.
+
+// Simple in-memory rate limiter: 1000 req/min per API key.
+// NOTE: resets on process restart; use Redis for multi-instance deployments.
+const ingestRateLimiter = new Map<string, { count: number; resetAt: number }>();
+
+function checkIngestRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = ingestRateLimiter.get(key);
+  if (!entry || entry.resetAt < now) {
+    ingestRateLimiter.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= 1000) return false;
+  entry.count++;
+  return true;
+}
+
+app.use("*", async (c, next) => {
+  const authHeader = c.req.header("Authorization");
+  let rawKey: string | null = null;
+  if (authHeader?.startsWith("Bearer ")) {
+    rawKey = authHeader.slice(7).trim();
+  } else if (authHeader?.startsWith("Basic ")) {
+    const decoded = Buffer.from(authHeader.slice(6), "base64").toString("utf8");
+    const colonIdx = decoded.indexOf(":");
+    rawKey = colonIdx !== -1 ? decoded.slice(colonIdx + 1).trim() : decoded.trim();
+  }
+  if (rawKey && !checkIngestRateLimit(rawKey)) {
+    logger.warn({ keyPrefix: rawKey.slice(0, 8) }, "Ingest rate limit exceeded");
+    return c.json({ error: "Rate limit exceeded. Max 1000 requests/minute." }, 429);
+  }
+  await next();
+});
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
@@ -290,7 +324,7 @@ app.post("/identify", async (c) => {
   }
 
   const contactId = await upsertContact(workspaceId, email, firstName, lastName, attributes);
-  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch(() => {});
+  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
   return c.json({ status: 1 }, 200);
 });
 
@@ -370,7 +404,7 @@ async function handleCioIdentify(c: Context): Promise<Response> {
 
   const contactId = await upsertContact(workspaceId, email, firstName, lastName,
     Object.keys(attributes).length > 0 ? attributes : undefined);
-  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch(() => {});
+  enqueueSegmentCheck(contactId, workspaceId, "ingest_identify").catch((err) => logger.warn({ err }, "Failed to enqueue segment check"));
 
   return new Response(null, { status: 200 });
 }
@@ -379,11 +413,18 @@ async function handleCioIdentify(c: Context): Promise<Response> {
 app.post("/cio/v1/customers/:id", handleCioIdentify);
 app.put("/cio/v1/customers/:id", handleCioIdentify);
 
-// DELETE /cio/v1/customers/:id — delete contact (no-op or actual delete)
+// DELETE /cio/v1/customers/:id — hard-delete contact by external ID or email
 app.delete("/cio/v1/customers/:id", async (c) => {
   const workspaceId = await resolveWorkspace(c);
   if (!workspaceId) return c.json({ error: "Invalid API key" }, 401);
-  // Accept but don't require deletion — return 200 for compatibility
+  const customerId = c.req.param("id");
+  const db = getDb();
+  await db.delete(contacts).where(
+    and(
+      eq(contacts.workspaceId, workspaceId),
+      sql`(${contacts.attributes}->>'id') = ${customerId} OR ${contacts.email} = ${customerId}`,
+    ),
+  );
   return new Response(null, { status: 200 });
 });
 

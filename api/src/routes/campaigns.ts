@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
 import { campaigns, campaignSteps } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and, max } from "drizzle-orm";
+import { eq, and, max, count, desc } from "drizzle-orm";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
@@ -19,16 +19,23 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 function parsePagination(pageStr?: string, pageSizeStr?: string) {
   const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
   return { page, pageSize };
 }
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(
-    await db.select().from(campaigns).where(eq(campaigns.workspaceId, workspaceId))
-  );
+  const [{ total }] = await db.select({ total: count() }).from(campaigns).where(eq(campaigns.workspaceId, workspaceId));
+  const data = await db
+    .select()
+    .from(campaigns)
+    .where(eq(campaigns.workspaceId, workspaceId))
+    .orderBy(desc(campaigns.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json({ data, total, page, pageSize });
 });
 
 app.get("/:id", async (c) => {

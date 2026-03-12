@@ -4,16 +4,31 @@ import { z } from "zod";
 import { getDb } from "@openmail/shared/db";
 import { emailTemplates, workspaces } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count, desc } from "drizzle-orm";
 import { Resend } from "resend";
 import type { ApiVariables } from "../types.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
+function parsePagination(pageStr?: string, pageSizeStr?: string) {
+  const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  return { page, pageSize };
+}
+
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(await db.select().from(emailTemplates).where(eq(emailTemplates.workspaceId, workspaceId)));
+  const [{ total }] = await db.select({ total: count() }).from(emailTemplates).where(eq(emailTemplates.workspaceId, workspaceId));
+  const data = await db
+    .select()
+    .from(emailTemplates)
+    .where(eq(emailTemplates.workspaceId, workspaceId))
+    .orderBy(desc(emailTemplates.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json({ data, total, page, pageSize });
 });
 
 app.post(
@@ -22,7 +37,7 @@ app.post(
     name: z.string().min(1),
     subject: z.string().min(1),
     previewText: z.string().optional(),
-    htmlContent: z.string().default(""),
+    htmlContent: z.string().max(1_048_576).default(""),
     jsonContent: z.unknown().optional(),
     isVisual: z.boolean().optional().default(false),
   })),
@@ -41,7 +56,7 @@ app.patch(
     name: z.string().optional(),
     subject: z.string().optional(),
     previewText: z.string().optional(),
-    htmlContent: z.string().optional(),
+    htmlContent: z.string().max(1_048_576).optional(),
     jsonContent: z.unknown().optional(),
   })),
   async (c) => {
@@ -69,7 +84,7 @@ app.post(
   zValidator("json", z.object({
     to: z.string().email(),
     subject: z.string().min(1),
-    htmlContent: z.string(),
+    htmlContent: z.string().max(1_048_576),
     prependTest: z.boolean().default(true),
   })),
   async (c) => {

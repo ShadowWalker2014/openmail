@@ -8,6 +8,7 @@ import { eq, and, count, desc, sql, inArray } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 let _broadcastQueue: Queue | null = null;
 function getBroadcastQueue() {
@@ -21,16 +22,37 @@ const VALID_SEND_STATUSES = new Set(["queued", "sent", "failed", "bounced"]);
 
 function parsePagination(pageStr?: string, pageSizeStr?: string) {
   const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
   return { page, pageSize };
+}
+
+// Simple in-memory rate limiter: 5 test-sends per minute per workspace
+const testSendRateLimiter = new Map<string, { count: number; resetAt: number }>();
+function checkTestSendRate(workspaceId: string): boolean {
+  const now = Date.now();
+  const entry = testSendRateLimiter.get(workspaceId);
+  if (!entry || entry.resetAt < now) {
+    testSendRateLimiter.set(workspaceId, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count++;
+  return true;
 }
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(
-    await db.select().from(broadcasts).where(eq(broadcasts.workspaceId, workspaceId))
-  );
+  const [{ total }] = await db.select({ total: count() }).from(broadcasts).where(eq(broadcasts.workspaceId, workspaceId));
+  const data = await db
+    .select()
+    .from(broadcasts)
+    .where(eq(broadcasts.workspaceId, workspaceId))
+    .orderBy(desc(broadcasts.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json({ data, total, page, pageSize });
 });
 
 app.get("/:id", async (c) => {
@@ -51,7 +73,7 @@ app.post(
     name: z.string().min(1),
     subject: z.string().min(1),
     templateId: z.string().optional(),
-    htmlContent: z.string().optional(),
+    htmlContent: z.string().max(1_048_576).optional(),
     fromEmail: z.string().email().optional(),
     fromName: z.string().optional(),
     segmentIds: z.array(z.string()).min(1),
@@ -89,7 +111,7 @@ app.patch(
     name: z.string().optional(),
     subject: z.string().optional(),
     templateId: z.string().optional(),
-    htmlContent: z.string().optional(),
+    htmlContent: z.string().max(1_048_576).optional(),
     fromEmail: z.string().email().optional(),
     fromName: z.string().optional(),
     segmentIds: z.array(z.string()).optional(),
@@ -266,6 +288,9 @@ app.get("/:id/top-links", async (c) => {
 
 app.post("/:id/test-send", zValidator("json", z.object({ email: z.string().email() })), async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  if (!checkTestSendRate(workspaceId)) {
+    return c.json({ error: "Test send rate limit exceeded. Max 5 per minute per workspace." }, 429);
+  }
   const db = getDb();
   const { email } = c.req.valid("json");
 

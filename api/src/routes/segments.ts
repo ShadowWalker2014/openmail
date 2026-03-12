@@ -5,7 +5,7 @@ import { getDb } from "@openmail/shared/db";
 import { segments, contacts, broadcasts, campaigns } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { buildConditionClause, buildSegmentWhereSQL } from "@openmail/shared/segment-sql";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, count, sql, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { ApiVariables } from "../types.js";
 
@@ -18,29 +18,38 @@ const conditionOperatorEnum = z.enum([
   "eq", "ne", "gt", "lt", "gte", "lte", "exists", "not_exists",
 ]);
 
+const segmentConditionValueSchema = z.union([z.string().max(500), z.number(), z.boolean()]).optional();
+
 const segmentSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   conditions: z.array(z.object({
     field: z.string().min(1),
     operator: conditionOperatorEnum,
-    value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    value: segmentConditionValueSchema,
   })).min(1),
   conditionLogic: z.enum(["and", "or"]).optional().default("and"),
 });
 
 function parsePagination(pageStr?: string, pageSizeStr?: string) {
   const page = Math.max(1, parseInt(pageStr ?? "1", 10) || 1);
-  const pageSize = Math.min(500, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
+  const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeStr ?? "50", 10) || 50));
   return { page, pageSize };
 }
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const { page, pageSize } = parsePagination(c.req.query("page"), c.req.query("pageSize"));
   const db = getDb();
-  return c.json(
-    await db.select().from(segments).where(eq(segments.workspaceId, workspaceId))
-  );
+  const [{ total }] = await db.select({ total: count() }).from(segments).where(eq(segments.workspaceId, workspaceId));
+  const data = await db
+    .select()
+    .from(segments)
+    .where(eq(segments.workspaceId, workspaceId))
+    .orderBy(desc(segments.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  return c.json({ data, total, page, pageSize });
 });
 
 app.post("/", zValidator("json", segmentSchema), async (c) => {
@@ -63,7 +72,7 @@ app.patch(
     conditions: z.array(z.object({
       field: z.string().min(1),
       operator: conditionOperatorEnum,
-      value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+      value: segmentConditionValueSchema,
     })).min(1).optional(),
     conditionLogic: z.enum(["and", "or"]).optional(),
   })),

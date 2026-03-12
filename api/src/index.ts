@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
+import { bodyLimit } from "hono/body-limit";
 import { workspaceApiKeyAuth } from "./middleware/workspace-auth.js";
 import { sessionAuth } from "./middleware/session-auth.js";
 import workspacesRouter from "./routes/workspaces.js";
@@ -23,7 +24,7 @@ import ingestRouter from "./routes/ingest.js";
 import groupsRouter from "./routes/groups.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { getDb } from "@openmail/shared/db";
 import { getObject } from "./lib/storage.js";
 import { logger } from "./lib/logger.js";
@@ -57,8 +58,18 @@ app.use("*", cors({
   allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
 }));
 app.use("*", honoLogger());
+app.use("*", bodyLimit({ maxSize: 10 * 1024 * 1024, onError: (c) => c.json({ error: "Request body too large (max 10MB)" }, 413) }));
 
-app.get("/health", (c) => c.json({ status: "ok", service: "api" }));
+app.get("/health", async (c) => {
+  try {
+    const db = getDb();
+    await db.execute(sql`SELECT 1`);
+    return c.json({ status: "ok", service: "api" });
+  } catch (err) {
+    logger.error({ err }, "Health check DB probe failed");
+    return c.json({ status: "error", service: "api" }, 503);
+  }
+});
 
 // Public: get invite info by token (no auth needed — shown on the invite acceptance page)
 app.get("/api/invites/info/:token", async (c) => {
@@ -141,13 +152,15 @@ app.get("/api/public/assets/:workspaceId/:assetId", async (c) => {
   const obj = await getObject(asset.s3Key);
   if (!obj) return c.json({ error: "File not found in storage" }, 404);
 
-  return new Response(obj.body as BodyInit, {
-    headers: {
-      "Content-Type": obj.contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "Content-Length": String(obj.contentLength),
-    },
-  });
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": obj.contentType,
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Length": String(obj.contentLength),
+  };
+  if (obj.contentType === "image/svg+xml") {
+    responseHeaders["Content-Disposition"] = "attachment";
+  }
+  return new Response(obj.body as BodyInit, { headers: responseHeaders });
 });
 
 // Global error handler — prevents internal details from leaking to clients
@@ -248,6 +261,15 @@ async function runStartupMigrations() {
   await db.execute(`CREATE INDEX IF NOT EXISTS broadcasts_status_idx       ON broadcasts (status)`);
 
   logger.info("Startup migrations OK");
+}
+
+if (!process.env.DATABASE_URL) {
+  logger.fatal("DATABASE_URL is required");
+  process.exit(1);
+}
+if (!process.env.BETTER_AUTH_SECRET) {
+  logger.fatal("BETTER_AUTH_SECRET is required — refusing to start (all sessions would be forgeable)");
+  process.exit(1);
 }
 
 const port = Number(process.env.PORT ?? 3001);

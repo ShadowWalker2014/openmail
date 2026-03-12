@@ -4,6 +4,7 @@ import { apiKeys } from "@openmail/shared/schema";
 import { eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import type { ApiVariables } from "../types.js";
+import { logger } from "../lib/logger.js";
 
 export async function workspaceApiKeyAuth(c: Context<{ Variables: ApiVariables }>, next: Next) {
   const authHeader = c.req.header("Authorization");
@@ -24,7 +25,7 @@ export async function workspaceApiKeyAuth(c: Context<{ Variables: ApiVariables }
   if (!apiKey) return c.json({ error: "Invalid API key" }, 401);
 
   // Fire-and-forget: don't block the request on this bookkeeping update
-  db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, apiKey.id)).catch(() => {});
+  db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, apiKey.id)).catch((err) => logger.warn({ err }, "Failed to update API key lastUsedAt"));
 
   c.set("workspaceId", apiKey.workspaceId);
   await next();

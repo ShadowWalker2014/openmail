@@ -433,7 +433,7 @@ function TemplatesPage() {
 
   const { data: templates = [], isLoading, isError } = useQuery<Template[]>({
     queryKey: ["templates", activeWorkspaceId],
-    queryFn: () => sessionFetch(activeWorkspaceId!, "/templates"),
+    queryFn: () => sessionFetch<{ data: Template[] }>(activeWorkspaceId!, "/templates?pageSize=100").then((res) => res.data),
     enabled: !!activeWorkspaceId,
   });
 
