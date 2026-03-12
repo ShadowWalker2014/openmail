@@ -101,7 +101,7 @@ export function createProcessEventWorker() {
               attempts: 3,
               backoff: { type: "exponential", delay: 5_000 },
               removeOnComplete: { count: 100 },
-              removeOnFail: { count: 50 },
+              removeOnFail: { count: 100 },
             });
           }
         }
@@ -112,7 +112,8 @@ export function createProcessEventWorker() {
     {
       connection: getWorkerRedisConnection(),
       concurrency: 20,
-      removeOnFail: { count: 50 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 100 },
     }
   );
 }

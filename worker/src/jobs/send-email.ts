@@ -206,7 +206,7 @@ export function createSendEmailWorker() {
       connection: getWorkerRedisConnection(),
       concurrency: 10,
       removeOnComplete: { count: 100 },
-      removeOnFail: { count: 50 },
+      removeOnFail: { count: 100 },
     }
   );
 }

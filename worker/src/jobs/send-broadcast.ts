@@ -99,7 +99,8 @@ export function createSendBroadcastWorker() {
           workspaceId,
         };
         await sendBatchQueue.add("send-batch", jobData, {
-          removeOnComplete: 100,
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 100 },
           attempts: 5,
           backoff: { type: "exponential", delay: 10_000 },
         });
@@ -113,7 +114,8 @@ export function createSendBroadcastWorker() {
     {
       connection: getWorkerRedisConnection(),
       concurrency: 2,
-      removeOnFail: { count: 50 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 100 },
     },
   );
 }
