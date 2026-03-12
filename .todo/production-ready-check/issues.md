@@ -79,9 +79,9 @@ Generated from multi-agent audit. Items are checked off as fixed.
 
 - [ ] **OPS-1** Zero database backup strategy — **configure Railway automated backups** (Settings → Database → Backups)
 - [ ] **OPS-2** No billing/subscription management page — requires Stripe integration
-- [ ] **OPS-3** PgBouncer built but unwired — update all services' `DATABASE_URL` to point through pgbouncer
-- [ ] **OPS-4** ElectricSQL absent from docker-compose (self-hosted real-time broken)
-- [ ] **OPS-5** No dead letter queue / external alerting for failed jobs — consider Bull Board + Slack webhook
+- [x] **OPS-3** PgBouncer wired — `prepare: false` added to postgres client; IGNORE_STARTUP_PARAMETERS + SERVER_RESET_QUERY set on Railway PgBouncer service; docker-compose updated with pgbouncer service (api/worker/tracker → pgbouncer:6432; electric → direct postgres)
+- [x] **OPS-4** ElectricSQL added to docker-compose with correct direct Postgres connection + WAL config
+- [x] **OPS-5** Bull Board mounted at `/api/admin/queues` (protected by BULL_BOARD_PASSWORD Basic Auth); drizzle.config.ts updated to use DIRECT_DATABASE_URL for migrations
 
 ---
 

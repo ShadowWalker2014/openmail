@@ -4,6 +4,12 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # wal_level=logical required by ElectricSQL for real-time sync
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_replication_slots=10
+      -c max_wal_senders=10
     environment:
       POSTGRES_DB: openmail
       POSTGRES_USER: openmail
@@ -13,6 +19,39 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openmail"]
       interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PgBouncer — connection pooler sitting in front of Postgres.
+  # All application services connect through pgbouncer:6432 in transaction
+  # pool mode. Max 1000 client connections → 20 actual Postgres connections.
+  # ElectricSQL is the only service that bypasses PgBouncer (needs logical replication).
+  pgbouncer:
+    image: edoburu/pgbouncer:1.22.1
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: "5432"
+      POSTGRESQL_DATABASE: openmail
+      POSTGRESQL_USERNAME: openmail
+      POSTGRESQL_PASSWORD: openmail_password
+      PGBOUNCER_DATABASE: openmail
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_DEFAULT_POOL_SIZE: "20"
+      PGBOUNCER_MAX_CLIENT_CONN: "1000"
+      PGBOUNCER_LISTEN_ADDRESS: "*"
+      # Required for postgres.js / Drizzle compatibility in transaction pool mode
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits,search_path
+      # Resets server connection state between client sessions
+      PGBOUNCER_SERVER_RESET_QUERY: DISCARD ALL
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U openmail -d openmail || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 5
 
@@ -27,6 +66,22 @@ services:
       timeout: 3s
       retries: 5
 
+  # ElectricSQL — real-time sync service. Must connect DIRECTLY to Postgres
+  # (bypasses PgBouncer) because it requires logical replication streaming.
+  electric:
+    image: electricsql/electric:latest
+    restart: unless-stopped
+    ports:
+      - "3004:3000"
+    environment:
+      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      ELECTRIC_SECRET: ${ELECTRIC_SECRET:?ELECTRIC_SECRET must be set — generate with: openssl rand -hex 32}
+      ELECTRIC_LOG_LEVEL: info
+      ELECTRIC_DB_POOL_SIZE: "10"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -36,15 +91,19 @@ services:
       - "3001:3001"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      # Routes through PgBouncer for connection pooling
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:6432/openmail
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set — generate with: openssl rand -hex 32}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
       RESEND_API_KEY: ${RESEND_API_KEY}
       WEB_URL: ${WEB_URL:-http://localhost:5173}
+      # ElectricSQL internal address for shape proxy
+      ELECTRIC_URL: http://electric:3000
+      ELECTRIC_SECRET: ${ELECTRIC_SECRET:?ELECTRIC_SECRET must be set}
       PORT: 3001
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -56,14 +115,15 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      # Routes through PgBouncer for connection pooling
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:6432/openmail
       REDIS_URL: redis://redis:6379
       RESEND_API_KEY: ${RESEND_API_KEY}
       TRACKER_URL: ${TRACKER_URL:-http://tracker:3003}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@openmail.dev}
       DEFAULT_FROM_NAME: ${DEFAULT_FROM_NAME:-OpenMail}
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -77,10 +137,12 @@ services:
       - "3003:3003"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://openmail:openmail_password@postgres:5432/openmail
+      # Routes through PgBouncer for connection pooling
+      DATABASE_URL: postgresql://openmail:openmail_password@pgbouncer:6432/openmail
+      WEB_URL: ${WEB_URL:-http://localhost:5173}
       PORT: 3003
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
 
   mcp:
@@ -92,6 +154,7 @@ services:
       - "3002:3002"
     environment:
       NODE_ENV: production
+      # MCP proxies all DB operations through the API service — no direct DB access
       API_URL: http://api:3001
       PORT: 3002
     depends_on:
