@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { Bot, ExternalLink, Key, Plug, Loader2, Check, X } from "lucide-react";
+import { Bot, ExternalLink, Key, Plug, Loader2, Check, X, AlertTriangle, Info } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, sessionFetch } from "@/lib/api";
 import { useWorkspaceStore } from "@/store/workspace";
@@ -13,10 +13,15 @@ export const Route = createFileRoute("/_app/settings/mcp-server")({
   component: McpServerSettingsPage,
 });
 
+type UrlSource = "explicit" | "derived" | "unconfigured";
+
 interface DeploymentConfig {
   apiUrl: string;
-  mcpUrl: string;
-  docsUrl: string;
+  /** null when the deployment has neither MCP_PUBLIC_URL nor a derivable convention */
+  mcpUrl: string | null;
+  mcpUrlSource: UrlSource;
+  docsUrl: string | null;
+  docsUrlSource: UrlSource;
   mcp: {
     authScheme: "bearer-api-key" | string;
     keysHref: string;
@@ -61,7 +66,7 @@ function McpServerSettingsPage() {
   const credentialForSnippet = freshKey ?? "<your-api-key>";
 
   const snippet = useMemo(() => {
-    if (!config) return "";
+    if (!config || !config.mcpUrl) return "";
     return JSON.stringify(
       {
         mcpServers: {
@@ -77,7 +82,7 @@ function McpServerSettingsPage() {
   }, [config, credentialForSnippet]);
 
   async function handleTestConnection() {
-    if (!config) return;
+    if (!config || !config.mcpUrl) return;
     if (!freshKey && !selectedKey) {
       toast.error("Choose an API key first or create one to test the connection.");
       return;
@@ -163,7 +168,7 @@ function McpServerSettingsPage() {
           <p className="text-[12px] text-muted-foreground">
             Capabilities are discovered live by the agent on connect — there's no static list to
             keep in sync.{" "}
-            {config && (
+            {config?.docsUrl && (
               <a
                 href={config.docsUrl}
                 target="_blank"
@@ -178,7 +183,34 @@ function McpServerSettingsPage() {
         </div>
       </SectionCard>
 
-      {/* ── Section 2: Connection details ────────────────────────────── */}
+      {/* ── MCP-not-configured warning (replaces sections 2+3 when no URL) */}
+      {!configLoading && config && !config.mcpUrl && (
+        <SectionCard>
+          <div className="px-5 py-4 flex gap-3">
+            <div className="shrink-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md border border-amber-500/30 bg-amber-500/10">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-[13px] font-medium text-foreground">MCP server is not configured for this deployment</p>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                The api service has no <code className="font-mono text-[11px] text-foreground/70">MCP_PUBLIC_URL</code> environment
+                variable set, and the host{" "}
+                <code className="font-mono text-[11px] text-foreground/70">{config.apiUrl || "(unknown)"}</code>{" "}
+                doesn't match the expected <code className="font-mono text-[11px] text-foreground/70">api.&lt;base&gt;</code>{" "}
+                subdomain convention from which an MCP URL can be derived.
+              </p>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Set <code className="font-mono text-[11px] text-foreground/70">MCP_PUBLIC_URL</code> on the api service to enable AI agent access.
+              </p>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Section 2: Connection details (only when MCP URL is known) ───── */}
+      {(!configLoading && config?.mcpUrl) && (
       <SectionCard>
         <SectionHeader icon={Plug} title="Connection details" description="What to point your AI agent at" />
         <div className="divide-y divide-border/60">
@@ -187,15 +219,20 @@ function McpServerSettingsPage() {
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1.5">
               Endpoint URL
             </p>
-            {configLoading ? (
-              <div className="h-5 w-72 rounded shimmer" />
-            ) : (
-              <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded border border-border bg-background px-2.5 py-1.5 font-mono text-[12px] text-foreground/90">
-                  {config?.mcpUrl}
-                </code>
-                {config && <CopyButton value={config.mcpUrl} />}
-              </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate rounded border border-border bg-background px-2.5 py-1.5 font-mono text-[12px] text-foreground/90">
+                {config.mcpUrl}
+              </code>
+              <CopyButton value={config.mcpUrl} />
+            </div>
+            {config.mcpUrlSource === "derived" && (
+              <p className="mt-1.5 inline-flex items-start gap-1 text-[11px] text-muted-foreground">
+                <Info className="h-3 w-3 mt-px shrink-0" />
+                <span>
+                  Auto-detected from <code className="font-mono text-[10px]">BETTER_AUTH_URL</code> using the OpenMail subdomain convention.
+                  Set <code className="font-mono text-[10px]">MCP_PUBLIC_URL</code> on the api service to override.
+                </span>
+              </p>
             )}
           </div>
 
@@ -204,16 +241,12 @@ function McpServerSettingsPage() {
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1.5">
               Authentication
             </p>
-            {configLoading ? (
-              <div className="h-4 w-48 rounded shimmer" />
-            ) : (
-              <p className="text-[13px] text-foreground/80">
-                {schemeLabel(config?.mcp.authScheme)}{" "}
-                <span className="text-muted-foreground">
-                  — pass <code className="font-mono text-[11px] text-foreground/70">Authorization: Bearer &lt;key&gt;</code> on every request
-                </span>
-              </p>
-            )}
+            <p className="text-[13px] text-foreground/80">
+              {schemeLabel(config.mcp.authScheme)}{" "}
+              <span className="text-muted-foreground">
+                — pass <code className="font-mono text-[11px] text-foreground/70">Authorization: Bearer &lt;key&gt;</code> on every request
+              </span>
+            </p>
           </div>
 
           {/* API key link */}
@@ -242,8 +275,10 @@ function McpServerSettingsPage() {
           </div>
         </div>
       </SectionCard>
+      )}
 
-      {/* ── Section 3: Configuration snippet ─────────────────────────── */}
+      {/* ── Section 3: Configuration snippet (only when MCP URL is known) */}
+      {(!configLoading && config?.mcpUrl) && (
       <SectionCard>
         <SectionHeader
           icon={Bot}
@@ -328,6 +363,7 @@ function McpServerSettingsPage() {
           </div>
         </div>
       </SectionCard>
+      )}
     </div>
   );
 }

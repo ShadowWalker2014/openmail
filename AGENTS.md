@@ -60,8 +60,16 @@ Capabilities: tools (CRUD for contacts/broadcasts/campaigns/segments/templates/a
 
 ### Deployment Config Discovery (`GET /api/session/config`)
 - Single source of truth for the dashboard's view of public-facing URLs.
-- Source: `api/src/routes/config.ts`. Auth: session (logged-in users only). Returns `{ apiUrl, mcpUrl, docsUrl, mcp: { authScheme, keysHref }, version }`.
-- Env knobs (set on `api` service): `MCP_PUBLIC_URL`, `DOCS_PUBLIC_URL`, `API_PUBLIC_URL`. Defaults to SaaS host.
+- Source: `api/src/routes/config.ts`. Auth: session (logged-in users only). Returns `{ apiUrl, mcpUrl, mcpUrlSource, docsUrl, docsUrlSource, mcp: { authScheme, keysHref }, version }`.
+- **Resolution chain** (no SaaS hardcodes — ever):
+  1. **Explicit override:** `MCP_PUBLIC_URL` / `DOCS_PUBLIC_URL` env vars on the api service.
+  2. **Convention-based derivation** from `BETTER_AUTH_URL` / `WEB_URL` (which IS the deployment's reality — these are mandatory env vars):
+     - `https://api.<base>` → `https://mcp.<base>/mcp` (subdomain swap)
+     - `http://localhost:<port>` → `http://localhost:<MCP_PORT|3002>/mcp` (local dev)
+     - `https://app.<base>` → `https://docs.<base>` (docs subdomain swap)
+     - bare host without convention → `<host>/docs` for docs path-prefix
+  3. **`null`** if nothing applies. Dashboard renders a "MCP not configured for this deployment" warning. We do NOT fall back to upstream's SaaS host — that would silently misconfigure self-hosted deployments.
+- `mcpUrlSource` / `docsUrlSource`: `"explicit" | "derived" | "unconfigured"`. UI uses these to show appropriate hints (e.g. "Auto-detected — set MCP_PUBLIC_URL to override" for derived).
 - **Forward-compat discipline:** fields are append-only once shipped. `mcp.authScheme` is a versioned literal — when MCP scheme changes (e.g. to "oauth-2.1"), the value changes in lockstep with the dashboard's setup UI variant.
 - The dashboard's `Settings → MCP Server` page (`web/src/routes/_app/settings/mcp-server.tsx`) is the only consumer today. Future SDK auto-config could also hit it.
 - **MUST NOT** hardcode `mcpUrl` anywhere in `web/`. Always read from this endpoint.
