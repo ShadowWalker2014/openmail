@@ -11,24 +11,96 @@
  *   - mcpUrlSource / docsUrlSource correctly tagged ("explicit"|"derived"|"unconfigured")
  *   - Forward-compat shape (mcp.authScheme, mcp.keysHref, version)
  *   - authScheme literal stability (changing this is a breaking change)
+ *
+ * Self-contained: this test only needs Postgres (for auth tables) — no Redis,
+ * no BullMQ, no engine-specific fixtures. We boot an ephemeral Postgres in
+ * Docker on a dedicated port to avoid colliding with other tests.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import postgres from "postgres";
-import {
-  setTestEnv, startContainers, stopContainers, waitForDb, waitForRedis,
-  runMigrations, cleanDb, flushRedis, TEST_DB_URL,
-} from "./_fixtures.js";
+import path from "path";
 
-setTestEnv();
+// ── Test infrastructure ─────────────────────────────────────────────────────
+
+const TEST_PG_PORT = Number(process.env.OPENMAIL_TEST_PG_PORT ?? "5450");
+const PG_CONTAINER = `openmail-cfgtest-pg-${process.env.OPENMAIL_TEST_SUFFIX ?? "default"}`;
+const TEST_DB_URL = `postgresql://openmail:openmail_password@127.0.0.1:${TEST_PG_PORT}/openmail_test`;
+
+process.env.DATABASE_URL = TEST_DB_URL;
+process.env.BETTER_AUTH_SECRET = "config-test-secret-abc123xyz456def"; // pragma: allowlist secret
+process.env.BETTER_AUTH_URL = process.env.BETTER_AUTH_URL ?? "http://localhost:3001";
+process.env.WEB_URL = process.env.WEB_URL ?? "http://localhost:5173";
+process.env.RESEND_API_KEY = "re_test_config"; // pragma: allowlist secret
+
+async function spawn(cmd: string[]) {
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  const code = await proc.exited;
+  return { code, stderr: await new Response(proc.stderr).text() };
+}
+
+async function startTestDb() {
+  await spawn(["docker", "rm", "-f", PG_CONTAINER]);
+  const r = await spawn([
+    "docker", "run", "-d",
+    "--name", PG_CONTAINER,
+    "-e", "POSTGRES_DB=openmail_test",
+    "-e", "POSTGRES_USER=openmail",
+    "-e", "POSTGRES_PASSWORD=openmail_password",
+    "-p", `${TEST_PG_PORT}:5432`,
+    "postgres:16-alpine",
+  ]);
+  if (r.code !== 0) throw new Error(`Postgres start failed: ${r.stderr}`);
+}
+
+async function stopTestDb() {
+  await spawn(["docker", "rm", "-f", PG_CONTAINER]);
+}
+
+async function waitForDb(maxRetries = 60): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    const pg = postgres(TEST_DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+    try {
+      await pg`SELECT 1`;
+      await pg.end();
+      return;
+    } catch {
+      await pg.end({ timeout: 1 }).catch(() => {});
+      await Bun.sleep(1000);
+    }
+  }
+  throw new Error("Postgres did not become ready");
+}
+
+async function runMigrations(rawDb: postgres.Sql) {
+  const dir = path.join(import.meta.dir, "../../../packages/shared/drizzle");
+  const files = [
+    "0000_woozy_sharon_ventura.sql",
+    "0001_sending_domains.sql",
+    "0002_assets.sql",
+    "0003_workspace_logo.sql",
+    "0004_shocking_slyde.sql",
+  ];
+  for (const file of files) {
+    const sql = await Bun.file(path.join(dir, file)).text();
+    const statements = sql
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const stmt of statements) {
+      await rawDb.unsafe(stmt);
+    }
+  }
+}
+
+// ── Test state ──────────────────────────────────────────────────────────────
 
 let rawDb: postgres.Sql;
 let app: any;
 
 beforeAll(async () => {
-  await startContainers();
+  await startTestDb();
   await waitForDb();
-  await waitForRedis();
   rawDb = postgres(TEST_DB_URL, { max: 5 });
   await runMigrations(rawDb);
   const mod = await import("../index.js");
@@ -37,12 +109,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rawDb?.end({ timeout: 5 }).catch(() => {});
-  await stopContainers();
+  await stopTestDb();
 }, 30_000);
 
 beforeEach(async () => {
-  await cleanDb(rawDb);
-  await flushRedis();
+  // CASCADE handles workspace_members, sessions, etc.
+  await rawDb`TRUNCATE "user", workspaces RESTART IDENTITY CASCADE`;
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -91,7 +163,7 @@ async function getConfigWith(env: Record<string, string | undefined>) {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-describe("deployment config endpoint (T-CFG)", () => {
+describe("deployment config endpoint", () => {
   it("rejects unauthenticated requests with 401", async () => {
     const res = await app.request("/api/session/config");
     expect(res.status).toBe(401);
@@ -137,7 +209,6 @@ describe("deployment config endpoint (T-CFG)", () => {
   });
 
   it("returns null for MCP when neither override nor convention applies", async () => {
-    // Bare host (no api. prefix, not localhost) → cannot guess MCP host
     const { body } = await getConfigWith({
       MCP_PUBLIC_URL: undefined,
       BETTER_AUTH_URL: "https://acme.io",
@@ -194,7 +265,6 @@ describe("deployment config endpoint (T-CFG)", () => {
   it("returns the forward-compatible shape with all required fields", async () => {
     const { body } = await getConfigWith({});
     expect(typeof body.apiUrl).toBe("string");
-    // mcpUrl/docsUrl can be null (unconfigured) or string — both valid.
     expect(body.mcpUrl === null || typeof body.mcpUrl === "string").toBe(true);
     expect(body.docsUrl === null || typeof body.docsUrl === "string").toBe(true);
     expect(["explicit", "derived", "unconfigured"]).toContain(body.mcpUrlSource);
@@ -206,8 +276,6 @@ describe("deployment config endpoint (T-CFG)", () => {
 
   it("authScheme is the literal 'bearer-api-key' (changing this is a breaking change)", async () => {
     const { body } = await getConfigWith({});
-    // Strict — if the value changes (e.g. to "oauth-2.1"), the dashboard's
-    // setup UI must be updated in lockstep.
     expect(body.mcp.authScheme).toBe("bearer-api-key");
   });
 
@@ -222,7 +290,6 @@ describe("deployment config endpoint (T-CFG)", () => {
     });
     expect(body.mcpUrl).toBeNull();
     expect(body.docsUrl).toBeNull();
-    // Regression guard: ensure the response body itself contains no openmail.win literal
     expect(JSON.stringify(body)).not.toMatch(/openmail\.win/);
   });
 });

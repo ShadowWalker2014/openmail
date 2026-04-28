@@ -13,3 +13,13 @@ dist/
 .DS_Store
 packages/shared/.env
 web/.tanstack/
+
+# ── Personal / per-machine context (not part of upstream) ──
+# These are AI-assistant context, local-dev helpers, and per-feature PRP
+# notes. They live alongside the repo for individual contributors but
+# never travel upstream.
+.claude/
+PRPs/
+prime.md
+LOCAL.md
+web/vite.config.local.ts
