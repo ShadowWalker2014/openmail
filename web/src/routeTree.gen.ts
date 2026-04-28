@@ -29,6 +29,7 @@ import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns/i
 import { Route as AppBroadcastsIndexRouteImport } from './routes/_app/broadcasts/index'
 import { Route as AppAssetsIndexRouteImport } from './routes/_app/assets/index'
 import { Route as AppSettingsTeamRouteImport } from './routes/_app/settings/team'
+import { Route as AppSettingsMcpServerRouteImport } from './routes/_app/settings/mcp-server'
 import { Route as AppSettingsGeneralRouteImport } from './routes/_app/settings/general'
 import { Route as AppSettingsEmailRouteImport } from './routes/_app/settings/email'
 import { Route as AppSettingsDomainRouteImport } from './routes/_app/settings/domain'
@@ -134,6 +135,11 @@ const AppSettingsTeamRoute = AppSettingsTeamRouteImport.update({
   path: '/team',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsMcpServerRoute = AppSettingsMcpServerRouteImport.update({
+  id: '/mcp-server',
+  path: '/mcp-server',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsGeneralRoute = AppSettingsGeneralRouteImport.update({
   id: '/general',
   path: '/general',
@@ -173,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/settings/domain': typeof AppSettingsDomainRoute
   '/settings/email': typeof AppSettingsEmailRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/assets/': typeof AppAssetsIndexRoute
   '/broadcasts/': typeof AppBroadcastsIndexRoute
@@ -198,6 +205,7 @@ export interface FileRoutesByTo {
   '/settings/domain': typeof AppSettingsDomainRoute
   '/settings/email': typeof AppSettingsEmailRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/assets': typeof AppAssetsIndexRoute
   '/broadcasts': typeof AppBroadcastsIndexRoute
@@ -226,6 +234,7 @@ export interface FileRoutesById {
   '/_app/settings/domain': typeof AppSettingsDomainRoute
   '/_app/settings/email': typeof AppSettingsEmailRoute
   '/_app/settings/general': typeof AppSettingsGeneralRoute
+  '/_app/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/_app/settings/team': typeof AppSettingsTeamRoute
   '/_app/assets/': typeof AppAssetsIndexRoute
   '/_app/broadcasts/': typeof AppBroadcastsIndexRoute
@@ -254,6 +263,7 @@ export interface FileRouteTypes {
     | '/settings/domain'
     | '/settings/email'
     | '/settings/general'
+    | '/settings/mcp-server'
     | '/settings/team'
     | '/assets/'
     | '/broadcasts/'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/settings/domain'
     | '/settings/email'
     | '/settings/general'
+    | '/settings/mcp-server'
     | '/settings/team'
     | '/assets'
     | '/broadcasts'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/_app/settings/domain'
     | '/_app/settings/email'
     | '/_app/settings/general'
+    | '/_app/settings/mcp-server'
     | '/_app/settings/team'
     | '/_app/assets/'
     | '/_app/broadcasts/'
@@ -472,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsTeamRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/mcp-server': {
+      id: '/_app/settings/mcp-server'
+      path: '/mcp-server'
+      fullPath: '/settings/mcp-server'
+      preLoaderRoute: typeof AppSettingsMcpServerRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/general': {
       id: '/_app/settings/general'
       path: '/general'
@@ -516,6 +535,7 @@ interface AppSettingsRouteChildren {
   AppSettingsDomainRoute: typeof AppSettingsDomainRoute
   AppSettingsEmailRoute: typeof AppSettingsEmailRoute
   AppSettingsGeneralRoute: typeof AppSettingsGeneralRoute
+  AppSettingsMcpServerRoute: typeof AppSettingsMcpServerRoute
   AppSettingsTeamRoute: typeof AppSettingsTeamRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
@@ -526,6 +546,7 @@ const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsDomainRoute: AppSettingsDomainRoute,
   AppSettingsEmailRoute: AppSettingsEmailRoute,
   AppSettingsGeneralRoute: AppSettingsGeneralRoute,
+  AppSettingsMcpServerRoute: AppSettingsMcpServerRoute,
   AppSettingsTeamRoute: AppSettingsTeamRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
 }

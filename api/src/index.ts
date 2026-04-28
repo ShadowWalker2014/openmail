@@ -22,6 +22,7 @@ import assetsRouter from "./routes/assets.js";
 import sendsRouter from "./routes/sends.js";
 import ingestRouter from "./routes/ingest.js";
 import groupsRouter from "./routes/groups.js";
+import configRouter from "./routes/config.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { mountBullBoard } from "./lib/bull-board.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
@@ -102,6 +103,10 @@ app.all("/api/auth/*", authHandler);
 const sessionApi = new Hono<{ Variables: ApiVariables }>();
 sessionApi.use("*", sessionAuth);
 sessionApi.route("/workspaces", workspacesRouter);
+// Deployment config discovery — used by dashboard MCP setup page.
+// Auth-only (logged-in users); does NOT require workspace membership since
+// config is deployment-wide, not workspace-scoped.
+sessionApi.route("/config", configRouter);
 
 // Workspace membership guard — every /ws/:workspaceId/* route requires the
 // authenticated user to be a member of that workspace.

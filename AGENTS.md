@@ -52,11 +52,19 @@ openmail/
 
 ## MCP Server (exposed to AI agents)
 Auth: Bearer workspace API key
-Public URL: https://mcp.openmail.win/mcp
+Public URL: https://mcp.openmail.win/mcp (SaaS default — self-hosters override via `MCP_PUBLIC_URL`)
 Source: mcp/src/index.ts — tools in mcp/src/tools/, prompts in mcp/src/prompts.ts, resources in mcp/src/resources.ts
 Capabilities: tools (CRUD for contacts/broadcasts/campaigns/segments/templates/analytics/assets),
               prompts (workflow templates for common tasks),
               resources (live docs via llms.txt, dynamic page lookup)
+
+### Deployment Config Discovery (`GET /api/session/config`)
+- Single source of truth for the dashboard's view of public-facing URLs.
+- Source: `api/src/routes/config.ts`. Auth: session (logged-in users only). Returns `{ apiUrl, mcpUrl, docsUrl, mcp: { authScheme, keysHref }, version }`.
+- Env knobs (set on `api` service): `MCP_PUBLIC_URL`, `DOCS_PUBLIC_URL`, `API_PUBLIC_URL`. Defaults to SaaS host.
+- **Forward-compat discipline:** fields are append-only once shipped. `mcp.authScheme` is a versioned literal — when MCP scheme changes (e.g. to "oauth-2.1"), the value changes in lockstep with the dashboard's setup UI variant.
+- The dashboard's `Settings → MCP Server` page (`web/src/routes/_app/settings/mcp-server.tsx`) is the only consumer today. Future SDK auto-config could also hit it.
+- **MUST NOT** hardcode `mcpUrl` anywhere in `web/`. Always read from this endpoint.
 
 ### MCP Maintenance Rules (MUST follow when changing the underlying system)
 - **New API route added?** → Add a corresponding MCP tool in mcp/src/tools/
