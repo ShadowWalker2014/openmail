@@ -6,6 +6,8 @@ import { campaigns, campaignSteps } from "@openmail/shared/schema";
 import { generateId } from "@openmail/shared/ids";
 import { eq, and, max, count, desc } from "drizzle-orm";
 import type { ApiVariables } from "../types.js";
+import { cancelCampaignJobs } from "../lib/campaign-cancel.js";
+import { logger } from "../lib/logger.js";
 
 const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -121,6 +123,20 @@ app.patch(
       .set({ ...body, updatedAt: new Date() })
       .where(and(eq(campaigns.id, c.req.param("id")), eq(campaigns.workspaceId, workspaceId)))
       .returning();
+
+    // Cancellation hook: when a campaign transitions out of active, kill
+    // pending wait-step jobs and mark enrollments terminal. Pause is
+    // resumable (status="paused"); archive is terminal (status="cancelled").
+    if (body.status && body.status !== existing.status && existing.status === "active") {
+      if (body.status === "paused") {
+        await cancelCampaignJobs(c.req.param("id"), "paused")
+          .catch((err) => logger.error({ campaignId: c.req.param("id"), err }, "Pause cancellation failed"));
+      } else if (body.status === "archived") {
+        await cancelCampaignJobs(c.req.param("id"), "cancelled")
+          .catch((err) => logger.error({ campaignId: c.req.param("id"), err }, "Archive cancellation failed"));
+      }
+    }
+
     return c.json(updated);
   }
 );
@@ -138,6 +154,11 @@ app.delete("/:id", async (c) => {
   if (existing.status === "active") {
     return c.json({ error: "Cannot delete an active campaign. Pause or archive it first." }, 400);
   }
+
+  // Cancel any lingering wait-step jobs BEFORE deleting the campaign.
+  // (PG cascade clears the enrollments rows but doesn't touch BullMQ.)
+  await cancelCampaignJobs(c.req.param("id"), "cancelled")
+    .catch((err) => logger.error({ campaignId: c.req.param("id"), err }, "Pre-delete cancellation failed"));
 
   await db.delete(campaigns).where(and(eq(campaigns.id, c.req.param("id")), eq(campaigns.workspaceId, workspaceId)));
   return c.json({ success: true });

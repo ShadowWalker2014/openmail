@@ -18,16 +18,17 @@
  *   - BullMQ rate limiter prevents thundering herd on bulk imports
  */
 
-import { Worker, Queue } from "bullmq";
-import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
+import { Worker } from "bullmq";
+import { getWorkerRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
 import {
   campaigns, campaignEnrollments, campaignSteps,
-  contacts, emailSends, segmentMemberships,
+  contacts, segmentMemberships,
 } from "@openmail/shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "@openmail/shared/ids";
 import { contactMatchesSegment } from "../lib/segment-evaluator.js";
+import { enqueueNextStep } from "../lib/step-advance.js";
 import { logger } from "../lib/logger.js";
 
 export interface CheckSegmentJobData {
@@ -35,13 +36,6 @@ export interface CheckSegmentJobData {
   workspaceId: string;
   /** Informational — used for logging only */
   reason: "contact_updated" | "event_tracked" | "group_changed" | "ingest_identify";
-}
-
-let _sendEmailQueue: Queue | null = null;
-function getSendEmailQueue() {
-  if (!_sendEmailQueue)
-    _sendEmailQueue = new Queue("send-email", { connection: getQueueRedisConnection() });
-  return _sendEmailQueue;
 }
 
 export function createCheckSegmentWorker() {
@@ -157,8 +151,9 @@ export function createCheckSegmentWorker() {
 
           const firstStep = steps[0];
 
-          // Upsert enrollment — re-activates previously completed/paused enrollments
-          await db
+          // Upsert enrollment — re-activates previously completed/paused enrollments.
+          // .returning() captures the persisted id (preserves existing id on conflict).
+          const [enrollment] = await db
             .insert(campaignEnrollments)
             .values({
               id:            generateId("enr"),
@@ -177,36 +172,16 @@ export function createCheckSegmentWorker() {
                 completedAt:   null,
                 updatedAt:     new Date(),
               },
-            });
-
-          // Queue first email step if applicable and contact is not unsubscribed
-          // Note: the DB stores "email" (not "send_email") — match accordingly.
-          if (firstStep.stepType === "email" && !contact.unsubscribed) {
-            const stepConfig = firstStep.config as { templateId?: string; subject?: string };
-            const sendId = generateId("snd");
-            await db.insert(emailSends).values({
-              id:              sendId,
-              workspaceId,
-              contactId,
-              contactEmail:    contact.email,
-              campaignId:      campaign.id,
-              campaignStepId:  firstStep.id,
-              subject:         stepConfig.subject ?? "Message from us",
-              status:          "queued",
-            });
-            await getSendEmailQueue().add("send-email", { sendId }, {
-              jobId: `send-email:${sendId}`, // deduplicate: prevent double-sends on concurrent workers
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5_000 },
-              removeOnComplete: { count: 100 },
-              removeOnFail: { count: 100 },
-            });
-          }
+            })
+            .returning({ id: campaignEnrollments.id });
 
           logger.info(
-            { campaignId: campaign.id, contactId, segmentId, triggerType, reason },
-            "Contact enrolled via segment trigger",
+            { campaignId: campaign.id, contactId, segmentId, triggerType, reason, enrollmentId: enrollment.id },
+            "Contact enrolled via segment trigger — advancing to first step",
           );
+
+          // Hand off to step-advance (handles email vs wait, unsubscribed, etc.)
+          await enqueueNextStep(enrollment.id, -1);
         }
       }
     },

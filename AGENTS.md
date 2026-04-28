@@ -43,12 +43,37 @@ openmail/
 - `contacts` + `contact_attributes` (flexible KV for custom traits)
 - `segments` + `segment_conditions` (rule-based dynamic segments)
 - `events` (customer activity — event_name, contact_id, properties JSONB)
-- `campaigns` (automation flows) + `campaign_steps` (trigger + actions)
+- `campaigns` (automation flows) + `campaign_steps` (trigger + actions) + `campaign_enrollments` (per-contact step cursor)
 - `broadcasts` (one-off email blasts)
 - `email_templates` (HTML + visual builder output)
 - `email_sends` (audit log) + `email_events` (opens, clicks, bounces — from tracker)
 - `api_keys` (workspace-scoped for API + MCP access)
 - `assets` (uploaded files: images/video/PDF — stored in Railway Object Storage S3)
+
+## Campaign Engine (multi-step advancement)
+- **Step ordering** is by `campaign_steps.position` (integers ≥ 0). The unused `next_step_id` column is legacy — do NOT introduce it; remove in a future migration.
+- **Single source of truth** for advancement: `worker/src/lib/step-advance.ts` exports `enqueueNextStep(enrollmentId, completedPosition)`. Callers pass `completedPosition = -1` to start from position 0.
+- **Trigger sites** (`process-event.ts`, `check-segment.ts`) ONLY upsert the enrollment and call `enqueueNextStep`. They do NOT inline the email send.
+- **Wait step execution**: `process-step` worker consumes the `step-execution` BullMQ queue. Wait jobs are scheduled with `delay: durationMs`. Idempotency check: enrollment must be `active` AND `currentStepId === stepId` before advancement; stale jobs return cleanly without retry.
+- **Email-step advancement**: `send-email` worker calls `enqueueNextStep` AFTER successful send AND after permanent failure (a single bounce must NOT halt a multi-step campaign). Transient failures retry without advancing.
+- **jobId pattern**: `step-execution__${enrollmentId}__${stepId}` and `send-email__${sendId}`. Double-underscore (NOT colon — BullMQ rejects `:` in custom jobIds).
+- **Cancellation** (`api/src/lib/campaign-cancel.ts`): when a campaign transitions out of active, load all active enrollments + currentStepId, call `queue.remove(jobId)` by EXACT id (no Redis SCAN). Pause → enrollment `status = "paused"` (resume not yet implemented). Archive/delete → `status = "cancelled"`.
+- **Resume from pause** is currently a known limitation; reactivating a paused campaign does NOT re-enqueue the cursor. Future work.
+
+## Rate Limiting
+- **All rate limiters are Redis-backed** (`api/src/lib/rate-limiter.ts`). Fixed-window counter via Lua `EVAL`. Same semantics as the previous in-memory implementation, but shared across all api replicas.
+- Buckets: `ingest` (1000/min per workspace API key), `test-send` (5/min per workspace).
+- Do NOT add a per-process in-memory limiter — it breaks horizontal scaling.
+
+## Integration Tests
+- Location: `api/src/integration/`. Pattern: `_fixtures.ts` boots ephemeral Postgres + Redis via Docker. Each test file imports `_fixtures.ts` for `setTestEnv` + `startContainers` etc.
+- Existing suites:
+  - `domains.integration.test.ts` — Sending domain CRUD + Resend interceptor (1040 LOC, predates this work)
+  - `campaign-engine.test.ts` — multi-step engine end-to-end (single email, two emails, email+wait+email with `Job.promote()`, pause cancellation, idempotent re-enrollment)
+  - `rate-limit.test.ts` — Redis fixed-window correctness + multi-client visibility
+  - `ingest-posthog.test.ts` — `/api/ingest/{capture,batch,identify}` PostHog SDK contract
+  - `ingest-cio.test.ts` — Customer.io SDK contract (PUT customers, events, DELETE, objects, relationships)
+- **MUST run** `bun run scripts/test-integration.sh` before declaring engine or ingest changes done. Tests boot real Docker; expect ~60s per file.
 
 ## MCP Server (exposed to AI agents)
 Auth: Bearer workspace API key

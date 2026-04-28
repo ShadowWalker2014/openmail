@@ -7,11 +7,17 @@ import { emailSends, emailTemplates, broadcasts, campaignSteps, workspaces } fro
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { injectTracking } from "../lib/email-utils.js";
+import { enqueueNextStep } from "../lib/step-advance.js";
 
 export interface SendEmailJobData {
   sendId: string;
   /** Passed from send-broadcast so we can update sentCount without an extra query */
   broadcastId?: string;
+  /** Set ONLY for campaign-step sends. step-advance.ts populates these so we
+   *  can advance the enrollment to the next step after this email completes. */
+  enrollmentId?: string;
+  /** Position of the step that just sent — passed to enqueueNextStep on success/permanent-failure. */
+  campaignStepPosition?: number;
 }
 
 /**
@@ -205,12 +211,34 @@ export function createSendEmailWorker() {
       // with backoff. (The finally block was a no-op for transient errors.)
       if (transientError) throw transientError;
 
+      // Campaign-step advancement (T6).
+      // Both success AND permanent failure should advance the enrollment to the
+      // next step — a single bounce should not stall a multi-step campaign.
+      // Transient failures already short-circuited above (BullMQ will retry).
+      const isCampaignStep =
+        job.data.enrollmentId !== undefined &&
+        job.data.campaignStepPosition !== undefined;
+      if (isCampaignStep) {
+        try {
+          await enqueueNextStep(job.data.enrollmentId!, job.data.campaignStepPosition!);
+        } catch (advanceErr) {
+          // Don't fail the send job because advancement failed — the email
+          // was definitively processed. Log and continue; a manual reconcile
+          // job (future) can heal stranded enrollments.
+          logger.error(
+            { sendId, enrollmentId: job.data.enrollmentId, err: advanceErr },
+            "Failed to advance enrollment after send — enrollment may be stranded",
+          );
+        }
+        return;
+      }
+
       // Broadcast email failures: sentCount already incremented in finally —
       // don't retry (would double-count) and don't throw.
       if (!sendSuccess && send.broadcastId) return;
 
-      // Campaign email failures: throw so BullMQ marks the job FAILED (not
-      // COMPLETED) and applies retry logic.
+      // Standalone (non-campaign, non-broadcast) email failures: throw so
+      // BullMQ marks the job FAILED and applies retry logic.
       if (!sendSuccess && !send.broadcastId) {
         throw new Error(send.failureReason ?? "Send failed");
       }
