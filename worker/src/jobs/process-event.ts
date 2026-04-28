@@ -1,20 +1,15 @@
-import { Worker, Queue } from "bullmq";
-import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
+import { Worker } from "bullmq";
+import { getWorkerRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
-import { events, campaigns, campaignEnrollments, campaignSteps, contacts, emailSends } from "@openmail/shared/schema";
+import { events, campaigns, campaignEnrollments, campaignSteps } from "@openmail/shared/schema";
 import { eq, and } from "drizzle-orm";
 import { generateId } from "@openmail/shared/ids";
+import { enqueueNextStep } from "../lib/step-advance.js";
 import { logger } from "../lib/logger.js";
 
 export interface ProcessEventJobData {
   eventId: string;
   workspaceId: string;
-}
-
-let _sendEmailQueue: Queue | null = null;
-function getSendEmailQueue() {
-  if (!_sendEmailQueue) _sendEmailQueue = new Queue("send-email", { connection: getQueueRedisConnection() });
-  return _sendEmailQueue;
 }
 
 export function createProcessEventWorker() {
@@ -66,10 +61,11 @@ export function createProcessEventWorker() {
         }
 
         const firstStep = steps[0];
-        const enrollmentId = generateId("enr");
 
-        await db.insert(campaignEnrollments).values({
-          id: enrollmentId,
+        // Upsert enrollment. .returning() captures the actual id (preserves
+        // existing id on conflict instead of using the freshly-generated one).
+        const [enrollment] = await db.insert(campaignEnrollments).values({
+          id: generateId("enr"),
           campaignId: campaign.id,
           workspaceId,
           contactId: event.contactId,
@@ -78,35 +74,15 @@ export function createProcessEventWorker() {
         }).onConflictDoUpdate({
           target: [campaignEnrollments.campaignId, campaignEnrollments.contactId],
           set: { status: "active", currentStepId: firstStep.id, startedAt: new Date(), completedAt: null, updatedAt: new Date() },
-        });
+        }).returning({ id: campaignEnrollments.id });
 
-        // The DB stores "email" (not "send_email") — match accordingly.
-        if (firstStep.stepType === "email") {
-          const stepConfig = firstStep.config as { templateId?: string; subject?: string };
-          const [contact] = await db.select().from(contacts).where(eq(contacts.id, event.contactId)).limit(1);
-          if (contact && !contact.unsubscribed) {
-            const sendId = generateId("snd");
-            await db.insert(emailSends).values({
-              id: sendId,
-              workspaceId,
-              contactId: contact.id,
-              contactEmail: contact.email,
-              campaignId: campaign.id,
-              campaignStepId: firstStep.id,
-              subject: stepConfig.subject ?? "Message from us",
-              status: "queued",
-            });
-            await getSendEmailQueue().add("send-email", { sendId }, {
-              jobId: `send-email:${sendId}`, // deduplicate: prevent double-sends on concurrent workers
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5_000 },
-              removeOnComplete: { count: 100 },
-              removeOnFail: { count: 100 },
-            });
-          }
-        }
+        logger.info(
+          { campaignId: campaign.id, contactId: event.contactId, enrollmentId: enrollment.id },
+          "Contact enrolled in campaign — advancing to first step",
+        );
 
-        logger.info({ campaignId: campaign.id, contactId: event.contactId, enrollmentId }, "Contact enrolled in campaign");
+        // Hand off to step-advance — it dispatches by step type and respects unsubscribed.
+        await enqueueNextStep(enrollment.id, -1);
       }
     },
     {

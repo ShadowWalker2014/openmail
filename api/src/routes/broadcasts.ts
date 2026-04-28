@@ -7,6 +7,7 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, desc, sql, inArray } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
+import { rateLimit } from "../lib/rate-limiter.js";
 import type { ApiVariables } from "../types.js";
 import { logger } from "../lib/logger.js";
 
@@ -26,19 +27,8 @@ function parsePagination(pageStr?: string, pageSizeStr?: string) {
   return { page, pageSize };
 }
 
-// Simple in-memory rate limiter: 5 test-sends per minute per workspace
-const testSendRateLimiter = new Map<string, { count: number; resetAt: number }>();
-function checkTestSendRate(workspaceId: string): boolean {
-  const now = Date.now();
-  const entry = testSendRateLimiter.get(workspaceId);
-  if (!entry || entry.resetAt < now) {
-    testSendRateLimiter.set(workspaceId, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 5) return false;
-  entry.count++;
-  return true;
-}
+// Test-send rate limit: 5/min per workspace, Redis-backed (shared across replicas).
+// See api/src/lib/rate-limiter.ts.
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
@@ -288,7 +278,9 @@ app.get("/:id/top-links", async (c) => {
 
 app.post("/:id/test-send", zValidator("json", z.object({ email: z.string().email() })), async (c) => {
   const workspaceId = c.get("workspaceId") as string;
-  if (!checkTestSendRate(workspaceId)) {
+  const { allowed, resetMs } = await rateLimit("test-send", workspaceId, 5, 60_000);
+  if (!allowed) {
+    c.header("Retry-After", String(Math.ceil(resetMs / 1000)));
     return c.json({ error: "Test send rate limit exceeded. Max 5 per minute per workspace." }, 429);
   }
   const db = getDb();

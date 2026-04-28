@@ -545,8 +545,10 @@ If a workspace hasn't configured its own key, it falls back to the platform's `R
 - [ ] Visual drag-and-drop email builder (Unlayer integration)
 - [ ] Webhook ingestion (receive events from Stripe, Segment, etc.)
 - [ ] Contact import via CSV
-- [ ] Resend webhook → bounce/complaint handling
-- [ ] Campaign step delay execution (wait nodes)
+- [x] Resend webhook → bounce/complaint handling
+- [x] Campaign multi-step engine — email + wait + email flows execute end-to-end with BullMQ delayed jobs
+- [x] Redis-backed rate limiting (multi-replica safe)
+- [ ] Resume paused campaign enrollments (currently pause cancels the wait timer; reactivating does not re-enqueue)
 - [ ] A/B testing for broadcasts
 - [ ] SendGrid / AWS SES / Postmark provider support
 - [ ] SAML/SSO for enterprise

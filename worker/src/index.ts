@@ -3,6 +3,7 @@ import { createSendBroadcastWorker } from "./jobs/send-broadcast.js";
 import { createSendBatchWorker } from "./jobs/send-batch.js";
 import { createProcessEventWorker } from "./jobs/process-event.js";
 import { createCheckSegmentWorker } from "./jobs/check-segment.js";
+import { createProcessStepWorker } from "./jobs/process-step.js";
 import { logger } from "./lib/logger.js";
 
 const workers = [
@@ -11,6 +12,7 @@ const workers = [
   createSendBatchWorker(),      // sends ≤100 emails per Resend batch API call
   createProcessEventWorker(),   // event-triggered campaign enrollment
   createCheckSegmentWorker(),   // segment_enter / segment_exit campaign enrollment
+  createProcessStepWorker(),    // multi-step campaign advancement (wait timers + step transitions)
 ];
 
 logger.info({ count: workers.length }, "Workers started");
