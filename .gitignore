@@ -23,3 +23,14 @@ PRPs/
 prime.md
 LOCAL.md
 web/vite.config.local.ts
+.todo/
+
+# ── Shadow .js artifacts from local Bun builds (TypeScript sources are SSOT) ──
+# Bun build emits .js next to .ts; never commit them.
+api/src/**/*.js
+worker/src/**/*.js
+mcp/src/**/*.js
+sdk/src/**/*.js
+packages/shared/src/**/*.js
+# Keep ESLint custom rule (must be .js for ESLint to load)
+!eslint-rules/**/*.js
