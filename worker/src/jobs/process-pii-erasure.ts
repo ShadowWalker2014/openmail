@@ -103,18 +103,23 @@ async function eraseContact(
     // Aggregate per-campaign counts BEFORE redaction (otherwise the redacted
     // payload still has the campaign_id column intact, but reading easier
     // up-front).
+    //
+    // Explicit ::text casts on bound params avoid Postgres "could not
+    // determine data type of parameter" (42P18) — Drizzle + postgres-js
+    // can't always infer the column type when the placeholder is the
+    // first reference to a TEXT column in the planner pass.
     const aggPrimary = (await tx.execute(sql`
       SELECT campaign_id, workspace_id, COUNT(*)::int AS cnt
         FROM enrollment_events
-       WHERE contact_id = ${contactId}
-         AND workspace_id = ${workspaceId}
+       WHERE contact_id = ${contactId}::text
+         AND workspace_id = ${workspaceId}::text
        GROUP BY campaign_id, workspace_id
     `)) as unknown as CampaignAgg[];
     const aggArchive = (await tx.execute(sql`
       SELECT campaign_id, workspace_id, COUNT(*)::int AS cnt
         FROM enrollment_events_archive
-       WHERE contact_id = ${contactId}
-         AND workspace_id = ${workspaceId}
+       WHERE contact_id = ${contactId}::text
+         AND workspace_id = ${workspaceId}::text
        GROUP BY campaign_id, workspace_id
     `)) as unknown as CampaignAgg[];
     const merged = new Map<string, number>();
@@ -133,12 +138,12 @@ async function eraseContact(
                          'reason', 'gdpr_erasure',
                          'redacted_at', now()::text,
                          'original_event_type', event_type,
-                         'lifecycle_op_id', ${lifecycleOpId}
+                         'lifecycle_op_id', ${lifecycleOpId}::text
                        ),
              "before" = NULL,
              "after"  = NULL
-       WHERE contact_id = ${contactId}
-         AND workspace_id = ${workspaceId}
+       WHERE contact_id = ${contactId}::text
+         AND workspace_id = ${workspaceId}::text
        RETURNING id
     `)) as unknown as Array<{ id: string }>;
     primaryUpdated = r1.length;
@@ -151,12 +156,12 @@ async function eraseContact(
                          'reason', 'gdpr_erasure',
                          'redacted_at', now()::text,
                          'original_event_type', event_type,
-                         'lifecycle_op_id', ${lifecycleOpId}
+                         'lifecycle_op_id', ${lifecycleOpId}::text
                        ),
              "before" = NULL,
              "after"  = NULL
-       WHERE contact_id = ${contactId}
-         AND workspace_id = ${workspaceId}
+       WHERE contact_id = ${contactId}::text
+         AND workspace_id = ${workspaceId}::text
        RETURNING id
     `)) as unknown as Array<{ id: string }>;
     archiveUpdated = r2.length;

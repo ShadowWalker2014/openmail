@@ -126,12 +126,13 @@ async function archiveWorkspace(
       // oldest. RETURNING * gives the archived rows; INSERT into archive.
       // The composite ORDER ... LIMIT inside the CTE works since Postgres
       // 14+ supports ORDER BY in DELETE...RETURNING via subquery wrapper.
+      const cutoffIso = cutoff.toISOString();
       const result = (await tx.execute(sql`
         WITH to_delete AS (
           SELECT id
             FROM enrollment_events
-           WHERE workspace_id = ${workspaceId}
-             AND emitted_at < ${cutoff}
+           WHERE workspace_id = ${workspaceId}::text
+             AND emitted_at < ${cutoffIso}::timestamptz
            ORDER BY emitted_at ASC
            LIMIT ${batchSize}
            FOR UPDATE SKIP LOCKED
@@ -208,10 +209,11 @@ async function archiveWorkspace(
 
 async function listWorkspacesWithOldEvents(cutoff: Date): Promise<string[]> {
   const db = getDb();
+  const cutoffIso = cutoff.toISOString();
   const rows = (await db.execute(sql`
     SELECT DISTINCT workspace_id
       FROM enrollment_events
-     WHERE emitted_at < ${cutoff}
+     WHERE emitted_at < ${cutoffIso}::timestamptz
      LIMIT 1000
   `)) as unknown as Array<{ workspace_id: string }>;
   return rows.map((r) => r.workspace_id);

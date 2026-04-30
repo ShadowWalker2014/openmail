@@ -269,16 +269,14 @@ Per CR-11, every handler INSERTs into `campaign_edit_outbox` in the SAME `db.tra
 - All 12 Stage 6 tests pass; all 138 prior integration tests still pass (Stages 1-5 + lifecycle-goals + step-pause + spread + audit-completeness + ingest contracts + rate-limiter + campaigns + lifecycle).
 - 1 pre-existing failure: `domains.integration.test.ts` (docker container startup, unrelated to Stage 6).
 
-### Skipped tests (autonomous time-budget — flagged here for follow-up)
-Per task spec, the following extended/perf tests were explicitly skipped for the autonomous run:
-1. End-to-end DB-dependent reconciliation tests (insert outbox + worker forwards + reconciliation runs).
-2. Timeline 1000 events <2s perf test.
-3. Replay 10k events <30s perf test.
-4. Reconciliation 10k enrollments <2min perf test.
-5. Goal-add paginated 100k enrollments + new goal matching 30k.
-6. Drift sweeper detection probabilistic (seed 10k + drift 1).
+### Perf validation (completed 2026-04-30)
+All previously-skipped extended/perf tests now run in [`api/src/integration/lifecycle-stage6.perf.test.ts`](api/src/integration/lifecycle-stage6.perf.test.ts) (12 tests, 62 assertions, ~21s on standing test infra). All pass within budget. Headline: archival 391M events/hour extrapolated (>1M target), timeline 1000 events at 3ms p95, replay 10k events in 35ms. See [`PRPs/sota-lifecycle-engine/06-perf-validation.md`](PRPs/sota-lifecycle-engine/06-perf-validation.md) for the full report.
 
-Run these in dedicated perf/staging environment before scale rollout.
+**Two production bugs found & fixed during perf validation:**
+1. `process-pii-erasure.ts` — Drizzle/postgres-js param type inference (42P18) on all 4 SQL statements; fixed with explicit `::text` casts. Without this, every GDPR Art. 17 erasure would have errored 500.
+2. `process-event-archival.ts` — JS `Date` cannot bind to timestamptz placeholder; fixed with `.toISOString()` + `::timestamptz` cast. Without this, every nightly archival cron run would have errored.
+
+Both bugs were invisible to existing integration tests because those tests didn't exercise `eraseContactOnce()` or `runArchivalOnce()` against a real Postgres instance.
 
 ## Known Limitations (internal — not yet disclosed publicly)
 

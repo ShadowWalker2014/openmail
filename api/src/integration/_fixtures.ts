@@ -135,6 +135,23 @@ export async function waitForDb(maxRetries = 40): Promise<void> {
 
 export async function runMigrations(): Promise<void> {
   const db = getRawDb();
+  // Pre-clean tables that are subject to CHECK-constraint refresh during
+  // migration re-runs. Postgres validates new CHECK against existing rows,
+  // so any stale row from a previous suite would fail constraint refresh
+  // (e.g. event_type values from a future migration version).
+  await db.unsafe(
+    `DO $$ BEGIN
+       IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='enrollment_events') THEN
+         TRUNCATE enrollment_events RESTART IDENTITY CASCADE;
+       END IF;
+       IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='enrollment_events_archive') THEN
+         TRUNCATE enrollment_events_archive RESTART IDENTITY CASCADE;
+       END IF;
+       IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='campaign_edit_outbox') THEN
+         TRUNCATE campaign_edit_outbox RESTART IDENTITY CASCADE;
+       END IF;
+     END $$;`,
+  ).catch(() => {});
   const dir = path.join(import.meta.dir, "../../../packages/shared/drizzle");
   const files = [
     "0000_woozy_sharon_ventura.sql",
@@ -169,8 +186,12 @@ export async function runMigrations(): Promise<void> {
       .filter(Boolean);
     for (const stmt of statements) {
       await db.unsafe(stmt).catch((err: Error) => {
-        // Ignore "already exists" — migrations are idempotent across test files.
-        if (!/already exists|duplicate/i.test(err.message)) throw err;
+        // Ignore idempotency-related errors when re-running migrations:
+        //   * "already exists" / "duplicate" — CREATE statements
+        //   * "does not exist" — DROP statements where prior migration
+        //     already replaced the constraint with a same-named newer
+        //     version (event_type CHECK is rebuilt 3× across 0010/0012/0013).
+        if (!/already exists|duplicate|does not exist/i.test(err.message)) throw err;
       });
     }
   }

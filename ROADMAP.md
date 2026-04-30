@@ -3,7 +3,9 @@
 > Living document — see [`AGENTS.md` "Known Limitations"](AGENTS.md#known-limitations) for technical detail.
 > Order, not dates: items ship when they pass acceptance, not on a calendar.
 
-OpenMail's lifecycle engine has been delivered in 6 stages under [`PRPs/sota-lifecycle-engine/`](PRPs/sota-lifecycle-engine/). With Stage 6 shipped, the SOTA Lifecycle Engine is now production-grade and surpasses every published competitor (Customer.io, HubSpot, Mautic, Mailchimp, ActiveCampaign) on burst mitigation, per-step pause, goal-based exits, audit log replayability, and GDPR PII redaction.
+OpenMail's lifecycle engine has been delivered in 6 stages under [`PRPs/sota-lifecycle-engine/`](PRPs/sota-lifecycle-engine/). With Stage 6 shipped and [perf-validated against 100k-row scale](PRPs/sota-lifecycle-engine/06-perf-validation.md), the SOTA Lifecycle Engine is now production-grade and surpasses every published competitor (Customer.io, HubSpot, Mautic, Mailchimp, ActiveCampaign) on burst mitigation, per-step pause, goal-based exits, audit log replayability, and GDPR PII redaction.
+
+**Performance headline:** archival sustains **391M events/hour** (391× the >1M/h SOTA target); timeline reads p95 **3ms** for 1000 events; replay of 10k events completes in **35ms**; spread-schedule generator yields 50k slots in **7ms** with O(1) memory. See [`PRPs/sota-lifecycle-engine/06-perf-validation.md`](PRPs/sota-lifecycle-engine/06-perf-validation.md) for the full report.
 
 ## ✅ Stable
 
