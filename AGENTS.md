@@ -246,7 +246,14 @@ Per CR-11, every handler INSERTs into `campaign_edit_outbox` in the SAME `db.tra
 - `web/src/components/timeline/event-row.tsx` — minimal MVP component: event_type label + timestamp + actor + expandable payload/before/after diff. Detects redacted payloads + shows badge.
 - `web/src/routes/_app/campaigns/$id/timeline.tsx` — campaign-wide most-recent-200 events page.
 - `web/src/routes/_app/campaigns/$id/enrollments/$enrollmentId.tsx` — per-enrollment full timeline drill-down.
-- **Gap (deferred):** filter toolbar (event_type multi-select, date range, actor), CSV/JSON export, icon-per-event-type, actor avatars. The minimal MVP ships the core read path; export + advanced filters are follow-ups.
+- **Filter toolbar + export + icons + cross-enrollment view (shipped 2026-04-30):**
+  - `web/src/components/timeline/event-icons.ts` — icon + color map for all 32 lifecycle event types (lucide-react). 6-color palette: emerald (progression), sky (informational), amber (operator-initiated), rose (terminal/destructive), violet (goal-related), slate (system/housekeeping).
+  - `web/src/components/timeline/timeline-filters.tsx` — multi-select event types (Popover + Command palette), single-select actor kind, date range, free-text search across `lifecycle_op_id` + actor + event_type. Pure predicate `applyTimelineFilters` for testability + reuse across views.
+  - `web/src/components/timeline/timeline-export.tsx` — CSV (RFC 4180) / JSON download of currently-filtered events, client-side Blob URL, no server round-trip.
+  - `web/src/components/timeline/event-row.tsx` — colored icon, actor avatar pill (initials + tooltip showing full actor JSON), `lifecycle_op_id` correlation chip with click-to-copy, expandable payload viewer, GDPR-redacted badge.
+  - `web/src/routes/_app/campaigns/$id/timeline.tsx` — cross-enrollment view with two modes: "flat feed" (reverse-chronological, shows enrollment_id per row) and "group by enrollment" (clickable drill-down + truncated-with-link when an enrollment has >20 events).
+  - `web/src/routes/_app/campaigns/$id/enrollments/$enrollmentId.tsx` — per-enrollment drill-down with breadcrumb back to campaign timeline.
+- **`@openmail/shared` package.json** gained `./lifecycle-events` and `./lifecycle-constants` subpath exports so web can import event-type constants without dragging the DB client (postgres-js) into its bundle. **Web/browser code MUST use the leaf submodule path**, never the bare `@openmail/shared` barrel.
 
 ### API timeline endpoint + MCP + SDK (T15)
 - `GET /api/v1/campaigns/:id/enrollments/:enrollmentId/events?limit=&before=&event_types=&include_archive=` — paginated, ordered DESC by `(event_seq, emitted_at)`. UNIONs the archive table when `include_archive=true`.
@@ -286,5 +293,6 @@ Both bugs were invisible to existing integration tests because those tests didn'
 - **Permanent email failures advance enrollments (not dead-letter).** Per Stage 1 plan T6 design decision (validated by recalibration §2 D1; matches Customer.io behavior): a 4xx Resend response (bad recipient, blocked content) marks the send `failed` but ADVANCES the enrollment to the next step. Rationale: a single bad address shouldn't halt a multi-step campaign. Trade-off: a misconfigured template will silently complete every enrollment with all sends marked failed. Surface in dashboard via step-error counts (product follow-up).
 - **Per-workspace rate-limit cap override is env-default only.** No per-tenant column on `workspaces` yet. If product wants per-tenant caps for enterprise plans, adding a `rate_limit_per_window` column + lookup before the EVAL is a small follow-up.
 - **Replay auto-fix is OFF by default** ([→ ROADMAP](ROADMAP.md#roadmap-replay-auto-fix)). The `--apply-fix` flag is recognised but no-op in this iteration per CR-01 / CN-06 — auto-fix at scale is catastrophic on false positive. Drift sweeper is alert-only.
-- **Cross-enrollment timeline UI is API-only.** Today the in-app timeline drills into a single enrollment. Campaign-wide views ship as a future stage.
+<!-- Cross-enrollment timeline UI shipped 2026-04-30 (campaign-wide flat feed + grouped-by-enrollment view + filter toolbar + CSV/JSON export). See ROADMAP "timeline-ui-toolkit" Stable entry. -->
+- **Time-travel debugging UI** is roadmap. The CLI replay tool covers the forensics use case today; an in-app "replay to arbitrary point and inspect intermediate state" view is planned but not built.
 - **Goal CRUD actor identification is `system`.** Stage 5 left this as a follow-up; Stage 6 added end-to-end timeline correlation via `lifecycle_op_id` but did not change the actor wiring. Future stage hardens to `{kind: "user", userId}` or `{kind: "agent_key", apiKeyId}`.
