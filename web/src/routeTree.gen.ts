@@ -30,11 +30,14 @@ import { Route as AppBroadcastsIndexRouteImport } from './routes/_app/broadcasts
 import { Route as AppAssetsIndexRouteImport } from './routes/_app/assets/index'
 import { Route as AppSettingsTeamRouteImport } from './routes/_app/settings/team'
 import { Route as AppSettingsMcpServerRouteImport } from './routes/_app/settings/mcp-server'
+import { Route as AppSettingsLifecycleRouteImport } from './routes/_app/settings/lifecycle'
 import { Route as AppSettingsGeneralRouteImport } from './routes/_app/settings/general'
 import { Route as AppSettingsEmailRouteImport } from './routes/_app/settings/email'
 import { Route as AppSettingsDomainRouteImport } from './routes/_app/settings/domain'
 import { Route as AppSettingsApiKeysRouteImport } from './routes/_app/settings/api-keys'
 import { Route as AppSettingsAccountRouteImport } from './routes/_app/settings/account'
+import { Route as AppCampaignsIdTimelineRouteImport } from './routes/_app/campaigns/$id/timeline'
+import { Route as AppCampaignsIdEnrollmentsEnrollmentIdRouteImport } from './routes/_app/campaigns/$id/enrollments/$enrollmentId'
 
 const UnsubscribeRoute = UnsubscribeRouteImport.update({
   id: '/unsubscribe',
@@ -140,6 +143,11 @@ const AppSettingsMcpServerRoute = AppSettingsMcpServerRouteImport.update({
   path: '/mcp-server',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsLifecycleRoute = AppSettingsLifecycleRouteImport.update({
+  id: '/lifecycle',
+  path: '/lifecycle',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsGeneralRoute = AppSettingsGeneralRouteImport.update({
   id: '/general',
   path: '/general',
@@ -165,6 +173,17 @@ const AppSettingsAccountRoute = AppSettingsAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppCampaignsIdTimelineRoute = AppCampaignsIdTimelineRouteImport.update({
+  id: '/campaigns/$id/timeline',
+  path: '/campaigns/$id/timeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCampaignsIdEnrollmentsEnrollmentIdRoute =
+  AppCampaignsIdEnrollmentsEnrollmentIdRouteImport.update({
+    id: '/campaigns/$id/enrollments/$enrollmentId',
+    path: '/campaigns/$id/enrollments/$enrollmentId',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -179,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/settings/domain': typeof AppSettingsDomainRoute
   '/settings/email': typeof AppSettingsEmailRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/lifecycle': typeof AppSettingsLifecycleRoute
   '/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/assets/': typeof AppAssetsIndexRoute
@@ -192,6 +212,8 @@ export interface FileRoutesByFullPath {
   '/segments/': typeof AppSegmentsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/templates/': typeof AppTemplatesIndexRoute
+  '/campaigns/$id/timeline': typeof AppCampaignsIdTimelineRoute
+  '/campaigns/$id/enrollments/$enrollmentId': typeof AppCampaignsIdEnrollmentsEnrollmentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -205,6 +227,7 @@ export interface FileRoutesByTo {
   '/settings/domain': typeof AppSettingsDomainRoute
   '/settings/email': typeof AppSettingsEmailRoute
   '/settings/general': typeof AppSettingsGeneralRoute
+  '/settings/lifecycle': typeof AppSettingsLifecycleRoute
   '/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/assets': typeof AppAssetsIndexRoute
@@ -218,6 +241,8 @@ export interface FileRoutesByTo {
   '/segments': typeof AppSegmentsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/templates': typeof AppTemplatesIndexRoute
+  '/campaigns/$id/timeline': typeof AppCampaignsIdTimelineRoute
+  '/campaigns/$id/enrollments/$enrollmentId': typeof AppCampaignsIdEnrollmentsEnrollmentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -234,6 +259,7 @@ export interface FileRoutesById {
   '/_app/settings/domain': typeof AppSettingsDomainRoute
   '/_app/settings/email': typeof AppSettingsEmailRoute
   '/_app/settings/general': typeof AppSettingsGeneralRoute
+  '/_app/settings/lifecycle': typeof AppSettingsLifecycleRoute
   '/_app/settings/mcp-server': typeof AppSettingsMcpServerRoute
   '/_app/settings/team': typeof AppSettingsTeamRoute
   '/_app/assets/': typeof AppAssetsIndexRoute
@@ -247,6 +273,8 @@ export interface FileRoutesById {
   '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/templates/': typeof AppTemplatesIndexRoute
+  '/_app/campaigns/$id/timeline': typeof AppCampaignsIdTimelineRoute
+  '/_app/campaigns/$id/enrollments/$enrollmentId': typeof AppCampaignsIdEnrollmentsEnrollmentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -263,6 +291,7 @@ export interface FileRouteTypes {
     | '/settings/domain'
     | '/settings/email'
     | '/settings/general'
+    | '/settings/lifecycle'
     | '/settings/mcp-server'
     | '/settings/team'
     | '/assets/'
@@ -276,6 +305,8 @@ export interface FileRouteTypes {
     | '/segments/'
     | '/settings/'
     | '/templates/'
+    | '/campaigns/$id/timeline'
+    | '/campaigns/$id/enrollments/$enrollmentId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -289,6 +320,7 @@ export interface FileRouteTypes {
     | '/settings/domain'
     | '/settings/email'
     | '/settings/general'
+    | '/settings/lifecycle'
     | '/settings/mcp-server'
     | '/settings/team'
     | '/assets'
@@ -302,6 +334,8 @@ export interface FileRouteTypes {
     | '/segments'
     | '/settings'
     | '/templates'
+    | '/campaigns/$id/timeline'
+    | '/campaigns/$id/enrollments/$enrollmentId'
   id:
     | '__root__'
     | '/'
@@ -317,6 +351,7 @@ export interface FileRouteTypes {
     | '/_app/settings/domain'
     | '/_app/settings/email'
     | '/_app/settings/general'
+    | '/_app/settings/lifecycle'
     | '/_app/settings/mcp-server'
     | '/_app/settings/team'
     | '/_app/assets/'
@@ -330,6 +365,8 @@ export interface FileRouteTypes {
     | '/_app/segments/'
     | '/_app/settings/'
     | '/_app/templates/'
+    | '/_app/campaigns/$id/timeline'
+    | '/_app/campaigns/$id/enrollments/$enrollmentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -491,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsMcpServerRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/lifecycle': {
+      id: '/_app/settings/lifecycle'
+      path: '/lifecycle'
+      fullPath: '/settings/lifecycle'
+      preLoaderRoute: typeof AppSettingsLifecycleRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/general': {
       id: '/_app/settings/general'
       path: '/general'
@@ -526,6 +570,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsAccountRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/campaigns/$id/timeline': {
+      id: '/_app/campaigns/$id/timeline'
+      path: '/campaigns/$id/timeline'
+      fullPath: '/campaigns/$id/timeline'
+      preLoaderRoute: typeof AppCampaignsIdTimelineRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/campaigns/$id/enrollments/$enrollmentId': {
+      id: '/_app/campaigns/$id/enrollments/$enrollmentId'
+      path: '/campaigns/$id/enrollments/$enrollmentId'
+      fullPath: '/campaigns/$id/enrollments/$enrollmentId'
+      preLoaderRoute: typeof AppCampaignsIdEnrollmentsEnrollmentIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -535,6 +593,7 @@ interface AppSettingsRouteChildren {
   AppSettingsDomainRoute: typeof AppSettingsDomainRoute
   AppSettingsEmailRoute: typeof AppSettingsEmailRoute
   AppSettingsGeneralRoute: typeof AppSettingsGeneralRoute
+  AppSettingsLifecycleRoute: typeof AppSettingsLifecycleRoute
   AppSettingsMcpServerRoute: typeof AppSettingsMcpServerRoute
   AppSettingsTeamRoute: typeof AppSettingsTeamRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
@@ -546,6 +605,7 @@ const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsDomainRoute: AppSettingsDomainRoute,
   AppSettingsEmailRoute: AppSettingsEmailRoute,
   AppSettingsGeneralRoute: AppSettingsGeneralRoute,
+  AppSettingsLifecycleRoute: AppSettingsLifecycleRoute,
   AppSettingsMcpServerRoute: AppSettingsMcpServerRoute,
   AppSettingsTeamRoute: AppSettingsTeamRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
@@ -567,6 +627,8 @@ interface AppRouteChildren {
   AppOnboardingIndexRoute: typeof AppOnboardingIndexRoute
   AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
   AppTemplatesIndexRoute: typeof AppTemplatesIndexRoute
+  AppCampaignsIdTimelineRoute: typeof AppCampaignsIdTimelineRoute
+  AppCampaignsIdEnrollmentsEnrollmentIdRoute: typeof AppCampaignsIdEnrollmentsEnrollmentIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -581,6 +643,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppOnboardingIndexRoute: AppOnboardingIndexRoute,
   AppSegmentsIndexRoute: AppSegmentsIndexRoute,
   AppTemplatesIndexRoute: AppTemplatesIndexRoute,
+  AppCampaignsIdTimelineRoute: AppCampaignsIdTimelineRoute,
+  AppCampaignsIdEnrollmentsEnrollmentIdRoute:
+    AppCampaignsIdEnrollmentsEnrollmentIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

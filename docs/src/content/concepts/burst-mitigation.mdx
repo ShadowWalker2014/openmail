@@ -1,0 +1,134 @@
+---
+title: Burst-send mitigation
+description: How OpenMail safely resumes long-paused campaigns without overwhelming recipients or Resend.
+---
+
+# Burst-send mitigation on resume
+
+When a campaign is paused — whether because of a deliverability issue, a content review, or just an operator click — wait-step jobs accumulate. The longer the pause, the more "overdue" enrollments build up. Resume them naively and you get a **burst**: thousands of sends in seconds, recipient inbox spam, Resend rate-limit hits, and (worst case) a deliverability cliff that takes weeks to recover from.
+
+OpenMail is the only customer-lifecycle platform we've found that addresses this safely.
+
+## Industry context
+
+| Platform | Behaviour on resume |
+|----------|---------------------|
+| **Customer.io** | All scheduled sends fire at unpause. No mitigation. |
+| **Mailchimp Customer Journeys** | Sends fire as fast as the queue drains; no operator-visible spread. |
+| **Mautic** | Same — pause/resume is a queue gate, not a scheduling primitive. |
+| **HubSpot Workflows** | Sends resume immediately; no spread mode. |
+| **ActiveCampaign** | Sends fire immediately on unpause. Effectively skip-waits very stale ones implicitly but offers no operator control. |
+| **OpenMail** | **Four modes:** `immediate`, `spread`, `skip_stale`, `skip_stale_spread`. Operator chooses based on pause duration. Live overdue count surfaced in the dashboard before resume. |
+
+## Resume modes
+
+```
+                    ┌─────────────────────────────────────────────────┐
+                    │ paused campaign with N overdue enrollments      │
+                    └────────┬────────────────────────────────────────┘
+                             ▼
+            ┌──────────────────────────────────────────────────────┐
+            │ POST /campaigns/:id/resume { mode, ...params }       │
+            └────┬─────────────┬─────────────┬─────────────┬──────┘
+                 │             │             │             │
+       immediate │     spread  │  skip_stale │ skip_stale_spread
+                 ▼             ▼             ▼             ▼
+        ┌─────────────┐ ┌─────────────┐ ┌──────────┐ ┌─────────────┐
+        │ Send all N  │ │ Distribute  │ │ Drop old │ │ Drop old +  │
+        │ now         │ │ across      │ │ ones,    │ │ spread rest │
+        │             │ │ window      │ │ advance  │ │             │
+        │ ⚠ DANGER for│ │ (rate-limit │ │ rest     │ │ ⭐ BEST for │
+        │ long pauses │ │ aware floor)│ │          │ │ very long   │
+        │             │ │ ⭐ recommend│ │          │ │ pauses      │
+        └─────────────┘ └─────────────┘ └──────────┘ └─────────────┘
+```
+
+### `immediate`
+
+Send all overdue messages at once. This is the Stage 2 default and matches the behaviour of every competing platform.
+
+**Use when:**
+- Pause was short (< 1 hour)
+- Overdue count is small (< 100)
+- You're confident your inbox provider can absorb the burst
+
+### `spread`
+
+Distribute overdue sends evenly across a time window:
+
+```
+step_ms = max(window_ms / total_overdue, 1000 / rate_limit_per_sec)
+```
+
+The `max(...)` clause is the **rate-limiter floor** — when the operator picks an aggressive window relative to the workspace's send-rate cap, the rate limiter dictates the spacing and the spread effectively extends beyond the chosen window. Two safety mechanisms compose, never conflict.
+
+**Sort strategies:**
+- `fifo_by_original_time` (default) — oldest scheduled-at first. Customer-friendly: the contact who has been waiting longest sends first.
+- `fifo_by_resume_time` — preserve enrollment-creation order.
+
+**Use when:**
+- Pause was 1–24 hours
+- You want to drain the queue at a sustainable rate
+- All overdue messages are still relevant
+
+### `skip_stale`
+
+Drop sends whose `scheduled_at` is older than the threshold. The enrollment is NOT cancelled — it ADVANCES to the next step (or auto-completes if it was the last step). Customer.io / Mailchimp behaviour, but with explicit operator control.
+
+**Use when:**
+- A subset of enrollments are very old (you don't want to send a "Welcome back!" email referencing a 3-week-old event)
+- You want forward motion on the campaign engine without sending stale messages
+
+### `skip_stale_spread`
+
+The combo. Drop stale enrollments first, then spread the rest. Default thresholds: 7d stale + 4h spread. Both configurable per-workspace and per-call.
+
+**Use when:**
+- Pause was very long (> 7 days)
+- You want both safety nets engaged
+- This is what we recommend for the operator's "panic resume" button
+
+## Workspace defaults
+
+The `Settings → Lifecycle` page lets workspace admins configure:
+
+- **Resume dialog threshold** — when overdue count exceeds this, the dashboard surfaces a confirmation dialog (default 100).
+- **Default spread window** — 4h.
+- **Default stale threshold** — 7d.
+- **Default resume mode** — `immediate` (Stage 2 default; consider `spread` for production workspaces).
+
+## Audit trail
+
+Every spread-scheduled enrollment emits a `spread_scheduled` event with:
+
+```json
+{
+  "lifecycle_op_id": "lop_api_a1b2c3d4e5f6",
+  "window_s": 14400,
+  "offset_ms": 8200,
+  "strategy": "fifo_by_original_time",
+  "spread_token": "lop_api_a1b2c3d4e5f6"
+}
+```
+
+A campaign-aggregate `resumed` event captures:
+
+```json
+{
+  "lifecycle_op_id": "lop_api_a1b2c3d4e5f6",
+  "mode": "skip_stale_spread",
+  "total_scanned": 1234,
+  "stale_skipped": 142,
+  "spread_enqueued": 1092,
+  "spread_window_seconds": 14400,
+  "stale_threshold_seconds": 604800
+}
+```
+
+The audit log is the canonical record — Stage 6 will surface it as a forensic timeline in the dashboard.
+
+## Idempotency & crash recovery
+
+- The spread worker writes `spread_token` to the enrollment row **before** enqueuing the BullMQ job (CR-02). On crash mid-spread, retry resumes from where it stopped — already-tokened rows are skipped.
+- The drain sweeper (a background worker that promotes `stopping → stopped`) doubles as an orphan-spread-token reconciler. If the spread worker crashed after writing a token but before BullMQ enqueue, the sweeper detects the orphan and re-enqueues with the remaining delay. Idempotent across runs.
+- Concurrent `POST /resume` calls return `409 SPREAD_IN_PROGRESS` (CR-03) — the operator double-click case is fully handled.
