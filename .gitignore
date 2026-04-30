@@ -32,5 +32,6 @@ worker/src/**/*.js
 mcp/src/**/*.js
 sdk/src/**/*.js
 packages/shared/src/**/*.js
+scripts/**/*.js
 # Keep ESLint custom rule (must be .js for ESLint to load)
 !eslint-rules/**/*.js

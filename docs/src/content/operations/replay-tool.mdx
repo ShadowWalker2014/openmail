@@ -1,0 +1,105 @@
+---
+title: Replay Tool
+description: CLI tool for reconstructing the final state of a campaign enrollment from its `enrollment_events` history. Useful for forensics, drift detection, and regression testing.
+---
+
+# Replay Tool
+
+The replay tool reconstructs the final state of an enrollment by sequentially applying every event in `enrollment_events` (and optionally `enrollment_events_archive`) and comparing the result to the live `campaign_enrollments` row.
+
+```bash
+bun run scripts/replay-enrollment.ts \
+  --workspace-id ws_abcdef123456 \
+  --enrollment-id eee_xyz789012345 \
+  [--include-archive] \
+  [--apply-fix] \
+  [--json]
+```
+
+## Why
+
+The audit log is the canonical record of every lifecycle transition. If `campaign_enrollments.status='completed'` but the event log shows the enrollment is still on step 3, **someone wrote to the row outside the audited path**. That's drift. The replay tool detects it.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0    | Replayed state matches current row. |
+| 1    | Error — DB unreachable, invalid args, or workspace mismatch. |
+| 2    | **Drift detected** — at least one column differs. The diff is printed (or returned as JSON with `--json`). |
+
+## Workspace assertion
+
+The `--workspace-id` flag is **required** and asserted against the row's actual `workspace_id`. Mismatch → exit 1. This is multi-tenant isolation at the CLI level: an operator with one workspace's credentials cannot accidentally (or maliciously) replay another workspace's enrollment.
+
+## Reading order
+
+Events are read ordered by `(enrollment_id, event_seq ASC)` — NOT `emitted_at`. Clock skew across replicas means timestamps can interleave; `event_seq` is monotonic per enrollment by design ([A2.3]).
+
+When `--include-archive` is passed, the archive table is UNIONed and the merged set is re-sorted by `event_seq`.
+
+## Drift output
+
+Default human-readable:
+
+```
+[replay] events read: 14, applied: 12
+[replay] warnings (2):
+  - event eev_abc123 (message_sent) is redacted (GDPR erasure); skipped
+  - event eev_def456: payload validation failed: step_id=Required
+[replay] DRIFT DETECTED:
+  - status: replayed="active" current="completed"
+  - completedAt: replayed=null current="2026-04-30T12:34:56Z"
+```
+
+JSON output (`--json`):
+
+```json
+{
+  "enrollmentId": "eee_xyz789",
+  "eventsRead": 14,
+  "eventsApplied": 12,
+  "warnings": [...],
+  "drift": {
+    "status": { "replayed": "active", "current": "completed" },
+    "completedAt": { "replayed": null, "current": "2026-04-30T12:34:56Z" }
+  },
+  "current": {...},
+  "replayed": {...}
+}
+```
+
+## Auto-fix is OFF by default
+
+The `--apply-fix` flag is recognised but a **no-op** in the current iteration. Per CR-01 / CN-06: drift = signal, but auto-fix at scale on a false positive is catastrophic. Operators inspect the diff manually and correct via supported MCP/SDK verbs.
+
+## Redacted events (GDPR)
+
+PII redaction (Stage 6, GDPR Art. 17) replaces `payload`, `before`, `after` with a sentinel:
+
+```json
+{
+  "redacted": true,
+  "reason": "gdpr_erasure",
+  "redacted_at": "<timestamp>",
+  "original_event_type": "<type>"
+}
+```
+
+The replay dispatcher detects this and treats the event as **opaque** — a warning is recorded and the event is skipped (NOT counted as drift). Replay still completes successfully; the warnings list shows which events were skipped.
+
+## Drift sweeper (background)
+
+A daily cron worker (`process-drift-sweep.ts`) automatically samples ~0.1% of recently-mutated enrollments per top-100 workspaces, replays each in-process, and emits an `audit_drift_detected` audit event on mismatch. **Alert-only** — does not auto-fix.
+
+To investigate a sweeper alert:
+
+```bash
+bun run scripts/replay-enrollment.ts \
+  --workspace-id <ws> \
+  --enrollment-id <eee from alert payload>
+```
+
+## Adding a new event type
+
+When the SSOT (`packages/shared/src/lifecycle-events.ts`) gains a new event type, the dispatcher (`scripts/lib/replay-event-dispatch.ts`) MUST add a matching `case`. The TypeScript exhaustiveness check (`unreachable(t, ...)`) produces a compile error if any `EnrollmentEventType` lacks a case. Likewise the payload schema SSOT (`packages/shared/src/lifecycle-events-payload-schemas.ts`) MUST register a `(eventType, version)` schema. Without both, replay falls back to "warning + skip" and silent drift is possible.

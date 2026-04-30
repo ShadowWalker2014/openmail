@@ -1,0 +1,75 @@
+---
+title: Audit Timeline
+description: Per-enrollment chronological event history surfaced in the dashboard, the API, MCP, and the SDK. Built on the append-only `enrollment_events` log shipped in Stage 2 and synced live via ElectricSQL in Stage 6.
+---
+
+# Audit Timeline
+
+Every campaign lifecycle transition — `enrolled`, `step_advanced`, `wait_scheduled`, `wait_fired`, `message_sent`, `paused`, `resumed`, `force_exited`, `goal_achieved`, etc. — is recorded in an append-only audit log (`enrollment_events`). The timeline UI, API endpoint, MCP tool, and SDK method all surface this log so an operator (or AI agent) can answer "what happened to this contact?" with forensic precision.
+
+## Use cases
+
+- **Customer support** — "why did Alice stop receiving the welcome series?"
+- **Replay debugging** — reconstruct the engine's exact decisions to find the cause of a bug.
+- **Compliance** — prove that a contact's lifecycle followed configured rules; produce evidence on demand.
+- **Cohort analysis** — combine the timeline with the audit log archive to study weeks of behavior.
+
+## How it works
+
+Events are written **in the same database transaction** as the state mutation that produced them — there is no out-of-band writer. Per-enrollment events carry a monotonic `event_seq`; aggregate events (e.g. `stop_drain_started`) carry `event_seq=NULL` but share the campaign-scoped `lifecycle_op_id` so they correlate to the operation that produced them.
+
+For events older than the audit retention window (default 180 days, override via `LIFECYCLE_AUDIT_RETENTION_DAYS`), a daily archival worker moves rows into `enrollment_events_archive`. The replay tool and timeline endpoint both accept `--include-archive` / `?include_archive=true` to walk both tables.
+
+## Reading the timeline
+
+### In the dashboard
+
+Navigate to **Campaigns → [Campaign] → Enrollments → [Contact]**. Events render newest-first with expandable payload + before/after diff. ElectricSQL keeps the view live — new events appear without a page refresh.
+
+### Via the API
+
+```http
+GET /api/v1/campaigns/:campaignId/enrollments/:enrollmentId/events
+  ?limit=50           # 1..200, default 50
+  &before=<ISO>       # cursor (emitted_at strictly less than)
+  &event_types=...    # CSV of event types to filter
+  &include_archive=true
+```
+
+Pagination cursor is returned in the response as `pagination.nextBefore` (an ISO timestamp).
+
+### Via the SDK
+
+```ts
+const { data, pagination } = await openmail.campaigns
+  .enrollments(campaignId)
+  .timeline(enrollmentId, {
+    limit: 100,
+    eventTypes: ["paused", "resumed", "force_exited"],
+    includeArchive: true,
+  });
+```
+
+### Via MCP (AI agents)
+
+Tool `get_enrollment_timeline` accepts the same filters. Useful for prompts like _"summarize what happened to enrollment eee_xyz"_.
+
+## GDPR PII redaction
+
+When a contact is hard-deleted via `DELETE /api/v1/contacts/:id`, a redaction worker walks both `enrollment_events` and `enrollment_events_archive`. For each row scoping that contact, `payload`, `before`, and `after` are replaced with a sentinel:
+
+```json
+{
+  "redacted": true,
+  "reason": "gdpr_erasure",
+  "redacted_at": "<timestamp>",
+  "original_event_type": "<event_type>",
+  "lifecycle_op_id": "lop_pii_<id>"
+}
+```
+
+**Preserved bit-exact** (so the audit chain stays valid for replay): `id`, `event_type`, `emitted_at`, `event_seq`, `actor`, `tx_id`, `payload_version`, plus the four scoping IDs (`enrollment_id`, `campaign_id`, `contact_id`, `workspace_id`).
+
+The replay tool detects `redacted: true` payloads and treats them as opaque — a warning is recorded but the event is NOT counted as drift. The timeline UI shows a `redacted` badge on these rows.
+
+This is the **only** exception to the append-only invariant. All other writes to `enrollment_events` are INSERT-only.
