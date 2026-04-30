@@ -44,6 +44,10 @@ import { format } from "date-fns";
 import { StopDialog, type StopDialogPayload } from "@/components/lifecycle/stop-dialog";
 import { ArchiveDialog } from "@/components/lifecycle/archive-dialog";
 import { GoalList } from "@/components/goals/goal-list";
+import {
+  EditPreviewDialog,
+  type PreviewRequest,
+} from "@/components/timeline/edit-preview-dialog";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   component: CampaignsPage,
@@ -124,6 +128,9 @@ interface StepConfigPanelProps {
   step: CampaignStep | null;
   campaignId: string;
   workspaceId: string;
+  /** Campaign status — preview is meaningful only on active/paused campaigns
+   *  with in-flight enrollments. On draft we skip the preview. */
+  campaignStatus: string;
   onSaved: () => void;
   onDeleted: () => void;
 }
@@ -132,6 +139,7 @@ function StepConfigPanel({
   step,
   campaignId,
   workspaceId,
+  campaignStatus,
   onSaved,
   onDeleted,
 }: StepConfigPanelProps) {
@@ -151,6 +159,39 @@ function StepConfigPanel({
 
   // Delete confirmation
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Stage 7 — Reconciliation preview (open dialog with a queued action).
+  const [previewRequest, setPreviewRequest] = useState<PreviewRequest | null>(
+    null,
+  );
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    | { kind: "save_wait"; duration: number; unit: "hours" | "days" | "weeks" }
+    | { kind: "delete_step" }
+    | null
+  >(null);
+
+  // Preview is only meaningful on active/paused campaigns where in-flight
+  // enrollments could exist. Draft campaigns skip the preview entirely.
+  const PREVIEWABLE_STATUSES = new Set(["active", "paused"]);
+  const shouldPreview = PREVIEWABLE_STATUSES.has(campaignStatus);
+
+  // Compute new wait-step seconds — same conversion the API uses.
+  const WAIT_UNIT_SECONDS: Record<string, number> = {
+    hours: 3600,
+    days: 86400,
+    weeks: 7 * 86400,
+  };
+  function waitSecondsForCurrentStep(): number {
+    if (step?.stepType !== "wait") return 0;
+    const cfg = step.config as { duration?: number; unit?: string };
+    const d = typeof cfg.duration === "number" ? cfg.duration : 0;
+    const u = typeof cfg.unit === "string" ? cfg.unit : "";
+    return d * (WAIT_UNIT_SECONDS[u] ?? 0);
+  }
+  function newWaitSeconds(): number {
+    return duration * (WAIT_UNIT_SECONDS[unit] ?? 0);
+  }
 
   const { data: templates = [] } = useQuery<{ id: string; name: string; htmlContent: string }[]>({
     queryKey: ["templates", workspaceId],
@@ -252,6 +293,9 @@ function StepConfigPanel({
 
   function handleSave() {
     if (step!.stepType === "email") {
+      // Email content / template changes don't move in-flight enrollments
+      // (Stage 6 [REQ-10]: future sends use new template; in-flight unaffected).
+      // No preview needed.
       saveMutation.mutate({
         subject,
         fromName,
@@ -260,13 +304,55 @@ function StepConfigPanel({
           ? { templateId: selectedTemplateId, htmlContent: undefined }
           : { htmlContent }),
       });
-    } else {
-      saveMutation.mutate({ duration, unit });
+      return;
     }
+    // Wait step.
+    const oldSecs = waitSecondsForCurrentStep();
+    const newSecs = newWaitSeconds();
+    if (shouldPreview && oldSecs !== newSecs && newSecs > 0) {
+      // Open preview dialog; actual save fires from EditPreviewDialog onConfirm.
+      setPendingAction({ kind: "save_wait", duration, unit });
+      setPreviewRequest({
+        edit_type: "wait_duration_changed",
+        step_id: step!.id,
+        new_delay_seconds: newSecs,
+        old_delay_seconds: oldSecs,
+      });
+      setPreviewOpen(true);
+      return;
+    }
+    // Draft campaign or no duration change — save directly.
+    saveMutation.mutate({ duration, unit });
   }
 
   function handleDelete() {
+    if (shouldPreview) {
+      // Open preview dialog instead of the bare confirmation; the dialog
+      // shows how many in-flight enrollments are at the doomed step.
+      setPendingAction({ kind: "delete_step" });
+      setPreviewRequest({
+        edit_type: "step_deleted",
+        step_id: step!.id,
+      });
+      setPreviewOpen(true);
+      return;
+    }
+    // Draft campaign — bare confirmation is fine.
     setConfirmDelete(true);
+  }
+
+  function executePendingAction() {
+    if (!pendingAction) return;
+    if (pendingAction.kind === "save_wait") {
+      saveMutation.mutate({
+        duration: pendingAction.duration,
+        unit: pendingAction.unit,
+      });
+    } else if (pendingAction.kind === "delete_step") {
+      deleteMutation.mutate();
+    }
+    setPendingAction(null);
+    setPreviewOpen(false);
   }
 
   return (
@@ -460,6 +546,24 @@ function StepConfigPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Stage 7 — Reconciliation preview before mutating active campaigns. */}
+      <EditPreviewDialog
+        open={previewOpen}
+        onOpenChange={(o) => {
+          setPreviewOpen(o);
+          if (!o) setPendingAction(null);
+        }}
+        campaignId={campaignId}
+        request={previewRequest}
+        onConfirm={executePendingAction}
+        confirmLabel={
+          pendingAction?.kind === "delete_step"
+            ? "Delete step"
+            : "Save and reconcile"
+        }
+        destructive={pendingAction?.kind === "delete_step"}
+      />
     </div>
   );
 }
@@ -844,6 +948,7 @@ function CampaignDetailDialog({
               step={selectedStep}
               campaignId={campaign.id}
               workspaceId={workspaceId}
+              campaignStatus={detail?.status ?? campaign.status}
               onSaved={() => {}}
               onDeleted={() => setSelectedStepId(null)}
             />

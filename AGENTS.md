@@ -285,6 +285,68 @@ All previously-skipped extended/perf tests now run in [`api/src/integration/life
 
 Both bugs were invisible to existing integration tests because those tests didn't exercise `eraseContactOnce()` or `runArchivalOnce()` against a real Postgres instance.
 
+## Reconciliation preview (Stage 7 follow-up, shipped 2026-04-30)
+
+Operator dry-run dialog that shows the projected impact of a campaign edit
+BEFORE the save fires.
+
+### API
+- `POST /api/v1/campaigns/:id/edits/preview` (mounted under `apiKeyApi.route("/campaigns")` — same auth as other campaigns endpoints).
+- Body: discriminated union by `edit_type` matching the outbox edit types
+  (`wait_duration_changed`, `step_deleted`, `step_inserted`, `email_template_changed`, `goal_added`, `goal_updated`, `goal_removed`).
+- Response: `{ data: EditImpact }` — see `worker/src/lib/edit-impact.ts` for
+  the full shape per edit type.
+- READ-ONLY. No DB writes. Mirrors REQ-28 frozen-status guard (returns
+  HTTP 409 on stopping/stopped/archived campaigns so the dashboard sees
+  the same error path it would on save).
+- For `wait_duration_changed` without explicit `old_delay_seconds`, the
+  endpoint reads the existing step config (`{duration, unit}`) and folds
+  to seconds via the same conversion table the API handler + worker use.
+
+### Helper
+- `worker/src/lib/edit-impact.ts` — `previewEdit({workspaceId, campaignId, editType, details})`.
+  Pure-ish (read queries only). Reused by:
+    - the API endpoint (today)
+    - the reconciliation worker, conceptually — both call the same
+      "what enrollments would be touched" SELECT, so the preview's
+      classification matches what the worker actually does (modulo the
+      race-window between preview and save).
+- `previewWaitDurationChange()` — classifies active enrollments at the step
+  into `immediate` / `stale_eligible` / `still_waiting` buckets based on
+  `step_entered_at + new_delay` vs `now()` and the workspace
+  `default_stale_threshold_seconds`. Returns workspace `resume_dialog_threshold`
+  + a recommended mode based on bucket counts. Capped at 100k rows for
+  preview latency; the worker paginates without a cap.
+- `previewStepDeleted()` — counts active enrollments at the step.
+- `previewGoalAdded()` — counts active enrollments in the campaign + chunk math.
+- `previewZeroImpactEdit()` — for edits that don't move in-flight enrollments
+  (step_inserted, email_template_changed, goal_updated, goal_removed); returns
+  `totalAffected: 0` + a human-readable reason for the dashboard tooltip.
+
+### UI
+- `web/src/components/timeline/edit-preview-dialog.tsx` — `<EditPreviewDialog>`
+  decoupled from the save action: caller opens with a `request`, the dialog
+  fetches impact, renders per edit type, and on confirm calls the caller's
+  `onConfirm()` (which then performs the actual save mutation). Same dialog
+  works for any future edit endpoint that emits an outbox row.
+- `web/src/routes/_app/campaigns/index.tsx` — `<StepConfigPanel>` now wraps
+  wait-step duration changes + step deletion in the preview flow on
+  `active` / `paused` campaigns. Draft campaigns skip the preview (no
+  in-flight enrollments to reconcile).
+
+### Tests
+- `api/src/integration/lifecycle-edit-preview.integration.test.ts` — 12 tests:
+  - wait_duration_changed: immediate / stale_eligible / still_waiting
+    classification across 4 entry-time × delay scenarios
+  - recommendedMode picks skip_stale_spread when both stale and immediate
+    present
+  - oldDelaySeconds auto-derived from step config when omitted
+  - sampleEnrollmentIds capped at 5
+  - step_deleted returns affected count + samples
+  - step_inserted / email_template_changed return 0 + reason text
+  - goal_added returns active-enrollment count + chunk math
+  - HTTP 409 on stopping + archived campaigns
+
 ## Lifecycle webhooks (Stage 6 follow-up, shipped 2026-04-30)
 
 Operators register HTTP endpoints per workspace to receive lifecycle audit

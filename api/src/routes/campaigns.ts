@@ -947,4 +947,122 @@ app.delete("/:id/steps/:stepId", async (c) => {
   return c.json({ success: true, lifecycle_op_id: lifecycleOpIdNp });
 });
 
+/**
+ * POST /:id/edits/preview
+ *
+ * Stage 7 follow-up — Reconciliation preview.
+ *
+ * Returns the projected impact of a proposed edit WITHOUT writing
+ * anything. The dashboard uses this to render a confirmation dialog:
+ * "12,847 enrollments are at this step. If you save, 8,200 will fire
+ * IMMEDIATELY, 3,600 spread over 4h, 1,047 skip-stale. We recommend
+ * `skip_stale_spread` mode."
+ *
+ * Body (discriminated by `edit_type`):
+ *   { edit_type: "wait_duration_changed",
+ *     step_id: "stp_xxx",
+ *     new_delay_seconds: 86400,
+ *     old_delay_seconds?: number    // optional; computed if omitted
+ *   }
+ *   { edit_type: "step_deleted", step_id: "stp_xxx" }
+ *   { edit_type: "step_inserted" | "email_template_changed" |
+ *                "goal_added" | "goal_updated" | "goal_removed", ... }
+ *
+ * Response: 200 with the EditImpact JSON; 409 if campaign is frozen
+ * (mirrors REQ-28 — preview rejects frozen campaigns the same way the
+ * actual edit handler does, so the operator sees a consistent error
+ * before saving).
+ *
+ * READ-ONLY. No DB writes. Safe to call from the dashboard at any time
+ * (e.g. on every keystroke as the operator edits the duration field).
+ */
+const previewSchema = z.discriminatedUnion("edit_type", [
+  z.object({
+    edit_type: z.literal("wait_duration_changed"),
+    step_id: z.string(),
+    new_delay_seconds: z.number().int().positive(),
+    old_delay_seconds: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    edit_type: z.literal("step_deleted"),
+    step_id: z.string(),
+  }),
+  z.object({
+    edit_type: z.literal("step_inserted"),
+  }),
+  z.object({
+    edit_type: z.literal("email_template_changed"),
+    step_id: z.string().optional(),
+    new_template_id: z.string().optional(),
+  }),
+  z.object({
+    edit_type: z.literal("goal_added"),
+  }),
+  z.object({
+    edit_type: z.literal("goal_updated"),
+  }),
+  z.object({
+    edit_type: z.literal("goal_removed"),
+  }),
+]);
+
+app.post(
+  "/:id/edits/preview",
+  zValidator("json", previewSchema),
+  async (c) => {
+    const workspaceId = c.get("workspaceId") as string;
+    const campaignId = c.req.param("id");
+    const body = c.req.valid("json");
+    // Lazy-import the worker helper. This API process must NOT pull the
+    // worker boot path at module-load — keeping the import inside the
+    // handler avoids accidentally starting BullMQ workers in the api.
+    const {
+      previewEdit,
+      getCampaignStatus,
+      getWaitStepDelay,
+    } = await import("../../../worker/src/lib/edit-impact.js");
+
+    // Mirror REQ-28: reject preview on frozen campaigns the same way the
+    // actual save would, so operator UX is consistent.
+    const status = await getCampaignStatus(campaignId, workspaceId);
+    if (status === null) return c.json({ error: "Not found" }, 404);
+    if (isCampaignFrozen(status)) {
+      return c.json(
+        {
+          error:
+            "Campaign is in a frozen status; edits and previews are not allowed",
+          status,
+        },
+        409,
+      );
+    }
+
+    let details: Record<string, unknown>;
+    if (body.edit_type === "wait_duration_changed") {
+      let oldDelay = body.old_delay_seconds;
+      if (oldDelay === undefined) {
+        const got = await getWaitStepDelay(campaignId, body.step_id);
+        oldDelay = got ?? 0;
+      }
+      details = {
+        stepId: body.step_id,
+        oldDelaySeconds: oldDelay,
+        newDelaySeconds: body.new_delay_seconds,
+      };
+    } else if (body.edit_type === "step_deleted") {
+      details = { stepId: body.step_id };
+    } else {
+      details = {};
+    }
+
+    const impact = await previewEdit({
+      workspaceId,
+      campaignId,
+      editType: body.edit_type,
+      details,
+    });
+    return c.json({ data: impact });
+  },
+);
+
 export default app;
