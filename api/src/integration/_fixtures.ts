@@ -177,6 +177,8 @@ export async function runMigrations(): Promise<void> {
     "0012_event_types_goals.sql",
     // Stage 6 — archive table, edit outbox, extended event_type CHECK.
     "0013_archive_outbox.sql",
+    // Stage 6 follow-up — drift webhook endpoints + delivery telemetry.
+    "0014_lifecycle_webhooks.sql",
   ];
   for (const file of files) {
     const sql = await Bun.file(path.join(dir, file)).text();

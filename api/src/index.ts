@@ -24,6 +24,7 @@ import ingestRouter from "./routes/ingest.js";
 import groupsRouter from "./routes/groups.js";
 import configRouter from "./routes/config.js";
 import workspaceLifecycleSettingsRouter from "./routes/workspace-lifecycle-settings.js";
+import lifecycleWebhooksRouter from "./routes/lifecycle-webhooks.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { mountBullBoard } from "./lib/bull-board.js";
 import { workspaceInvites, workspaceMembers, assets as assetsSchema } from "@openmail/shared/schema";
@@ -141,6 +142,7 @@ sessionApi.route("/ws/:workspaceId/assets", assetsRouter);
 sessionApi.route("/ws/:workspaceId/sends", sendsRouter);
 sessionApi.route("/ws/:workspaceId/groups", groupsRouter);
 sessionApi.route("/ws/:workspaceId/lifecycle-settings", workspaceLifecycleSettingsRouter);
+sessionApi.route("/ws/:workspaceId/lifecycle-webhooks", lifecycleWebhooksRouter);
 sessionApi.route("/invites", inviteAcceptRouter);
 
 app.route("/api/session", sessionApi);

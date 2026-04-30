@@ -99,6 +99,13 @@
       "when": 1777600000000,
       "tag": "0013_archive_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777700000000,
+      "tag": "0014_lifecycle_webhooks",
+      "breakpoints": true
     }
   ]
 }

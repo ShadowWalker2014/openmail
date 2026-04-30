@@ -26,6 +26,7 @@ import {
 } from "../lib/redis.js";
 import { logger } from "../lib/logger.js";
 import { audit } from "../lib/lifecycle-audit.js";
+import { enqueueWebhookDeliveries } from "./process-lifecycle-webhook.js";
 import { LIFECYCLE_OP_ID_LENGTH } from "@openmail/shared";
 import {
   emptyState,
@@ -242,7 +243,7 @@ async function checkOne(enrollmentId: string): Promise<boolean> {
   const diff = diffState(state, currentToReplayShape(current));
   if (!diff) return false;
 
-  // Drift detected → emit audit event + warn.
+  // Drift detected → emit audit event + warn + enqueue webhook deliveries.
   logger.warn(
     {
       enrollmentId,
@@ -254,6 +255,17 @@ async function checkOne(enrollmentId: string): Promise<boolean> {
     },
     "drift-sweeper: drift detected",
   );
+  // ONE op-id per detected drift — both the audit event and the webhook
+  // payload share it, so an operator alerted via webhook can grep the
+  // audit log by `lifecycle_op_id` to find the corresponding event row.
+  const opId = newOpId();
+  const emittedAt = new Date().toISOString();
+  const driftPayload = {
+    lifecycle_op_id: opId,
+    enrollment_id: enrollmentId,
+    source: "sweeper",
+    diff,
+  };
   try {
     await audit.emit(
       enrollmentId,
@@ -262,19 +274,34 @@ async function checkOne(enrollmentId: string): Promise<boolean> {
         campaignId: current.campaign_id,
         workspaceId: current.workspace_id,
         contactId: current.contact_id,
-        actor: { kind: "sweeper", runId: newOpId() },
-        payload: {
-          lifecycle_op_id: newOpId(),
-          enrollment_id: enrollmentId,
-          source: "sweeper",
-          diff,
-        },
+        actor: { kind: "sweeper", runId: opId },
+        payload: driftPayload,
       },
     );
   } catch (err) {
     logger.error(
       { err: (err as Error).message, enrollmentId },
       "drift-sweeper: failed to emit audit event",
+    );
+  }
+  // Webhook delivery is best-effort + non-blocking. Failures don't fail
+  // the drift detection itself; the worker logs internally + persists
+  // telemetry on the lifecycle_webhooks row.
+  try {
+    await enqueueWebhookDeliveries({
+      workspaceId: current.workspace_id,
+      event: "audit_drift_detected",
+      lifecycleOpId: opId,
+      campaignId: current.campaign_id,
+      enrollmentId,
+      contactId: current.contact_id,
+      emittedAt,
+      payload: driftPayload,
+    });
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, enrollmentId },
+      "drift-sweeper: failed to enqueue webhook deliveries (non-fatal)",
     );
   }
   return true;

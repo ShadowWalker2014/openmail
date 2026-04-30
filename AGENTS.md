@@ -285,6 +285,71 @@ All previously-skipped extended/perf tests now run in [`api/src/integration/life
 
 Both bugs were invisible to existing integration tests because those tests didn't exercise `eraseContactOnce()` or `runArchivalOnce()` against a real Postgres instance.
 
+## Lifecycle webhooks (Stage 6 follow-up, shipped 2026-04-30)
+
+Operators register HTTP endpoints per workspace to receive lifecycle audit
+events. The drift sweeper enqueues a delivery to every subscribing endpoint
+each time `audit_drift_detected` fires. Schema is forward-compatible with
+subscribing to any of the 32 lifecycle event types.
+
+### Schema + migration
+- `packages/shared/src/db/schema/lifecycle-webhooks.ts` — `lifecycle_webhooks` table:
+  `(id, workspace_id, url, secret, event_types text[], enabled, description,
+  last_delivered_at, last_status, last_error, consecutive_failures, created_at, updated_at)`.
+- `packages/shared/drizzle/0014_lifecycle_webhooks.sql` — creates table +
+  CHECK constraint that `url` matches `^https?://` and `secret` is at least
+  16 chars + workspace FK with CASCADE on delete + partial index on `enabled = true`.
+
+### Worker
+- `worker/src/jobs/process-lifecycle-webhook.ts` — delivery worker on the
+  `lifecycle-webhook-delivery` BullMQ queue.
+- `enqueueWebhookDeliveries(data)` — finds all `enabled = true` webhooks
+  in the workspace whose `event_types` is empty (= all events) OR contains
+  the event type, enqueues one delivery job per match. Used by the drift
+  sweeper today; reusable from any audit emitter.
+- `deliverOnce()` — POSTs JSON body to the operator endpoint with headers:
+  `X-OpenMail-Delivery: wdl_<nanoid16>`, `X-OpenMail-Event: <type>`,
+  `X-OpenMail-Signature: sha256=<hex(HMAC-SHA256(secret, body))>`,
+  `User-Agent: OpenMail-Webhook/1`, `Content-Type: application/json`.
+  Body shape: `{ delivery_id, event, lifecycle_op_id, workspace_id,
+  campaign_id, enrollment_id, contact_id, emitted_at, payload }`.
+- Permanent failures (4xx): consecutive_failures bumped, no retry.
+- Transient failures (5xx / network): BullMQ exponential backoff
+  (`5s → 10s → 20s → 40s → 80s → 160s → 320s`, default 6 retries via
+  `LIFECYCLE_WEBHOOK_MAX_RETRIES`).
+- Idempotency: `jobId = ${webhookId}:${lifecycleOpId}:${event}` so a
+  retried emit doesn't double-enqueue the same delivery.
+- Disabled webhooks skipped silently at enqueue time (the partial index
+  on `enabled = true` makes the WHERE filter index-only).
+
+### Drift sweeper integration
+- `worker/src/jobs/process-drift-sweep.ts` calls `enqueueWebhookDeliveries`
+  immediately after `audit.emit("audit_drift_detected", ...)`. Same
+  `lifecycle_op_id` shared between the audit row and the webhook payload,
+  so an operator alerted via webhook can grep the audit log to find the
+  corresponding event row.
+- Webhook enqueue failure is non-fatal — drift detection still succeeds.
+
+### API CRUD (`/api/session/ws/:wsId/lifecycle-webhooks`)
+- `GET /` — list all webhooks. Secrets MASKED in response (`secret_preview` = last 4 chars).
+- `POST /` — create. Server generates a 32-char alphanumeric secret unless caller provides one. **Secret returned ONCE in the POST response**; subsequent GETs only show the mask.
+- `PATCH /:id` — update. Pass `regenerate_secret: true` to rotate; new secret returned ONCE.
+- `DELETE /:id` — delete (cascade-safe; no orphan deliveries because BullMQ jobs hold a copy of the webhook id).
+- `POST /:id/test` — fires a SYNTHETIC delivery (clearly marked in payload) so operators can verify their endpoint is reachable + signature-validating BEFORE a real drift event fires.
+
+All write endpoints require **workspace owner or admin role**.
+
+### Tests
+- `api/src/integration/lifecycle-webhooks.integration.test.ts` — 7 tests:
+  HMAC signature verification, header shape, JSON body shape, telemetry
+  recording on success / 4xx / network failure, subscription routing
+  (empty event_types = all, explicit list filters, disabled skipped,
+  multi-subscriber fanout). 41 assertions.
+
+### Configuration
+- `LIFECYCLE_WEBHOOK_MAX_RETRIES` (default 6)
+- `LIFECYCLE_WEBHOOK_TIMEOUT_MS` (default 10000)
+
 ## Known Limitations (internal — not yet disclosed publicly)
 
 > Public-facing summary lives in [`ROADMAP.md`](ROADMAP.md). The items below are the internal-context technical detail.

@@ -27,6 +27,7 @@ import {
   ensureDriftSweeperSchedule,
 } from "./jobs/process-drift-sweep.js";
 import { createPiiErasureWorker } from "./jobs/process-pii-erasure.js";
+import { createLifecycleWebhookWorker } from "./jobs/process-lifecycle-webhook.js";
 import { startGoalCacheSubscriber } from "./lib/goal-cache.js";
 import { logger } from "./lib/logger.js";
 
@@ -46,6 +47,7 @@ const workers = [
   createArchivalWorker(),                  // archival of old enrollment_events
   createDriftSweeperWorker(),              // detect replay drift (alert only, CN-06)
   createPiiErasureWorker(),                // GDPR redaction on contact delete
+  createLifecycleWebhookWorker(),          // POST audit events to operator-registered HTTP endpoints
 ];
 
 // Stage 2 — install repeatable stop-drain schedule (idempotent across reboots).

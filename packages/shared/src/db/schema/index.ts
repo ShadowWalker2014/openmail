@@ -13,3 +13,4 @@ export * from "./enrollment-events-archive";
 export * from "./campaign-edit-outbox";
 export * from "./workspace-lifecycle-settings";
 export * from "./campaign-goals";
+export * from "./lifecycle-webhooks";
