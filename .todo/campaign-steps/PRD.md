@@ -55,3 +55,7 @@ Clicking a campaign card opens a full-screen step editor dialog (96vw × 92vh).
 [x] Wait step config
 [x] Add/delete step actions
 [x] Activate/Pause from within dialog
+
+---
+
+> **Status:** ✅ Engine SHIPPED in Stage 1 (`PRPs/campaign-engine-fix/03-plan.md`). UI step-editor was previously shipped; engine landed 2026-04-29. Multi-step campaigns now progress through all positions end-to-end (email → wait → email → ...). 54/54 integration tests pass. See `AGENTS.md § Campaign Step Progression Engine` for architecture.

@@ -32,7 +32,7 @@ function getRedisOpts() {
 }
 
 // Queue names must match exactly what the worker registers
-const QUEUE_NAMES = ["broadcasts", "send-batch", "send-email", "campaigns", "segment-check"];
+const QUEUE_NAMES = ["broadcasts", "send-batch", "send-email", "campaigns", "segment-check", "step-execution"];
 
 let _queues: Queue[] | null = null;
 function getQueues(): Queue[] {

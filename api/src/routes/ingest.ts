@@ -27,6 +27,7 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, sql } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
+import { rateLimit } from "../lib/rate-limiter.js";
 import type { Context } from "hono";
 import type { ApiVariables } from "../types.js";
 import { upsertGroup, linkContactToGroup } from "./groups.js";
@@ -38,21 +39,12 @@ const app = new Hono<{ Variables: ApiVariables }>();
 // CORS for this router is configured at the app level in index.ts (before the global cors).
 // No need for a duplicate cors() call here.
 
-// Simple in-memory rate limiter: 1000 req/min per API key.
-// NOTE: resets on process restart; use Redis for multi-instance deployments.
-const ingestRateLimiter = new Map<string, { count: number; resetAt: number }>();
-
-function checkIngestRateLimit(key: string): boolean {
-  const now = Date.now();
-  const entry = ingestRateLimiter.get(key);
-  if (!entry || entry.resetAt < now) {
-    ingestRateLimiter.set(key, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 1000) return false;
-  entry.count++;
-  return true;
-}
+// Rate limit: 1000 req/min per API key, enforced via Redis fixed-window
+// counter so the cap is shared across every api replica (CR-05, CN-03).
+// Window/cap are env-configurable for self-hosters; defaults match the
+// previous in-memory limiter so behaviour is unchanged for SaaS.
+const INGEST_RATE_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_SECONDS ?? 60) * 1000;
+const INGEST_RATE_LIMIT = Number(process.env.RATE_LIMIT_DEFAULT_PER_WINDOW ?? 1000);
 
 app.use("*", async (c, next) => {
   const authHeader = c.req.header("Authorization");
@@ -64,9 +56,31 @@ app.use("*", async (c, next) => {
     const colonIdx = decoded.indexOf(":");
     rawKey = colonIdx !== -1 ? decoded.slice(colonIdx + 1).trim() : decoded.trim();
   }
-  if (rawKey && !checkIngestRateLimit(rawKey)) {
-    logger.warn({ keyPrefix: rawKey.slice(0, 8) }, "Ingest rate limit exceeded");
-    return c.json({ error: "Rate limit exceeded. Max 1000 requests/minute." }, 429);
+  if (rawKey) {
+    // Partition by API-key hash prefix (8 chars) to avoid storing the raw key
+    // in Redis keyspace — the prefix has enough entropy for a per-key bucket
+    // and is not reversible to the secret.
+    const keyId = createHash("sha256").update(rawKey).digest("hex").slice(0, 16);
+    try {
+      const { allowed, resetMs } = await rateLimit(
+        "ingest",
+        keyId,
+        INGEST_RATE_LIMIT,
+        INGEST_RATE_WINDOW_MS,
+      );
+      if (!allowed) {
+        logger.warn({ keyPrefix: rawKey.slice(0, 8) }, "Ingest rate limit exceeded");
+        c.header("Retry-After", String(Math.ceil(resetMs / 1000)));
+        return c.json(
+          { error: `Rate limit exceeded. Max ${INGEST_RATE_LIMIT} requests/minute.` },
+          429,
+        );
+      }
+    } catch (err) {
+      // Fail-open on Redis errors to avoid taking the ingest endpoint down
+      // when Redis is briefly unavailable; surfaced via logs for ops alerts.
+      logger.error({ err }, "Ingest rate-limit check failed; allowing request");
+    }
   }
   await next();
 });
