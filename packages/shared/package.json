@@ -11,7 +11,8 @@
     "./ids": "./src/ids.ts",
     "./segment-sql": "./src/segment-sql.ts",
     "./lifecycle-events": "./src/lifecycle-events.ts",
-    "./lifecycle-constants": "./src/lifecycle-constants.ts"
+    "./lifecycle-constants": "./src/lifecycle-constants.ts",
+    "./lifecycle-events-payload-schemas": "./src/lifecycle-events-payload-schemas.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

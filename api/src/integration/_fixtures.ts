@@ -249,6 +249,18 @@ export async function cleanDb(): Promise<void> {
   `).catch(() => {
     // Some tables may not exist in older schema during initial migration runs.
   });
+  // Stage 6 tables — TRUNCATE separately because they're not FK-cascaded
+  // from the workspaces/campaigns tree (archive is intentionally
+  // workspace-id text without FK so it survives workspace hard-delete).
+  await db
+    .unsafe(`
+      TRUNCATE enrollment_events_archive, campaign_edit_outbox
+      RESTART IDENTITY
+    `)
+    .catch(() => {
+      // Tables may not exist before migration 0013 has applied (older
+      // suites that only run earlier migrations).
+    });
 }
 
 // ── Redis helper ─────────────────────────────────────────────────────────────

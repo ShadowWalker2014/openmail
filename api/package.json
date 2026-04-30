@@ -6,6 +6,7 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --target bun --outdir dist",
+    "pretest": "bash ../scripts/clean-shadow-js.sh",
     "test": "bun test src/routes/domains.test.ts",
     "test:verbose": "bun test --verbose src/routes/domains.test.ts",
     "test:integration": "bun test src/integration/domains.integration.test.ts",

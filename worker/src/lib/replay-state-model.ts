@@ -16,7 +16,9 @@
  *   - `scripts/replay-enrollment.ts` — CLI tool that loads events + drives
  *     `applyEvent` + diffs.
  */
-import type { EnrollmentEventType } from "@openmail/shared";
+// Leaf submodule import — keeps this file browser-safe (the @openmail/shared
+// barrel re-exports DB client code that pulls in postgres-js).
+import type { EnrollmentEventType } from "@openmail/shared/lifecycle-events";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

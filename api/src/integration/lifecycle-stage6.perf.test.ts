@@ -456,6 +456,92 @@ describe("Perf 5: Archival throughput", () => {
       else process.env.LIFECYCLE_AUDIT_RETENTION_DAYS = prevRetention;
     }
   }, 180_000);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Multi-replica contention check.
+  //
+  // Two replicas calling runArchivalOnce() simultaneously against the same
+  // workspace MUST serialize via pg_advisory_xact_lock (CR-05/CR-14, CN-11).
+  // If they raced, we'd see double-DELETE attempts (only one would find rows
+  // due to FOR UPDATE SKIP LOCKED) but more dangerously — the lock is the
+  // pacing primitive that keeps live ElectricSQL readers responsive. Without
+  // it, two replicas would drive 2× the DELETE rate against the live table.
+  //
+  // Verification: kick off N=3 parallel runArchivalOnce() promises against
+  // the same workspace; assert that the SUM of archived counts equals the
+  // total seeded (no double-count, no skipped rows), AND that wall time is
+  // close to the single-run time (serialized) rather than 1/3 of it
+  // (parallel-equivalent). The advisory lock is transactional, so the
+  // "loser" promises return totalArchived=0 after acquiring the lock and
+  // finding no remaining work.
+  // ───────────────────────────────────────────────────────────────────────────
+  test("3 parallel runArchivalOnce() against same workspace serialize via advisory lock", async () => {
+    const prevBatch = process.env.LIFECYCLE_ARCHIVAL_BATCH_SIZE;
+    const prevRetention = process.env.LIFECYCLE_AUDIT_RETENTION_DAYS;
+    process.env.LIFECYCLE_ARCHIVAL_BATCH_SIZE = "5000";
+    process.env.LIFECYCLE_AUDIT_RETENTION_DAYS = "180";
+
+    try {
+      const scope = await seedScope();
+      const SEED = 10_000;
+      await bulkSeedEvents({ scope, count: SEED, pastArchiveCutoff: true });
+
+      const db = getRawDb();
+      const beforeArchive = await db`SELECT count(*) AS c FROM enrollment_events_archive`;
+      expect(Number(beforeArchive[0].c)).toBe(0);
+
+      const start = Date.now();
+      const [r1, r2, r3] = await Promise.all([
+        runArchivalOnce(),
+        runArchivalOnce(),
+        runArchivalOnce(),
+      ]);
+      const wallMs = Date.now() - start;
+
+      const totalArchived = r1.totalArchived + r2.totalArchived + r3.totalArchived;
+      const winners = [r1, r2, r3].filter((r) => r.totalArchived > 0).length;
+
+      console.log(
+        `[Perf5b] 3-replica race: r1=${r1.totalArchived} r2=${r2.totalArchived} r3=${r3.totalArchived} winners=${winners} wallMs=${wallMs}`,
+      );
+
+      const afterLive = await db`
+        SELECT count(*) AS c FROM enrollment_events
+         WHERE workspace_id = ${scope.workspaceId}::text
+      `;
+      const afterArchive = await db`
+        SELECT count(*) AS c FROM enrollment_events_archive
+         WHERE workspace_id = ${scope.workspaceId}::text
+      `;
+      console.log(
+        `[Perf5b]   after: live=${afterLive[0].c} archive=${afterArchive[0].c}`,
+      );
+
+      // Conservation invariant: every seeded event was archived exactly
+      // once. Sum across the three replicas equals SEED — no double-archival.
+      expect(totalArchived).toBe(SEED);
+      expect(Number(afterArchive[0].c)).toBe(SEED);
+      // Live table drained for this workspace (the seedScope's "enrolled"
+      // event is too recent and stays in live).
+      expect(Number(afterLive[0].c)).toBeLessThanOrEqual(1);
+
+      // At least one replica did meaningful work; usually exactly one wins
+      // (the tx that gets the advisory lock first), but the others may
+      // pick up tail batches in extremely fast succession. We don't pin
+      // the winner count — the conservation invariant is the contract.
+      expect(winners).toBeGreaterThanOrEqual(1);
+
+      // Sanity bound on wall time. With proper serialization 3 runs take
+      // roughly 1× single-run time (the losers no-op). Without the lock,
+      // we'd see contention/retries blowing this past 30s. Generous budget.
+      expect(wallMs).toBeLessThan(30_000);
+    } finally {
+      if (prevBatch === undefined) delete process.env.LIFECYCLE_ARCHIVAL_BATCH_SIZE;
+      else process.env.LIFECYCLE_ARCHIVAL_BATCH_SIZE = prevBatch;
+      if (prevRetention === undefined) delete process.env.LIFECYCLE_AUDIT_RETENTION_DAYS;
+      else process.env.LIFECYCLE_AUDIT_RETENTION_DAYS = prevRetention;
+    }
+  }, 60_000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

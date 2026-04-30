@@ -20,7 +20,10 @@
     "db:generate": "bun --cwd packages/shared db:generate",
     "db:migrate": "bun --cwd packages/shared db:migrate",
     "db:studio": "bun --cwd packages/shared db:studio",
-    "lint:stability": "bun run scripts/check-stability-mapping.ts"
+    "lint:stability": "bun run scripts/check-stability-mapping.ts",
+    "clean": "bash scripts/clean-shadow-js.sh",
+    "test:integration:lifecycle": "bun run clean && bun --cwd api test src/integration/lifecycle*.test.ts",
+    "test:integration:perf": "bun run clean && bun --cwd api test src/integration/lifecycle-stage6.perf.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

@@ -18,12 +18,17 @@
  * Pure: no DB access, no I/O. Inputs in, outputs out. The CLI tool wraps
  * this with cursor reads + diffs.
  */
+// Leaf submodule imports — keeps this file browser-safe (the @openmail/shared
+// barrel re-exports DB client code that pulls in postgres-js, blocking
+// browser bundling). Web's time-travel UI imports from this module.
 import {
   ENROLLMENT_EVENT_TYPES,
   type EnrollmentEventType,
+} from "@openmail/shared/lifecycle-events";
+import {
   getPayloadSchema,
   isRedactedPayload,
-} from "@openmail/shared";
+} from "@openmail/shared/lifecycle-events-payload-schemas";
 import {
   type EventRow,
   type ReplayState,
