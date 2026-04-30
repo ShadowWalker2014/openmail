@@ -1,0 +1,87 @@
+---
+title: Edit Reconciliation
+description: How edits to running campaigns (wait-duration changes, step inserts/deletes, template swaps, goal CRUD) propagate to in-flight enrollments without losing audit fidelity.
+---
+
+# Edit Reconciliation
+
+OpenMail lets operators edit a running campaign — change a wait duration, insert a new step, swap an email template — without taking the campaign offline. The challenge: in-flight enrollments may be sleeping inside a wait job that was scheduled BEFORE the edit. Without reconciliation, those enrollments would wake up at the OLD scheduled time and produce inconsistent behaviour.
+
+Stage 6 introduced a transactional outbox + reconciliation worker pattern that propagates edits to in-flight enrollments **at-least-once** and **idempotently**.
+
+## How it works
+
+```
+┌─────────────────┐    1. INSERT step + outbox row (same tx)
+│  API edit       │───┐
+│  handler        │   │
+└─────────────────┘   ↓
+              ┌─────────────────────┐
+              │ campaign_edit_outbox│  (Postgres)
+              │  forwarded_at NULL  │
+              └──────────┬──────────┘
+                         │  2. Outbox worker polls
+                         ↓
+                ┌──────────────────┐
+                │  Redis pub/sub   │  channel: campaign-edits
+                │                  │
+                └────────┬─────────┘
+                         │  3. Subscriber pushes into BullMQ
+                         ↓
+              ┌────────────────────────┐
+              │ Edit reconciliation    │
+              │ worker (BullMQ)        │
+              │  - per-edit_type logic │
+              │  - per-enrollment      │
+              │    `reconciled` audit  │
+              └────────────────────────┘
+```
+
+Step 1 (the data write + outbox INSERT) lives in **one DB transaction**. Step 2 (publish + UPDATE forwarded_at) is its own transaction with `FOR UPDATE SKIP LOCKED` so multiple worker replicas don't double-publish. Step 3 deduplicates via Redis SET (`reconciled:edits:{lifecycle_op_id}` TTL 24h).
+
+## Edit types
+
+| `edit_type` | Where applied | Reconciliation action |
+|-------------|--------------|------------------------|
+| `wait_duration_changed` | `PATCH /campaigns/:id/steps/:stepId` (wait config) | Cancel old wait job; recompute `next_run_at = step_entered_at + new_duration_seconds`; re-enqueue. Per-enrollment `reconciled` event. |
+| `step_inserted` | `POST /campaigns/:id/steps` | No-op (in-flight enrollments at later positions don't need to know). Aggregate `reconciled` event. |
+| `step_deleted` | `DELETE /campaigns/:id/steps/:stepId` | If step was paused with held enrollments, the API handler advances them past the position via the Stage 4 helper. Aggregate `reconciled` event. |
+| `email_template_changed` | `PATCH /campaigns/:id/steps/:stepId` (email config) | No-op — templates are looked up live at send time. Aggregate `reconciled` event. |
+| `goal_added` | `POST /campaigns/:id/goals` | Enqueue **paginated reconciliation worker** that streams in-flight enrollments in chunks (`LIFECYCLE_RECONCILIATION_CHUNK_SIZE`, default 1000), evaluates the new goal per enrollment, and exits matching enrollments. Per-chunk `reconciliation_chunk_progress` events; final aggregate `reconciled`. |
+| `goal_updated` / `goal_removed` | `PATCH/DELETE /campaigns/:id/goals/:goalId` | No per-enrollment work. Aggregate `reconciled` event. (Stage 5's separate `goal-cache:invalidate` channel handles cache freshness.) |
+
+## Frozen status guard
+
+Edits on campaigns in `stopping`, `stopped`, or `archived` status return **HTTP 409**. The API rejects, the outbox row is never written, the worker never sees the edit. This is the same `FROZEN_CAMPAIGN_STATUSES` guard used by goal CRUD — it prevents operator confusion ("I just edited a stopped campaign — did anything happen?") and keeps the audit trail unambiguous.
+
+## Why outbox instead of post-commit publish?
+
+A naive implementation publishes to Redis after the DB transaction commits:
+
+```ts
+await db.transaction(async (tx) => { /* write step */ });
+await redis.publish("campaign-edits", json);  // ← can be lost on process crash
+```
+
+If the API process crashes between the commit and the publish, the edit is committed in the database but **never reconciled** to in-flight enrollments. Hours later a wait job fires with the OLD config and the operator wonders why their template change didn't apply.
+
+The outbox pattern eliminates the gap: the publish-intent is durably persisted in the same transaction. If the API process crashes, the outbox row remains. The outbox worker (running in a separate process) sees the unforwarded row on its next poll cycle and publishes — at-least-once delivery guaranteed.
+
+## Idempotency
+
+Pub/sub may double-deliver on subscriber reconnect. The reconciliation worker's first action is:
+
+```
+Redis: SET reconciled:edits:{lifecycle_op_id} EX 86400 NX
+```
+
+If the SET fails (key already exists), the worker logs and skips. So even if the outbox worker publishes twice (e.g. crashed mid-UPDATE), the reconciliation runs at-most-once per `lifecycle_op_id`.
+
+## Audit emissions
+
+Every reconciliation emits a `reconciled` event in the audit log:
+- **Per-enrollment** for `wait_duration_changed` (one per affected enrollment).
+- **Aggregate** (campaign-scope, `enrollment_id=NULL`) for `step_inserted`, `step_deleted`, `email_template_changed`, `goal_updated`, `goal_removed`, and the final completion of a `goal_added` paginated run.
+- **Chunk progress** (`reconciliation_chunk_progress`) for each chunk of a `goal_added` run.
+
+The `lifecycle_op_id` is shared across the entire reconciliation lineage — the audit query `SELECT * FROM enrollment_events WHERE payload->>'lifecycle_op_id' = $1` returns the data write, the outbox forward, and every per-enrollment reconciliation in chronological order.

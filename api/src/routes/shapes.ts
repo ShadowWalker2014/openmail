@@ -10,6 +10,8 @@ const ALLOWED_TABLES = new Set([
   "campaigns",
   "campaign_enrollments",
   "events",
+  // Stage 6 (REQ-09 timeline UI, [CN-05] workspace-scoped sync)
+  "enrollment_events",
 ]);
 
 const app = new Hono<{ Variables: ApiVariables }>();

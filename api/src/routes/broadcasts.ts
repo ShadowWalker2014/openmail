@@ -7,6 +7,7 @@ import { generateId } from "@openmail/shared/ids";
 import { eq, and, count, desc, sql, inArray } from "drizzle-orm";
 import { Queue } from "bullmq";
 import { getQueueRedisConnection } from "../lib/redis.js";
+import { rateLimit } from "../lib/rate-limiter.js";
 import type { ApiVariables } from "../types.js";
 import { logger } from "../lib/logger.js";
 
@@ -26,19 +27,11 @@ function parsePagination(pageStr?: string, pageSizeStr?: string) {
   return { page, pageSize };
 }
 
-// Simple in-memory rate limiter: 5 test-sends per minute per workspace
-const testSendRateLimiter = new Map<string, { count: number; resetAt: number }>();
-function checkTestSendRate(workspaceId: string): boolean {
-  const now = Date.now();
-  const entry = testSendRateLimiter.get(workspaceId);
-  if (!entry || entry.resetAt < now) {
-    testSendRateLimiter.set(workspaceId, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 5) return false;
-  entry.count++;
-  return true;
-}
+// Rate limit: 5 test-sends per minute per workspace, enforced via Redis
+// fixed-window counter so the cap is shared across every api replica
+// (CR-05, CN-03). Per-workspace bucket — never global.
+const TEST_SEND_RATE_WINDOW_MS = 60_000;
+const TEST_SEND_RATE_LIMIT = 5;
 
 app.get("/", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
@@ -288,8 +281,24 @@ app.get("/:id/top-links", async (c) => {
 
 app.post("/:id/test-send", zValidator("json", z.object({ email: z.string().email() })), async (c) => {
   const workspaceId = c.get("workspaceId") as string;
-  if (!checkTestSendRate(workspaceId)) {
-    return c.json({ error: "Test send rate limit exceeded. Max 5 per minute per workspace." }, 429);
+  try {
+    const { allowed, resetMs } = await rateLimit(
+      "test-send",
+      workspaceId,
+      TEST_SEND_RATE_LIMIT,
+      TEST_SEND_RATE_WINDOW_MS,
+    );
+    if (!allowed) {
+      c.header("Retry-After", String(Math.ceil(resetMs / 1000)));
+      return c.json(
+        { error: `Test send rate limit exceeded. Max ${TEST_SEND_RATE_LIMIT} per minute per workspace.` },
+        429,
+      );
+    }
+  } catch (err) {
+    // Fail-open on Redis errors so test-sends still work during transient
+    // outages; the cap re-engages as soon as Redis is reachable again.
+    logger.error({ err, workspaceId }, "Test-send rate-limit check failed; allowing request");
   }
   const db = getDb();
   const { email } = c.req.valid("json");

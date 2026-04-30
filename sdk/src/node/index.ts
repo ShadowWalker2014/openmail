@@ -24,6 +24,11 @@ import type {
   CampaignStep,
   CreateStepInput,
   UpdateStepInput,
+  CampaignLifecycleResult,
+  ResumeMode,
+  ResumeInput,
+  StopInput,
+  ArchiveInput,
   Segment,
   CreateSegmentInput,
   UpdateSegmentInput,
@@ -45,6 +50,9 @@ import type {
   Group,
   CreateGroupInput,
   GroupMembership,
+  CampaignGoal,
+  CreateCampaignGoalInput,
+  UpdateCampaignGoalInput,
 } from "../core/types.js";
 
 export * from "../core/types.js";
@@ -159,24 +167,99 @@ class CampaignsAPI {
     return this.http.get<Campaign>(`/api/v1/campaigns/${id}`);
   }
 
+  /**
+   * Create a campaign. Stage 2 [V2.3]: optional `re_enrollment_policy` field
+   * (default `'never'`). When set to `'after_cooldown'`, the SDK enforces
+   * `re_enrollment_cooldown_seconds` at compile time via discriminated union.
+   */
   async create(input: CreateCampaignInput): Promise<Campaign> {
     return this.http.post<Campaign>("/api/v1/campaigns", input);
   }
 
+  /**
+   * Update a campaign. Stage 2 [V2.3]: re_enrollment_policy is now updatable
+   * on `draft|active|paused`; rejected with HTTP 409 on `stopping|stopped|archived`
+   * per [CR-13]. Setting `status` is DEPRECATED — prefer `.pause()`, `.resume()`,
+   * `.stop()`, `.archive()` for richer audit trail.
+   */
   async update(id: string, input: UpdateCampaignInput): Promise<Campaign> {
     return this.http.patch<Campaign>(`/api/v1/campaigns/${id}`, input);
   }
 
+  /**
+   * Activate (draft → active). Calls the legacy PATCH-status alias because
+   * activate has no dedicated verb endpoint in Stage 2; activation is the
+   * only forward-progressing transition where re-using PATCH is safe.
+   */
   async activate(id: string): Promise<Campaign> {
     return this.update(id, { status: "active" });
   }
 
-  async pause(id: string): Promise<Campaign> {
-    return this.update(id, { status: "paused" });
+  /**
+   * Pause an active campaign (Stage 2 [V2.10] return shape).
+   * `active → paused` only; throws on illegal transitions (HTTP 409).
+   */
+  async pause(id: string): Promise<CampaignLifecycleResult> {
+    return this.http.post<CampaignLifecycleResult>(
+      `/api/v1/campaigns/${id}/pause`,
+    );
   }
 
-  async archive(id: string): Promise<Campaign> {
-    return this.update(id, { status: "archived" });
+  /**
+   * Resume a paused campaign. Stage 3 supports four modes:
+   *  - `immediate`: send all overdue at once (default).
+   *  - `spread`: distribute overdue sends across a time window.
+   *  - `skip_stale`: drop messages older than threshold, advance enrollments.
+   *  - `skip_stale_spread`: combine — drop stale + spread the remainder.
+   *
+   * Recommended: use `spread` or `skip_stale_spread` for pauses longer than 24h.
+   *
+   * Discriminated-union typed input: TS infers the shape from `mode`.
+   */
+  async resume(
+    id: string,
+    opts?: { mode?: ResumeMode } | ResumeInput,
+  ): Promise<CampaignLifecycleResult> {
+    // Backwards-compat shape: { mode } with no other params is allowed.
+    const body: ResumeInput =
+      !opts || typeof (opts as { mode?: ResumeMode }).mode === "undefined"
+        ? { mode: "immediate" }
+        : (opts as ResumeInput);
+    return this.http.post<CampaignLifecycleResult>(
+      `/api/v1/campaigns/${id}/resume`,
+      body,
+    );
+  }
+
+  /**
+   * Stop a campaign — drain (graceful) or force (immediate cancel).
+   *
+   * - `mode: "drain"` — flips to `stopping`; the BullMQ sweeper promotes to
+   *   `stopped` once in-flight enrollments finish naturally.
+   * - `mode: "force", confirm_force: true` — cancels all pending wait jobs
+   *   immediately and force-exits in-flight enrollments. The
+   *   `confirm_force: true` literal is REQUIRED at compile time.
+   */
+  async stop(id: string, input: StopInput): Promise<CampaignLifecycleResult> {
+    return this.http.post<CampaignLifecycleResult>(
+      `/api/v1/campaigns/${id}/stop`,
+      input,
+    );
+  }
+
+  /**
+   * Archive a campaign — TERMINAL operation, cannot be reactivated.
+   * `confirm_terminal: true` literal REQUIRED at compile time. Idempotent on
+   * already-archived campaigns (returns `idempotent: true`).
+   */
+  async archive(
+    id: string,
+    input: ArchiveInput,
+  ): Promise<CampaignLifecycleResult> {
+    return this.http.post<CampaignLifecycleResult>(
+      `/api/v1/campaigns/${id}/archive`,
+      input,
+    );
   }
 
   async delete(id: string): Promise<void> {
@@ -205,6 +288,130 @@ class CampaignsAPI {
 
   async deleteStep(campaignId: string, stepId: string): Promise<void> {
     await this.http.delete(`/api/v1/campaigns/${campaignId}/steps/${stepId}`);
+  }
+
+  /**
+   * Stage 4 — Step lifecycle namespace.
+   *
+   *   client.campaigns.steps(campaignId).pause(stepId)
+   *   client.campaigns.steps(campaignId).resume(stepId, { mode: "spread", ... })
+   *
+   * Per-step pause halts new arrivals at the named step but does NOT affect
+   * enrollments at other steps. The granularity is unique among email
+   * marketing platforms (Customer.io / Mailchimp pause whole campaigns).
+   */
+  steps(campaignId: string) {
+    const http = this.http;
+    return {
+      async pause(stepId: string): Promise<{
+        step: CampaignStep;
+        lifecycle_op_id: string;
+        held_count: number;
+        cancelled_jobs: number;
+        idempotent?: boolean;
+      }> {
+        return http.post(
+          `/api/v1/campaigns/${campaignId}/steps/${stepId}/pause`,
+          {},
+        );
+      },
+      async resume(
+        stepId: string,
+        input: ResumeInput = { mode: "immediate" },
+      ): Promise<{
+        step: CampaignStep;
+        lifecycle_op_id: string;
+        mode: ResumeMode;
+        held_count: number;
+        resumed_count: number;
+        idempotent?: boolean;
+      }> {
+        return http.post(
+          `/api/v1/campaigns/${campaignId}/steps/${stepId}/resume`,
+          input,
+        );
+      },
+    };
+  }
+
+  /**
+   * Stage 5 — Campaign goals namespace.
+   *
+   *   client.campaigns.goals(campaignId).list()
+   *   client.campaigns.goals(campaignId).add({ condition: {...} })
+   *   client.campaigns.goals(campaignId).update(goalId, { enabled: false })
+   *   client.campaigns.goals(campaignId).remove(goalId)
+   *
+   * Goals are campaign-scoped early-exit conditions evaluated with OR
+   * semantics. Editing is allowed on draft / active / paused campaigns;
+   * frozen statuses (stopping / stopped / archived) return HTTP 409.
+   */
+  goals(campaignId: string) {
+    const http = this.http;
+    return {
+      async list(): Promise<CampaignGoal[]> {
+        const res = await http.get<{ data: CampaignGoal[] }>(
+          `/api/v1/campaigns/${campaignId}/goals`,
+        );
+        return res.data;
+      },
+      async add(input: CreateCampaignGoalInput): Promise<CampaignGoal> {
+        return http.post<CampaignGoal>(
+          `/api/v1/campaigns/${campaignId}/goals`,
+          input,
+        );
+      },
+      async update(
+        goalId: string,
+        input: UpdateCampaignGoalInput,
+      ): Promise<CampaignGoal> {
+        return http.patch<CampaignGoal>(
+          `/api/v1/campaigns/${campaignId}/goals/${goalId}`,
+          input,
+        );
+      },
+      async remove(goalId: string): Promise<void> {
+        await http.delete(`/api/v1/campaigns/${campaignId}/goals/${goalId}`);
+      },
+    };
+  }
+
+  /**
+   * Stage 6 — Enrollment timeline namespace.
+   *
+   *   client.campaigns.enrollments(campaignId).timeline(enrollmentId, { limit, before, ... })
+   *
+   * Returns paginated event history for a single enrollment, ordered most
+   * recent first. Pass `includeArchive: true` to walk the archive table
+   * for events older than the audit retention window (default 180 days).
+   */
+  enrollments(campaignId: string) {
+    const http = this.http;
+    return {
+      async timeline(
+        enrollmentId: string,
+        opts?: {
+          limit?: number;
+          before?: string;
+          eventTypes?: string[];
+          includeArchive?: boolean;
+        },
+      ): Promise<{
+        data: Array<Record<string, unknown>>;
+        pagination: { limit: number; hasMore: boolean; nextBefore: string | null };
+      }> {
+        const params: Record<string, string | number | undefined> = {};
+        if (opts?.limit !== undefined) params.limit = opts.limit;
+        if (opts?.before) params.before = opts.before;
+        if (opts?.eventTypes && opts.eventTypes.length > 0)
+          params.event_types = opts.eventTypes.join(",");
+        if (opts?.includeArchive) params.include_archive = "true";
+        const q = buildQuery(params);
+        return http.get(
+          `/api/v1/campaigns/${campaignId}/enrollments/${enrollmentId}/events${q}`,
+        );
+      },
+    };
   }
 }
 

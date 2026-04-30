@@ -115,12 +115,29 @@ app.patch(
 
 app.delete("/:id", async (c) => {
   const workspaceId = c.get("workspaceId") as string;
+  const contactId = c.req.param("id");
   const db = getDb();
   const [deleted] = await db
     .delete(contacts)
-    .where(and(eq(contacts.id, c.req.param("id")), eq(contacts.workspaceId, workspaceId)))
+    .where(and(eq(contacts.id, contactId), eq(contacts.workspaceId, workspaceId)))
     .returning({ id: contacts.id });
   if (!deleted) return c.json({ error: "Not found" }, 404);
+  // Stage 6 (REQ-27, [A6.4], GDPR Art. 17): enqueue PII erasure for any
+  // enrollment_events / archive rows scoping this contact. Best-effort:
+  // failure to enqueue does NOT undo the hard-delete (job is idempotent and
+  // can be re-triggered manually). Worker emits `pii_erased` aggregate
+  // events per campaign.
+  try {
+    const { enqueuePiiErasure } = await import(
+      "../../../worker/src/jobs/process-pii-erasure.js"
+    );
+    await enqueuePiiErasure({ contactId, workspaceId });
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, contactId },
+      "contacts.delete: enqueuePiiErasure failed (non-fatal)",
+    );
+  }
   return c.json({ success: true });
 });
 

@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link, useMatchRoute } from "@tanstack/react-router";
-import { Building2, Users, Mail, Globe, Code2, User } from "lucide-react";
+import { Building2, Users, Mail, Globe, Code2, User, Bot, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -15,6 +15,8 @@ const SETTINGS_GROUPS = [
       { to: "/settings/email",    label: "Email Sending",  icon: Mail },
       { to: "/settings/domain",   label: "Sending Domain", icon: Globe },
       { to: "/settings/api-keys", label: "API Keys",       icon: Code2 },
+      { to: "/settings/mcp-server", label: "MCP Server",   icon: Bot },
+      { to: "/settings/lifecycle", label: "Lifecycle",     icon: Activity },
     ],
   },
   {

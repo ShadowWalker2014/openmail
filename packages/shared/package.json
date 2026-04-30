@@ -9,12 +9,18 @@
     "./db": "./src/db/client.ts",
     "./types": "./src/types/index.ts",
     "./ids": "./src/ids.ts",
-    "./segment-sql": "./src/segment-sql.ts"
+    "./segment-sql": "./src/segment-sql.ts",
+    "./lifecycle-events": "./src/lifecycle-events.ts",
+    "./lifecycle-constants": "./src/lifecycle-constants.ts",
+    "./lifecycle-events-payload-schemas": "./src/lifecycle-events-payload-schemas.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit",
+    "check:event-types": "bun run scripts/generate-event-type-check.ts --verify",
+    "print:event-types": "bun run scripts/generate-event-type-check.ts --print"
   },
   "dependencies": {
     "drizzle-orm": "^0.41.0",

@@ -1,5 +1,7 @@
 export type WorkspaceRole = "owner" | "admin" | "member";
-export type CampaignStatus = "draft" | "active" | "paused" | "archived";
+// CampaignStatus is now defined in lifecycle-constants.ts (Stage 2 SSOT) and
+// re-exported via the package index. The pre-Stage-2 union {draft|active|paused|archived}
+// is a strict subset of the new union which adds {stopping, stopped}.
 export type BroadcastStatus = "draft" | "scheduled" | "sending" | "sent" | "failed";
 export type EmailSendStatus = "queued" | "sent" | "failed" | "bounced";
 export type EmailEventType = "open" | "click" | "bounce" | "complaint" | "unsubscribe";

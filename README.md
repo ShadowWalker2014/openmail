@@ -546,7 +546,6 @@ If a workspace hasn't configured its own key, it falls back to the platform's `R
 - [ ] Webhook ingestion (receive events from Stripe, Segment, etc.)
 - [ ] Contact import via CSV
 - [ ] Resend webhook → bounce/complaint handling
-- [ ] Campaign step delay execution (wait nodes)
 - [ ] A/B testing for broadcasts
 - [ ] SendGrid / AWS SES / Postmark provider support
 - [ ] SAML/SSO for enterprise

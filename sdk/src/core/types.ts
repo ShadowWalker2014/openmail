@@ -198,9 +198,43 @@ export interface ListSendsOptions {
 
 // ─── Campaigns ────────────────────────────────────────────────────────────────
 
-export type CampaignStatus = "draft" | "active" | "paused" | "archived";
+/**
+ * Campaign status — Stage 2 [A2.5] forward-compat brand: accepts known string
+ * literals AND any unknown string at compile time, so SDK consumers don't have
+ * exhaustive-switch breakages when Stages 3-6 add states (e.g. `migrating`,
+ * `replaying`). Union members documented:
+ *   - `draft`     never enrolled, fully editable
+ *   - `active`    enrolling + processing
+ *   - `paused`    no new enrollments; in-flight wait jobs cancelled
+ *   - `stopping`  Stage 2: drain in progress (sweeper promotes → stopped)
+ *   - `stopped`   Stage 2: terminal stop (drain or force)
+ *   - `archived`  terminal — cannot be reactivated
+ */
+export type CampaignStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "stopping"
+  | "stopped"
+  | "archived"
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  | (string & {});
+
 export type TriggerType = "event" | "segment_enter" | "segment_exit" | "manual";
 export type StepType = "email" | "wait";
+
+/**
+ * Re-enrollment policy (Stage 2 — REQ-08, [V2.3]).
+ * - `never` (default — preserves pre-Stage-2 implicit behaviour)
+ * - `always`            re-enter every time trigger fires
+ * - `after_cooldown`    re-enter after `re_enrollment_cooldown_seconds`
+ * - `on_attribute_change` re-enter only if attributes changed since last enrollment
+ */
+export type ReEnrollmentPolicy =
+  | "never"
+  | "always"
+  | "after_cooldown"
+  | "on_attribute_change";
 
 export interface CampaignStep {
   id: string;
@@ -212,6 +246,54 @@ export interface CampaignStep {
   updatedAt: string;
 }
 
+/**
+ * Stage 5 — goal-based early exit. A goal is a campaign-scoped condition
+ * that, when satisfied by a contact's state, terminates that contact's
+ * enrollment via `goal_achieved`. Multiple goals are evaluated with OR
+ * semantics — first match wins (position is display-only).
+ */
+export type CampaignGoalCondition =
+  | {
+      type: "event";
+      eventName: string;
+      propertyFilter?: Record<string, unknown>;
+      sinceEnrollment?: boolean;
+    }
+  | {
+      type: "attribute";
+      attributeKey: string;
+      operator: "eq" | "neq" | "gt" | "lt" | "contains" | "exists";
+      value?: unknown;
+    }
+  | {
+      type: "segment";
+      segmentId: string;
+      requireMembership?: boolean;
+    };
+
+export interface CampaignGoal {
+  id: string;
+  campaignId: string;
+  workspaceId: string;
+  condition: CampaignGoalCondition;
+  position: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCampaignGoalInput {
+  condition: CampaignGoalCondition;
+  position?: number;
+  enabled?: boolean;
+}
+
+export interface UpdateCampaignGoalInput {
+  condition?: CampaignGoalCondition;
+  position?: number;
+  enabled?: boolean;
+}
+
 export interface Campaign {
   id: string;
   workspaceId: string;
@@ -220,23 +302,112 @@ export interface Campaign {
   status: CampaignStatus;
   triggerType: TriggerType;
   triggerConfig: Properties;
+  /** Stage 2 — re-enrollment policy */
+  reEnrollmentPolicy: ReEnrollmentPolicy;
+  /** Stage 2 — required when reEnrollmentPolicy === "after_cooldown" */
+  reEnrollmentCooldownSeconds: number | null;
   createdAt: string;
   updatedAt: string;
   steps?: CampaignStep[];
 }
 
-export interface CreateCampaignInput {
+/**
+ * Discriminated union for re-enrollment policy: `after_cooldown` REQUIRES
+ * cooldown_seconds at compile time. The other 3 variants forbid it.
+ */
+export type ReEnrollmentInput =
+  | { re_enrollment_policy?: "never" | "always" | "on_attribute_change"; re_enrollment_cooldown_seconds?: never }
+  | { re_enrollment_policy: "after_cooldown"; re_enrollment_cooldown_seconds: number };
+
+export type CreateCampaignInput = {
   name: string;
   triggerType: TriggerType;
   triggerConfig?: Properties;
   description?: string;
-}
+} & ReEnrollmentInput;
 
-export interface UpdateCampaignInput {
+export type UpdateCampaignInput = {
   name?: string;
   description?: string;
   status?: CampaignStatus;
   triggerConfig?: Properties;
+} & Partial<ReEnrollmentInput>;
+
+/**
+ * Stage 2 [V2.10] — common return shape for all lifecycle-aware SDK methods
+ * (`.pause`, `.resume`, `.stop`, `.archive`, `.create`, `.update`).
+ *
+ * `eventSeq` is null for campaign-aggregate events (drain_started, drain_completed,
+ * archived, etc.) and a positive integer for per-enrollment events. Callers
+ * use eventId for forensic queries and eventSeq for replay ordering.
+ */
+export interface CampaignLifecycleResult {
+  campaign: Campaign;
+  eventId?: string;
+  eventSeq?: number | null;
+  /** Lifecycle op-id correlation (matches X-Lifecycle-Op-Id request header). */
+  lifecycle_op_id?: string;
+  /** stop-force only — number of enrollments cancelled (Stage 2 T13). */
+  cancelled?: number;
+  /** archive only — true when the campaign was already archived (idempotent path). */
+  idempotent?: boolean;
+}
+
+/**
+ * Stage 3 [A3.1] — resume modes (extended from Stage 2's literal-only).
+ *
+ * - `immediate`: send all overdue messages at once (Stage 2 default; safe for
+ *   short pauses but DANGEROUS for >24h pauses).
+ * - `spread`: distribute overdue sends across a time window (RECOMMENDED for
+ *   long pauses).
+ * - `skip_stale`: drop messages whose scheduled_at is older than the
+ *   threshold; advance the enrollments to next step.
+ * - `skip_stale_spread`: combined — drop stale, then spread the remainder.
+ */
+export type ResumeMode =
+  | "immediate"
+  | "spread"
+  | "skip_stale"
+  | "skip_stale_spread";
+
+export type SpreadStrategy =
+  | "fifo_by_original_time"
+  | "fifo_by_resume_time";
+
+/**
+ * Stage 3 — discriminated union over resume body shapes. The shape varies by
+ * `mode`: spread-bearing modes accept a window + strategy; stale-bearing
+ * modes accept a stale threshold.
+ */
+export type ResumeInput =
+  | { mode: "immediate" }
+  | {
+      mode: "spread";
+      spread_window_seconds?: number;
+      spread_strategy?: SpreadStrategy;
+    }
+  | {
+      mode: "skip_stale";
+      stale_threshold_seconds?: number;
+    }
+  | {
+      mode: "skip_stale_spread";
+      spread_window_seconds?: number;
+      stale_threshold_seconds?: number;
+      spread_strategy?: SpreadStrategy;
+    };
+
+/**
+ * Stage 2 stop body — discriminated union enforces `confirm_force: true`
+ * literal at compile time when `mode === "force"`.
+ */
+export type StopInput =
+  | { mode: "drain" }
+  | { mode: "force"; confirm_force: true };
+
+/** Archive body — TS literal hard requirement (`confirm_terminal: true`). */
+export interface ArchiveInput {
+  confirm_terminal: true;
 }
 
 export interface CreateStepInput {

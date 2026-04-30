@@ -1,0 +1,138 @@
+---
+title: Per-step pause
+description: Pause a single step in a campaign without halting the whole journey. The only platform that ships granular per-step pause + safe-edit workflow.
+---
+
+# Per-step pause
+
+Most marketing platforms only let you pause an entire campaign. That's coarse: pausing the whole journey to fix a typo on step 3 also halts perfectly-fine emails on step 1 and step 5. OpenMail's **per-step pause** lets you pause a single step — new arrivals at THAT step are held in place, but every other step keeps running.
+
+## Industry context
+
+| Platform | Per-step pause? |
+|----------|-----------------|
+| Customer.io | ❌ Whole-campaign only |
+| Mailchimp Customer Journeys | ❌ Whole-campaign only |
+| Mautic | ❌ Whole-campaign only |
+| HubSpot Workflows | ❌ Whole-workflow only |
+| ActiveCampaign | ❌ Whole-automation only |
+| **OpenMail** | ✅ Per-step pause + safe-edit + integrated burst mitigation |
+
+## State model
+
+Every `campaign_steps` row gains a status:
+
+```
+campaign_steps.status: 'active' | 'paused'
+```
+
+Held enrollments are tracked on `campaign_enrollments`:
+
+- `current_step_id` — the held step
+- `step_held_at` — timestamp the operator paused (NULL when not held)
+- `next_run_at` — paused; cleared until resume
+
+When you call `POST /api/v1/campaigns/:id/steps/:stepId/pause`:
+
+1. The step's `status` flips to `paused`. Idempotent — already-paused returns 200 with `idempotent: true`.
+2. Active enrollments at THIS step get `step_held_at = now()`.
+3. Audit events emit:
+   - `step_paused` (campaign-aggregate, no `enrollment_id`).
+   - `step_held` per enrollment.
+4. Tagged BullMQ jobs for this step are removed exhaustively (no SCAN — we maintain a deterministic Redis SET keyed by stepId).
+
+Other steps in the campaign keep firing. New enrollments arriving via trigger are not blocked from progressing through earlier active steps; they only halt if/when they reach the paused step.
+
+## Safe-edit workflow
+
+The pause/edit/resume pattern lets you safely fix a step's config without losing in-flight enrollments:
+
+```bash
+# 1. Pause step 3.
+curl -X POST /api/v1/campaigns/cmp_xxx/steps/stp_yyy/pause
+
+# 2. Edit the step's email template.
+curl -X PATCH /api/v1/campaigns/cmp_xxx/steps/stp_yyy \
+  -d '{"config": {"templateId": "tpl_NEW"}}'
+
+# 3. Resume — held enrollments now use the new template.
+curl -X POST /api/v1/campaigns/cmp_xxx/steps/stp_yyy/resume \
+  -d '{"mode": "immediate"}'
+```
+
+For long pauses, use the [burst-mitigation modes](/concepts/burst-mitigation) — same 4 modes as campaign-level resume:
+
+```bash
+curl -X POST /api/v1/campaigns/cmp_xxx/steps/stp_yyy/resume \
+  -d '{"mode": "spread", "spread_window_seconds": 14400}'
+```
+
+## Step deletion while paused
+
+If you delete a paused step that still has held enrollments:
+
+```bash
+curl -X DELETE /api/v1/campaigns/cmp_xxx/steps/stp_yyy
+```
+
+OpenMail emits a `reconciled` audit event per held enrollment and advances each one to the next step (or completes the enrollment if the deleted step was last). Idempotent — running the delete twice (e.g. retried API call) does not double-advance.
+
+## Stop-drain × held-step deadlock — resolved
+
+If the campaign is stop-drained (`POST /campaigns/:id/stop` with `mode: drain`) while held enrollments exist at a paused step, the sweeper would otherwise hang forever waiting for held enrollments to finish on their own. OpenMail's drain-completion path resolves this:
+
+1. Sweeper waits for **progressing** enrollments (status='active' AND step_held_at IS NULL) to reach 0.
+2. Once progressing=0, held enrollments at paused steps are **force-exited** via `force_exited_at = NOW()` + `force_exited` audit event with `reason: held_at_paused_step_during_drain`.
+3. Campaign promotes `stopping → stopped`.
+
+This is enforced by the integration test `[A4.1] stop_drain × held-step deadlock`.
+
+## Audit events
+
+| Event type | Scope | Emitted when |
+|------------|-------|--------------|
+| `step_paused` | aggregate | step status `active → paused` |
+| `step_resumed` | aggregate | step status `paused → active` |
+| `step_held` | per-enrollment | enrollment was held at the paused step |
+| `reconciled` | per-enrollment | held enrollment was advanced past a deleted/edited step |
+| `force_exited` | per-enrollment | held enrollment force-exited during stop_drain |
+
+All events carry `payload.lifecycle_op_id` so operator forensics can correlate the full pause→edit→resume chain.
+
+## SDK
+
+```ts
+import { OpenMail } from "@openmail/sdk";
+
+const om = new OpenMail({ apiKey });
+
+// Pause a single step
+await om.campaigns.steps("cmp_xxx").pause("stp_yyy");
+
+// Resume with burst mitigation
+await om.campaigns.steps("cmp_xxx").resume("stp_yyy", {
+  mode: "spread",
+  spread_window_seconds: 14400, // 4h
+});
+```
+
+## MCP
+
+```js
+await client.callTool("pause_campaign_step", {
+  campaignId: "cmp_xxx",
+  stepId: "stp_yyy",
+});
+
+await client.callTool("resume_campaign_step", {
+  campaignId: "cmp_xxx",
+  stepId: "stp_yyy",
+  mode: "spread",
+  spread_window_seconds: 14400,
+});
+```
+
+## Related
+
+- [Burst-send mitigation](/concepts/burst-mitigation) — modes shared with per-step resume
+- [Lifecycle audit](/concepts/lifecycle-audit) (Stage 6) — replay + forensics

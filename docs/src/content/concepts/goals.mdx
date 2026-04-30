@@ -1,0 +1,141 @@
+---
+title: Goals (early-exit conditions)
+description: Define campaign-scoped exit conditions so contacts who already converted, churned, or otherwise don't need the rest of a journey are removed cleanly without sending more email.
+---
+
+# Goals
+
+A **goal** is a per-campaign condition that, when satisfied by a contact's state, terminates that contact's enrollment immediately. No more steps fire. The most common use case: a checkout-recovery flow that should stop the moment the customer pays — sending follow-up "did you forget us?" emails after a successful payment is bad UX and worse engagement metrics.
+
+Goals are evaluated **on every step advance** (proactive) and **whenever a relevant event arrives** (reactive). When any goal matches, the engine cancels pending wait jobs for that enrollment, marks it `completed`, records `completed_via_goal_id`, and emits a paired audit `goal_achieved` + `enrollment_completed` event.
+
+## Use cases
+
+| Pattern | Condition | What it prevents |
+|---------|-----------|------------------|
+| Exit on conversion event | `event: checkout_completed` | Sending recovery emails after the customer paid |
+| Exit when re-engaged | `segment: inactive_users (leaves)` | Sending "we miss you" to active users |
+| Exit on plan upgrade | `attribute: plan == pro` | Sending free-tier upsell to paying customers |
+| Exit when survey done | `event: survey_submitted` | Asking again after the user answered |
+
+## Condition types
+
+### `event`
+
+Fires when a tracked event matching the configured name (and optional property filter) is observed for the contact. By default only events occurring **after enrollment.startedAt** count — pre-enrollment events do not trigger spurious immediate exits.
+
+```ts
+await client.campaigns.goals(campaignId).add({
+  condition: {
+    type: "event",
+    eventName: "checkout_completed",
+    propertyFilter: { plan: "pro" }, // optional
+    sinceEnrollment: true,            // default
+  },
+});
+```
+
+### `attribute`
+
+Fires when the contact's attribute matches an operator+value comparison. Operators: `eq`, `neq`, `gt`, `lt`, `contains`, `exists`.
+
+```ts
+await client.campaigns.goals(campaignId).add({
+  condition: {
+    type: "attribute",
+    attributeKey: "plan",
+    operator: "eq",
+    value: "pro",
+  },
+});
+```
+
+### `segment`
+
+Fires when the contact's segment membership matches. `requireMembership: true` (default) → goal fires when contact JOINS the segment. `requireMembership: false` → goal fires when the contact LEAVES the segment.
+
+```ts
+await client.campaigns.goals(campaignId).add({
+  condition: {
+    type: "segment",
+    segmentId: "seg_inactive_users",
+    requireMembership: false, // exit when contact leaves "inactive"
+  },
+});
+```
+
+## Multiple goals: OR semantics
+
+A campaign can have any number of goals. They are evaluated with OR semantics — the first match wins. The `position` field is for display order only; it does NOT short-circuit evaluation order at the engine level.
+
+```ts
+// Goal A: paid
+await client.campaigns.goals(c).add({
+  condition: { type: "event", eventName: "checkout_completed" },
+});
+// Goal B: upgraded
+await client.campaigns.goals(c).add({
+  condition: { type: "attribute", attributeKey: "plan", operator: "eq", value: "pro" },
+});
+```
+
+A contact who matches either goal exits via that goal's id (recorded in `completed_via_goal_id`).
+
+## Audit trail
+
+Every goal exit emits a **causal pair** of events:
+
+```
+goal_achieved         ← per-enrollment, includes goal_id + match payload
+enrollment_completed  ← per-enrollment, payload.via = "goal"
+```
+
+Natural completion (last step finished) emits only `enrollment_completed` with `payload.via` absent or `"natural"`. Use `enrollment.completed_via_goal_id` to distinguish:
+
+```sql
+SELECT
+  COUNT(*) FILTER (WHERE completed_via_goal_id IS NOT NULL) AS goal_completions,
+  COUNT(*) FILTER (WHERE completed_via_goal_id IS NULL AND status = 'completed') AS natural_completions
+FROM campaign_enrollments
+WHERE campaign_id = $1;
+```
+
+CRUD on goals also emits campaign-aggregate events: `goal_added`, `goal_updated`, `goal_removed`. These have `enrollment_id = NULL` and are scoped by `campaign_id`.
+
+## Evaluation timing
+
+| Trigger | When |
+|---------|------|
+| Proactive | Before every `enqueueNextStep` (wait expiry, post-send, initial enrollment) |
+| Reactive | When a tracked event arrives — every active enrollment of that contact in active campaigns is re-evaluated |
+
+Reactive evaluation is **best-effort** — if Redis pub/sub for cache invalidation drops a message, workers refresh on the cache TTL (default 300 seconds). Goal exits never miss; they may just take up to TTL seconds to apply on a different worker after a CRUD change.
+
+## Performance
+
+- **L1 LRU cache** on each worker process. Default size 1000 campaigns; default TTL 300s. Override via `LIFECYCLE_GOAL_CACHE_LRU_SIZE` and `LIFECYCLE_GOAL_CACHE_TTL_SECONDS`.
+- **Workspace shard router** — forward-compat plumbing for cache locality at fleet scale. Default `LIFECYCLE_WORKSPACE_SHARD_COUNT=1` (no sharding). Production scale flips this to `N` matching worker replica count, restoring near-100% cache hit ratio at multi-tenant scale.
+- **No N+1 queries** — evaluator loads the contact row once and runs at most one events query per goal in worst case.
+
+## Frozen statuses
+
+Goals can NOT be added, updated, or removed on campaigns in `stopping`, `stopped`, or `archived` status. The API returns HTTP 409. Goals on terminal-status campaigns are also NOT evaluated — the drain sweeper is the canonical owner of those enrollments.
+
+## Limitations
+
+- OR semantics only at MVP. Future stages may add AND.
+- No goal expiry ("achievable only within N days of enrollment"). Future scope.
+- No negative goals ("exit only if NOT this condition"). Use the inverse explicitly.
+- No per-step goals (goals are campaign-scoped). Future scope.
+- No cross-campaign goals.
+
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/campaigns/:id/goals` | List goals (ordered by `position`) |
+| `POST` | `/campaigns/:id/goals` | Add a goal |
+| `PATCH` | `/campaigns/:id/goals/:goalId` | Partial update |
+| `DELETE` | `/campaigns/:id/goals/:goalId` | Hard delete |
+
+See the [SDK reference](/api/campaigns) and [MCP tools](/mcp/campaigns) for client-side bindings.

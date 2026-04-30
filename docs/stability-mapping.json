@@ -1,0 +1,50 @@
+{
+  "$schema": "Maps docs MDX section anchors carrying a `<StabilityBadge level=\"stable\" />` marker to the integration test that proves the behavior. Required for every Stable badge per [A0.1] in PRPs/sota-lifecycle-engine/03-plan-stage-0.md. Beta and Roadmap badges are not enforced. Section slugs are produced by the same slugify() in scripts/check-stability-mapping.ts (lowercase, alphanumerics + dashes, dots/underscores stripped).",
+  "mappings": [
+    {
+      "file": "docs/src/content/api/campaigns.mdx",
+      "section": "state-machine-stage-2",
+      "test": "lifecycle.integration.test.ts > Lifecycle verbs — full cycle (enroll → pause → resume → stop_drain → archive) > walks a campaign through every reachable status with audit events"
+    },
+    {
+      "file": "docs/src/content/api/campaigns.mdx",
+      "section": "verb-endpoints",
+      "test": "lifecycle.integration.test.ts > Lifecycle verbs — full cycle (enroll → pause → resume → stop_drain → archive) > walks a campaign through every reachable status with audit events"
+    },
+    {
+      "file": "docs/src/content/api/campaigns.mdx",
+      "section": "re-enrollment-policy-stage-2",
+      "test": "lifecycle.integration.test.ts > Re-enrollment policy > policy='never' blocks 2nd trigger after enrollment completes"
+    },
+    {
+      "file": "docs/src/content/api/campaigns.mdx",
+      "section": "campaign-steps",
+      "test": "campaign.integration.test.ts > Campaign engine — email + wait + email > 3-step campaign for 5 contacts: email → wait 1s → email — both sends complete"
+    },
+    {
+      "file": "docs/src/content/mcp/campaigns.mdx",
+      "section": "lifecycle-tools",
+      "test": "mcp.test.ts > tool registration > registers exactly 27 tools (Stage 2 added 3 lifecycle.* verbs)"
+    },
+    {
+      "file": "docs/src/content/mcp/campaigns.mdx",
+      "section": "lifecyclepausecampaign-stage-2",
+      "test": "mcp.test.ts > pause_campaign (legacy → audited PATCH alias) > PATCHes /campaigns/:id with status=paused"
+    },
+    {
+      "file": "docs/src/content/mcp/campaigns.mdx",
+      "section": "lifecyclestopcampaign-stage-2",
+      "test": "mcp.test.ts > stop_campaign (lifecycle.*) > POST /campaigns/:id/stop with drain mode"
+    },
+    {
+      "file": "docs/src/content/mcp/campaigns.mdx",
+      "section": "lifecyclearchivecampaign-stage-2",
+      "test": "mcp.test.ts > archive_campaign (lifecycle.*) > POST /campaigns/:id/archive with confirm_terminal"
+    },
+    {
+      "file": "docs/src/content/mcp/campaigns.mdx",
+      "section": "pausecampaign-legacy-deprecated",
+      "test": "mcp.test.ts > pause_campaign (legacy → audited PATCH alias) > PATCHes /campaigns/:id with status=paused"
+    }
+  ]
+}

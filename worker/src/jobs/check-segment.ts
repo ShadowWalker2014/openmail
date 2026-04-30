@@ -16,32 +16,40 @@
  *   - O(1 contact × N active-segment-triggered-campaigns) — never loads all contacts
  *   - contactMatchesSegment fetches only the single contact's events/groups
  *   - BullMQ rate limiter prevents thundering herd on bulk imports
+ *
+ * Stage 2 additions (T11):
+ *   - lifecycle_op_id propagated via job data; generated locally with prefix
+ *     `lop_segment_` when absent (CR-15, [V2.5])
+ *   - shouldAllowEnrollment gates each enrollment per campaign re-enrollment
+ *     policy (REQ-15, CR-09)
  */
 
-import { Worker, Queue } from "bullmq";
-import { getWorkerRedisConnection, getQueueRedisConnection } from "../lib/redis.js";
+import { Worker } from "bullmq";
+import { sql, eq, and, inArray } from "drizzle-orm";
+import { getWorkerRedisConnection } from "../lib/redis.js";
 import { getDb } from "@openmail/shared/db";
 import {
   campaigns, campaignEnrollments, campaignSteps,
-  contacts, emailSends, segmentMemberships,
+  contacts, segmentMemberships,
 } from "@openmail/shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
 import { generateId } from "@openmail/shared/ids";
 import { contactMatchesSegment } from "../lib/segment-evaluator.js";
 import { logger } from "../lib/logger.js";
+// Stage 5 (T7): goal-aware advance wrapper.
+import { advanceWithGoalCheck } from "../lib/advance-with-goal-check.js";
+import { shouldAllowEnrollment, hashAttributes } from "../lib/re-enrollment-policy.js";
+import { audit, type AuditTx } from "../lib/lifecycle-audit.js";
 
 export interface CheckSegmentJobData {
   contactId:   string;
   workspaceId: string;
   /** Informational — used for logging only */
   reason: "contact_updated" | "event_tracked" | "group_changed" | "ingest_identify";
-}
-
-let _sendEmailQueue: Queue | null = null;
-function getSendEmailQueue() {
-  if (!_sendEmailQueue)
-    _sendEmailQueue = new Queue("send-email", { connection: getQueueRedisConnection() });
-  return _sendEmailQueue;
+  /**
+   * Stage 2 [V2.5] / CR-15 — operation correlation id propagated from upstream.
+   * Generated locally with `lop_segment_` prefix when absent.
+   */
+  lifecycle_op_id?: string;
 }
 
 export function createCheckSegmentWorker() {
@@ -50,9 +58,12 @@ export function createCheckSegmentWorker() {
     async (job) => {
       const { contactId, workspaceId, reason } = job.data;
       const db = getDb();
+      const lifecycleOpId =
+        job.data.lifecycle_op_id ?? generateId("lop_segment");
+      const log = logger.child({ lifecycle_op_id: lifecycleOpId });
 
       // ── 1. Only proceed if there are active segment_enter/exit campaigns ──
-      // Bail early to avoid touching the DB for workspaces with no such campaigns.
+      // Stage 1 invariant (CN-04 / CR-09): campaigns.status='active' filter MUST remain.
       const triggerCampaigns = await db
         .select()
         .from(campaigns)
@@ -75,9 +86,9 @@ export function createCheckSegmentWorker() {
 
       if (segmentIds.length === 0) return;
 
-      // ── 3. Verify contact exists and fetch email (needed for emailSends) ──
+      // ── 3. Verify contact exists in this workspace ───────────────────────
       const [contact] = await db
-        .select({ id: contacts.id, email: contacts.email, unsubscribed: contacts.unsubscribed })
+        .select({ id: contacts.id })
         .from(contacts)
         .where(and(eq(contacts.id, contactId), eq(contacts.workspaceId, workspaceId)))
         .limit(1);
@@ -96,8 +107,6 @@ export function createCheckSegmentWorker() {
       const wasInSegment = new Set(existingMemberships.map((m) => m.segmentId));
 
       // ── 5. Evaluate current membership for each relevant segment ──────────
-      // contactMatchesSegment is efficient: fetches only this contact's
-      // events and group memberships, never the whole workspace.
       for (const segmentId of segmentIds) {
         const nowIn = await contactMatchesSegment(contactId, segmentId);
         const wasIn = wasInSegment.has(segmentId);
@@ -128,83 +137,108 @@ export function createCheckSegmentWorker() {
         );
 
         for (const campaign of matchingCampaigns) {
-          // Check for existing active enrollment (idempotency guard)
-          const [existing] = await db
-            .select({ id: campaignEnrollments.id, status: campaignEnrollments.status })
-            .from(campaignEnrollments)
-            .where(and(
-              eq(campaignEnrollments.campaignId, campaign.id),
-              eq(campaignEnrollments.contactId, contactId),
-            ))
-            .limit(1);
-
-          if (existing?.status === "active") {
-            logger.info({ campaignId: campaign.id, contactId }, "Already actively enrolled, skipping");
-            continue;
-          }
-
-          // Load campaign steps ordered by position
-          const steps = await db
-            .select()
+          // Quick guard: skip enrollment for campaigns with no steps.
+          const [hasStep] = await db
+            .select({ id: campaignSteps.id })
             .from(campaignSteps)
             .where(eq(campaignSteps.campaignId, campaign.id))
-            .orderBy(campaignSteps.position);
+            .limit(1);
 
-          if (steps.length === 0) {
-            logger.warn({ campaignId: campaign.id }, "segment_enter/exit campaign has no steps");
+          if (!hasStep) {
+            log.warn({ campaignId: campaign.id }, "segment_enter/exit campaign has no steps");
             continue;
           }
 
-          const firstStep = steps[0];
-
-          // Upsert enrollment — re-activates previously completed/paused enrollments
-          await db
-            .insert(campaignEnrollments)
-            .values({
-              id:            generateId("enr"),
-              campaignId:    campaign.id,
-              workspaceId,
+          // ─── Stage 2 — re-enrollment policy gate + audited upsert ──────
+          const newEnrollmentId = generateId("enr");
+          const upsertedId = await db.transaction(async (tx: AuditTx) => {
+            const decision = await shouldAllowEnrollment(
               contactId,
-              currentStepId: firstStep.id,
-              status:        "active",
-            })
-            .onConflictDoUpdate({
-              target: [campaignEnrollments.campaignId, campaignEnrollments.contactId],
-              set: {
+              campaign.id,
+              tx,
+              lifecycleOpId,
+            );
+
+            if (!decision.allowed && decision.reason === "active_exists") {
+              log.info(
+                { campaignId: campaign.id, contactId },
+                "Already actively enrolled, skipping",
+              );
+              return null;
+            }
+
+            if (!decision.allowed) {
+              log.info(
+                { campaignId: campaign.id, contactId, reason: decision.reason },
+                "Re-enrollment blocked by policy",
+              );
+              return null;
+            }
+
+            // Upsert enrollment — re-activates previously completed/paused enrollments.
+            const [upserted] = (await tx
+              .insert(campaignEnrollments)
+              .values({
+                id:            newEnrollmentId,
+                campaignId:    campaign.id,
+                workspaceId,
+                contactId,
+                currentStepId: null,
                 status:        "active",
-                currentStepId: firstStep.id,
-                startedAt:     new Date(),
-                completedAt:   null,
-                updatedAt:     new Date(),
+              })
+              .onConflictDoUpdate({
+                target: [campaignEnrollments.campaignId, campaignEnrollments.contactId],
+                set: {
+                  status:        "active",
+                  currentStepId: null,
+                  startedAt:     new Date(),
+                  completedAt:   null,
+                  updatedAt:     new Date(),
+                },
+              })
+              .returning({ id: campaignEnrollments.id })) as Array<{ id: string }>;
+
+            const contactRow = (await tx.execute<{ attributes: unknown }>(
+              sql`SELECT attributes FROM contacts WHERE id = ${contactId} LIMIT 1`,
+            )) as unknown as Array<{ attributes: unknown }>;
+            const attributes = contactRow[0]?.attributes ?? null;
+
+            await audit.emit(
+              upserted!.id,
+              "enrolled",
+              {
+                campaignId: campaign.id,
+                workspaceId,
+                contactId,
+                actor: { kind: "system" },
+                payload: {
+                  lifecycle_op_id: lifecycleOpId,
+                  trigger: triggerType,
+                  segment_id: segmentId,
+                  reason,
+                  attributes_hash: hashAttributes(attributes),
+                  re_enrollment_reason: decision.reason,
+                },
               },
-            });
+              tx,
+            );
 
-          // Queue first email step if applicable and contact is not unsubscribed
-          // Note: the DB stores "email" (not "send_email") — match accordingly.
-          if (firstStep.stepType === "email" && !contact.unsubscribed) {
-            const stepConfig = firstStep.config as { templateId?: string; subject?: string };
-            const sendId = generateId("snd");
-            await db.insert(emailSends).values({
-              id:              sendId,
-              workspaceId,
-              contactId,
-              contactEmail:    contact.email,
-              campaignId:      campaign.id,
-              campaignStepId:  firstStep.id,
-              subject:         stepConfig.subject ?? "Message from us",
-              status:          "queued",
-            });
-            await getSendEmailQueue().add("send-email", { sendId }, {
-              jobId: `send-email:${sendId}`, // deduplicate: prevent double-sends on concurrent workers
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5_000 },
-              removeOnComplete: { count: 100 },
-              removeOnFail: { count: 100 },
-            });
-          }
+            return upserted!.id;
+          });
 
-          logger.info(
-            { campaignId: campaign.id, contactId, segmentId, triggerType, reason },
+          if (!upsertedId) continue;
+
+          // Stage 5 (T7): kick off step-chain progression via the goal-aware
+          // wrapper so contacts satisfying a goal at the moment of enrollment
+          // exit cleanly. No triggeringEvent here (segment trigger ≠ event).
+          await advanceWithGoalCheck({
+            enrollmentId: upsertedId,
+            completedPosition: -1,
+            lifecycleOpId,
+          });
+
+          log.info(
+            { campaignId: campaign.id, contactId, segmentId, triggerType, reason, enrollmentId: upsertedId },
             "Contact enrolled via segment trigger",
           );
         }
@@ -214,7 +248,6 @@ export function createCheckSegmentWorker() {
       connection:  getWorkerRedisConnection(),
       concurrency: 20,
       // Rate limit prevents thundering-herd on bulk contact imports.
-      // 100 contacts/sec × (N segments × ~5 DB queries) stays manageable.
       limiter: { max: 100, duration: 1000 },
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 100 },

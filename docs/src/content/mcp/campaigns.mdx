@@ -1,11 +1,16 @@
 ---
 title: Campaign Tools
-description: MCP tools for creating and managing automation campaigns.
+description: MCP tools for creating and managing automation campaigns, including the Stage 2 lifecycle verbs.
 ---
 
 # Campaign Tools
 
-4 tools for creating and managing event-triggered automation campaigns.
+8 tools across two namespaces:
+
+- **`campaigns.*`** — CRUD: list, create, update, pause (deprecated)
+- **`lifecycle.*`** — verb-style lifecycle control with full audit trail (Stage 2)
+
+> ⚠️ **Deprecation notice** — `update_campaign({ status: ... })` and the legacy `pause_campaign` tool are kept for backward compatibility but should NOT be used by new agents. Use the `lifecycle.*` tools below — they emit a full audit trail and expose explicit drain / force / archive verbs with destructive-action confirmations.
 
 ## list_campaigns
 
@@ -19,8 +24,6 @@ List all automation campaigns in the workspace.
 
 Create a new automation campaign.
 
-**Parameters:**
-
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|
 | `name` | string | ✓ | Campaign name |
@@ -28,14 +31,11 @@ Create a new automation campaign.
 | `triggerConfig` | object | * | Trigger configuration (see below) |
 | `description` | string | — | Optional description |
 
-**`triggerConfig` by type:**
-
+`triggerConfig` by type:
 - `event`: `{ "eventName": "user_signed_up" }`
 - `segment_enter`: `{ "segmentId": "seg_xxx" }`
 - `segment_exit`: `{ "segmentId": "seg_xxx" }`
 - `manual`: `{}`
-
-**Example — event-triggered welcome campaign:**
 
 > "Create a welcome campaign that fires when someone signs up. Make it active."
 
@@ -44,46 +44,110 @@ Tool: create_campaign
 {
   "name": "Welcome Series",
   "triggerType": "event",
-  "triggerConfig": { "eventName": "user_signed_up" },
-  "description": "Onboard new users with welcome sequence"
+  "triggerConfig": { "eventName": "user_signed_up" }
 }
 → returns campaign with id: cmp_xxx (status: draft)
 
-Tool: update_campaign  
+Tool: update_campaign
 { "campaignId": "cmp_xxx", "status": "active" }
 ```
 
 ---
 
-## update_campaign
+## update_campaign <StabilityBadge level="beta" />
 
 Update a campaign's name, description, or status.
 
-**Parameters:**
+> ⚠️ Setting `status` here is **deprecated** — use the `lifecycle.*` tools (pause_campaign, resume_campaign, stop_campaign, archive_campaign) for richer behaviour and full audit trail. The `update_campaign` tool is kept for backward compatibility only.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|
 | `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
 | `name` | string | — | New campaign name |
 | `description` | string | — | New description |
-| `status` | string | — | `active`, `paused`, or `archived` |
-
-**Status machine:**
-- `draft → active` — start the campaign
-- `active → paused` — pause (no new enrollments)  
-- `paused → active` — resume
-- Any → `archived` — permanent, cannot undo
+| `status` | string | — | **[Deprecated]** `active`, `paused`, or `archived` |
 
 ---
 
-## pause_campaign
+## Lifecycle Tools <StabilityBadge level="stable" />
 
-Shortcut to pause an active campaign. Equivalent to `update_campaign` with `status: "paused"`.
+The `lifecycle.*` family wraps the verb endpoints with full audit trail and destructive-action confirmations.
 
-**Parameters:**
+## lifecycle.pause_campaign (Stage 2) <StabilityBadge level="stable" />
+
+Pause an active campaign — stops new enrollments and freezes pending wait jobs. Reversible: call `resume_campaign` to continue.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|
 | `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
 
-> "Pause the welcome campaign while I update the email templates"
+Replaces the legacy `pause_campaign` tool which used the deprecated PATCH-status alias. Emits a full audit event with `lifecycle_op_id` correlation.
+
+---
+
+## lifecycle.resume_campaign (Stage 2) <StabilityBadge level="beta" />
+
+Resume a paused campaign.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
+| `mode` | `"immediate"` | — | Stage 2 supports `"immediate"` only. Stage 3 will extend with `"spread"` and `"skip_stale"` <StabilityBadge level="roadmap" />. |
+
+---
+
+## lifecycle.stop_campaign (Stage 2) <StabilityBadge level="stable" />
+
+Stop a campaign — drain or force.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
+| `mode` | `"drain" \| "force"` | ✓ | drain (recommended) or force (immediate) |
+| `confirm_force` | `true` | * | **REQUIRED when `mode === "force"`** |
+
+- **`drain`** — flips to `stopping`; the BullMQ sweeper promotes to `stopped` once in-flight enrollments finish naturally. Reversible until promoted.
+- **`force`** — ⚠️ DESTRUCTIVE. Cancels all pending wait jobs immediately and force-exits in-flight enrollments. In-flight emails already sent to Resend will still go out (BullMQ semantics — Stage 1 design).
+
+> "Stop the welcome campaign gracefully — let the in-flight enrollments finish."
+```
+Tool: lifecycle.stop_campaign
+{ "campaignId": "cmp_xxx", "mode": "drain" }
+```
+
+> "Cancel the welcome campaign immediately."
+```
+Tool: lifecycle.stop_campaign
+{ "campaignId": "cmp_xxx", "mode": "force", "confirm_force": true }
+```
+
+---
+
+## lifecycle.archive_campaign (Stage 2) <StabilityBadge level="stable" />
+
+⚠️ **TERMINAL** — archive a campaign.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |
+| `confirm_terminal` | `true` | ✓ | **REQUIRED**. Acknowledge that archive is irreversible. |
+
+Archived campaigns CANNOT be reactivated. Used to retire campaigns from the active list while preserving the audit trail and historical analytics. Idempotent on already-archived campaigns.
+
+> "Retire the welcome campaign — it's been replaced by the v2 onboarding flow."
+```
+Tool: lifecycle.archive_campaign
+{ "campaignId": "cmp_xxx", "confirm_terminal": true }
+```
+
+---
+
+## pause_campaign (legacy — deprecated) <StabilityBadge level="stable" />
+
+> ⚠️ **Deprecated** — use `lifecycle.pause_campaign` instead. This tool drives the deprecated PATCH-status alias.
+
+Pause an active campaign. Equivalent to `update_campaign` with `status: "paused"`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `campaignId` | string | ✓ | Campaign ID (`cmp_xxx`) |

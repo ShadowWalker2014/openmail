@@ -13,3 +13,25 @@ dist/
 .DS_Store
 packages/shared/.env
 web/.tanstack/
+
+# ── Personal / per-machine context (not part of upstream) ──
+# These are AI-assistant context, local-dev helpers, and per-feature PRP
+# notes. They live alongside the repo for individual contributors but
+# never travel upstream.
+.claude/
+PRPs/
+prime.md
+LOCAL.md
+web/vite.config.local.ts
+.todo/
+
+# ── Shadow .js artifacts from local Bun builds (TypeScript sources are SSOT) ──
+# Bun build emits .js next to .ts; never commit them.
+api/src/**/*.js
+worker/src/**/*.js
+mcp/src/**/*.js
+sdk/src/**/*.js
+packages/shared/src/**/*.js
+scripts/**/*.js
+# Keep ESLint custom rule (must be .js for ESLint to load)
+!eslint-rules/**/*.js

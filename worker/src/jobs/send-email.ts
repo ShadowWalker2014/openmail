@@ -5,13 +5,31 @@ import { getResend } from "../lib/resend.js";
 import { getDb } from "@openmail/shared/db";
 import { emailSends, emailTemplates, broadcasts, campaignSteps, workspaces } from "@openmail/shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { generateId } from "@openmail/shared/ids";
 import { logger } from "../lib/logger.js";
 import { injectTracking } from "../lib/email-utils.js";
+// Stage 5 (T7): goal-aware advance wrapper. Used after a campaign-step send
+// (success or permanent failure) so contacts that satisfied a goal on the
+// just-completed step exit cleanly via `goal_achieved` instead of advancing
+// to a step they would never need. The wrapper delegates to Stage 1's
+// `enqueueNextStep` when no goal matches.
+import { advanceWithGoalCheck } from "../lib/advance-with-goal-check.js";
 
 export interface SendEmailJobData {
   sendId: string;
   /** Passed from send-broadcast so we can update sentCount without an extra query */
   broadcastId?: string;
+  /** Set ONLY for campaign-step sends. step-advance.ts populates these. */
+  enrollmentId?: string;
+  /** Position of the step that just sent — passed to enqueueNextStep on success/permanent-failure. */
+  campaignStepPosition?: number;
+  /**
+   * Stage 2 [V2.5] / CR-15 — operation correlation id propagated from upstream.
+   * When absent (pre-Stage-2 spawn path via Stage 1's enqueueNextStep), generated
+   * locally with `lop_send_` prefix. Acceptable trade-off (Option A): existing
+   * Stage 1 emails won't carry op_id until Stage 2's audit chain takes over.
+   */
+  lifecycle_op_id?: string;
 }
 
 /**
@@ -43,7 +61,11 @@ export function createSendEmailWorker() {
     async (job) => {
       const db = getDb();
       const trackerUrl = process.env.TRACKER_URL ?? "http://localhost:3002";
-      const { sendId, broadcastId } = job.data;
+      const { sendId, broadcastId, enrollmentId, campaignStepPosition } = job.data;
+      // Per Stage 2 [V2.5] CR-15 — request-scoped op_id binding.
+      const lifecycleOpId =
+        job.data.lifecycle_op_id ?? generateId("lop_send");
+      const log = logger.child({ lifecycle_op_id: lifecycleOpId, sendId });
 
       const [send] = await db.select().from(emailSends).where(eq(emailSends.id, sendId)).limit(1);
       if (!send) throw new Error(`Send ${sendId} not found`);
@@ -147,8 +169,8 @@ export function createSendEmailWorker() {
             transientError = new Error(
               `Resend transient error (will retry): ${result.error.message}`,
             );
-            logger.warn(
-              { sendId, error: result.error.message },
+            log.warn(
+              { error: result.error.message },
               "Transient Resend error — job will be retried",
             );
           } else {
@@ -158,7 +180,7 @@ export function createSendEmailWorker() {
               failedAt: new Date(),
               failureReason: result.error.message,
             }).where(eq(emailSends.id, sendId));
-            logger.warn({ sendId, error: result.error.message }, "Email send failed (permanent)");
+            log.warn({ error: result.error.message }, "Email send failed (permanent)");
           }
         } else {
           await db.update(emailSends).set({
@@ -167,7 +189,7 @@ export function createSendEmailWorker() {
             sentAt: new Date(),
           }).where(eq(emailSends.id, sendId));
           sendSuccess = true;
-          logger.info({ sendId, resendMessageId: result.data!.id }, "Email sent successfully");
+          log.info({ resendMessageId: result.data!.id }, "Email sent successfully");
         }
       } finally {
         // Advance broadcast sentCount only when definitively processed (success or
@@ -205,13 +227,33 @@ export function createSendEmailWorker() {
       // with backoff. (The finally block was a no-op for transient errors.)
       if (transientError) throw transientError;
 
+      // ── Campaign step advancement ───────────────────────────────────────
+      // For campaign-step sends, advance the enrollment to the next step on
+      // BOTH success and permanent failure. A bounce / bad address is a
+      // permanent failure of *this* step; it should NOT halt subsequent
+      // steps of a multi-step campaign (a single bad address otherwise
+      // strands the contact forever). Transient errors are retried by
+      // BullMQ — advancement waits until the eventual definitive outcome.
+      //
+      // Idempotency: advanceWithGoalCheck (and enqueueNextStep underneath)
+      // both check enrollment.status === "active" before doing anything, so
+      // cancellation-mid-send is handled.
+      if (enrollmentId !== undefined && campaignStepPosition !== undefined) {
+        await advanceWithGoalCheck({
+          enrollmentId,
+          completedPosition: campaignStepPosition,
+        });
+      }
+
       // Broadcast email failures: sentCount already incremented in finally —
       // don't retry (would double-count) and don't throw.
       if (!sendSuccess && send.broadcastId) return;
 
-      // Campaign email failures: throw so BullMQ marks the job FAILED (not
-      // COMPLETED) and applies retry logic.
-      if (!sendSuccess && !send.broadcastId) {
+      // Campaign email permanent-failure: do NOT throw if we already advanced
+      // the enrollment above (advancement is the intended recovery path).
+      // Without an enrollmentId this is a transactional / one-off campaign
+      // send (legacy path) — preserve the prior throw-on-failure semantics.
+      if (!sendSuccess && !send.broadcastId && enrollmentId === undefined) {
         throw new Error(send.failureReason ?? "Send failed");
       }
     },

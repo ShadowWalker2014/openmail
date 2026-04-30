@@ -438,17 +438,97 @@ describe("campaigns API", () => {
     expect(result.status).toBe("active");
   });
 
-  it("pauses a campaign", async () => {
+  it("pauses a campaign via the new POST /:id/pause verb", async () => {
     const sdk = createSDK();
     server.use(
-      http.patch(`${BASE}/api/v1/campaigns/:id`, async ({ request }) => {
-        const body = await request.json() as Record<string, unknown>;
-        expect(body.status).toBe("paused");
-        return HttpResponse.json({ ...fixtures.campaign, status: "paused" });
+      http.post(`${BASE}/api/v1/campaigns/:id/pause`, async () => {
+        return HttpResponse.json({
+          campaign: { ...fixtures.campaign, status: "paused" },
+          eventId: "eev_test",
+          eventSeq: null,
+          lifecycle_op_id: "lop_api_abcdef123456",
+        });
       })
     );
     const result = await sdk.campaigns.pause("cmp_abc123def456");
-    expect(result.status).toBe("paused");
+    expect(result.campaign.status).toBe("paused");
+    expect(result.eventId).toBe("eev_test");
+  });
+
+  it("resumes a paused campaign with mode=immediate", async () => {
+    const sdk = createSDK();
+    server.use(
+      http.post(`${BASE}/api/v1/campaigns/:id/resume`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body.mode).toBe("immediate");
+        return HttpResponse.json({
+          campaign: { ...fixtures.campaign, status: "active" },
+          eventId: "eev_test_resume",
+          eventSeq: null,
+        });
+      })
+    );
+    const result = await sdk.campaigns.resume("cmp_abc123def456");
+    expect(result.campaign.status).toBe("active");
+  });
+
+  it("stops a campaign in drain mode", async () => {
+    const sdk = createSDK();
+    server.use(
+      http.post(`${BASE}/api/v1/campaigns/:id/stop`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body.mode).toBe("drain");
+        return HttpResponse.json({
+          campaign: { ...fixtures.campaign, status: "stopping" },
+          eventId: "eev_test_drain",
+          eventSeq: null,
+        });
+      })
+    );
+    const result = await sdk.campaigns.stop("cmp_abc123def456", { mode: "drain" });
+    expect(result.campaign.status).toBe("stopping");
+  });
+
+  it("force-stops a campaign with explicit confirmation", async () => {
+    const sdk = createSDK();
+    server.use(
+      http.post(`${BASE}/api/v1/campaigns/:id/stop`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body.mode).toBe("force");
+        expect(body.confirm_force).toBe(true);
+        return HttpResponse.json({
+          campaign: { ...fixtures.campaign, status: "stopped" },
+          eventId: "eev_test_force",
+          eventSeq: null,
+          cancelled: 3,
+        });
+      })
+    );
+    const result = await sdk.campaigns.stop("cmp_abc123def456", {
+      mode: "force",
+      confirm_force: true,
+    });
+    expect(result.campaign.status).toBe("stopped");
+    expect(result.cancelled).toBe(3);
+  });
+
+  it("archives a campaign with explicit confirm_terminal", async () => {
+    const sdk = createSDK();
+    server.use(
+      http.post(`${BASE}/api/v1/campaigns/:id/archive`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body.confirm_terminal).toBe(true);
+        return HttpResponse.json({
+          campaign: { ...fixtures.campaign, status: "archived" },
+          eventId: "eev_test_archive",
+          eventSeq: null,
+        });
+      })
+    );
+    const result = await sdk.campaigns.archive("cmp_abc123def456", {
+      confirm_terminal: true,
+    });
+    expect(result.campaign.status).toBe("archived");
   });
 
   it("adds a step to a campaign", async () => {

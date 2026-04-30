@@ -1,0 +1,44 @@
+---
+title: Roadmap
+description: What is stable, what is in beta, and what is planned for OpenMail's lifecycle engine and beyond.
+---
+
+# OpenMail Roadmap
+
+> Living document — see [`AGENTS.md` "Known Limitations"](https://github.com/ShadowWalker2014/openmail/blob/main/AGENTS.md#known-limitations) for technical detail.
+> Order, not dates: items ship when they pass acceptance, not on a calendar.
+
+OpenMail's lifecycle engine is being delivered in stages under [`PRPs/sota-lifecycle-engine/`](https://github.com/ShadowWalker2014/openmail/tree/main/PRPs/sota-lifecycle-engine). This page reflects what is **shipped**, what is **in beta with known gaps**, and what is **planned**. The three labels map to the badges shown next to feature sections in the [Campaigns API docs](/api/campaigns) and [Campaign MCP tools](/mcp/campaigns).
+
+## ✅ Stable
+
+These features are production-ready with comprehensive integration test coverage.
+
+- **Multi-step campaign progression** <StabilityBadge level="stable" linkToRoadmap={false} /> — `email → wait → email → ...` flows execute reliably via BullMQ delayed jobs. Cancellable on pause / archive / delete. Shipped Stage 1, validated by 54/54 integration tests.
+- **Lifecycle verb endpoints** <StabilityBadge level="stable" linkToRoadmap={false} /> — `POST /api/v1/campaigns/:id/{pause|resume|stop|archive}` with explicit semantics, idempotency, and destructive-action confirmations. Replaces the ambiguous PATCH-with-status pattern (kept as a frozen-shape alias for backward compatibility). Shipped Stage 2.
+- **Re-enrollment policies** <StabilityBadge level="stable" linkToRoadmap={false} /> — `never | always | after_cooldown | on_attribute_change` per campaign. Default `never` matches pre-Stage-2 behavior. Shipped Stage 2.
+- **Append-only audit log** <StabilityBadge level="stable" linkToRoadmap={false} /> — `enrollment_events` table records every state transition with `event_seq` (per-enrollment monotonic) and `lifecycle_op_id` correlation. Replayable for forensics and dashboard timeline reconstruction. Shipped Stage 2.
+- **Audit chokepoint trigger (campaigns)** <StabilityBadge level="stable" linkToRoadmap={false} /> — Postgres `audit_chokepoint_check` trigger on `campaigns.status` blocks status mutations outside the `commitLifecycleStatus()` helper. Defense-in-depth beyond TypeScript brand types and ESLint. Shipped Stage 2 (campaigns scope; enrollments scope deferred — see Beta below).
+- **Cross-replica rate limiting** <StabilityBadge level="stable" linkToRoadmap={false} /> — Redis fixed-window counter for ingest and broadcasts test-send. Cross-replica safe via atomic Lua EVAL. Shipped Stage 1.
+
+## 🟡 Beta
+
+Working but with documented gaps that close in subsequent stages.
+
+- **Resume mode `immediate` only** <StabilityBadge level="beta" linkToRoadmap={false} /> — `POST /:id/resume` flips status `paused → active` and emits a `resumed` audit event but does **not** re-enqueue cancelled BullMQ wait jobs nor spread overdue enrollments nor skip stale ones. Long pauses risk a burst on resume. Stage 3 adds `spread`, `skip_stale`, `skip_stale_spread` modes.
+- **Audit chokepoint trigger covers `campaigns.status` only** <StabilityBadge level="beta" linkToRoadmap={false} /> — `campaign_enrollments.status` mutations from Stage 1 helpers (`step-advance.ts`) bypass the trigger. Stage 3 will rewire enrollment status mutations through `commitLifecycleStatus`. Until then, replay-drift detection on enrollments relies on integration test coverage rather than a database constraint.
+
+## 🔵 Roadmap
+
+Planned but not yet implemented. Ordered roughly by dependency, not by date.
+
+- **Burst mitigation on resume** <StabilityBadge level="roadmap" linkToRoadmap={false} /> — Stage 3. Spread overdue enrollments over an operator-chosen window; skip stale enrollments past a workspace-configurable threshold (default 7 days). Rewires enrollment-level status mutations through the audit chokepoint.
+- **Per-step pause** <StabilityBadge level="roadmap" linkToRoadmap={false} /> — Stage 4. Pause one step in a multi-step flow without halting the rest of the in-flight contacts. Useful for fixing a broken template mid-campaign.
+- **Goal-based early exit** <StabilityBadge level="roadmap" linkToRoadmap={false} /> — Stage 5. Conditions that exit enrollments early when satisfied (e.g. user converted; exit cart-abandonment flow).
+- **Audit timeline UI + replay tool + GDPR PII redaction** <StabilityBadge level="roadmap" linkToRoadmap={false} /> — Stage 6. Per-enrollment timeline view via ElectricSQL real-time sync; CLI replay tool that reconstructs final state from `enrollment_events`; PII-redaction worker for right-to-erasure compliance.
+
+See the [PRP family on GitHub](https://github.com/ShadowWalker2014/openmail/tree/main/PRPs/sota-lifecycle-engine) for full spec documents.
+
+## Internal context
+
+For Claude Code agents and contributors: see [`AGENTS.md` "Known Limitations"](https://github.com/ShadowWalker2014/openmail/blob/main/AGENTS.md#known-limitations) for current-state technical detail (resume semantics around BullMQ, mid-flight Resend behavior, etc.).

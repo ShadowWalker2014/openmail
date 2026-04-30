@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
-const DOCS_URL = process.env.OPENMAIL_DOCS_URL ?? "https://openmail.win/docs";
+import { getDocsUrl, getApiPublicUrl } from "./lib/public-urls.js";
 
 /**
  * Register reusable prompt templates on the MCP server.
@@ -9,9 +8,16 @@ const DOCS_URL = process.env.OPENMAIL_DOCS_URL ?? "https://openmail.win/docs";
  *
  * IMPORTANT: prompts describe WHAT to achieve, not which specific tool names to call.
  * Tool names and API endpoints change — the AI discovers them via the tool list
- * and the live documentation at ${DOCS_URL}/llms.txt.
+ * and the live documentation. Public URLs are resolved per Stage 2 [A2.12]:
+ *   - DOCS_PUBLIC_URL / OPENMAIL_DOCS_URL env-var (explicit override) →
+ *   - WEB_URL-derived (subdomain swap or /docs path) →
+ *   - SaaS default https://openmail.win/docs.
  */
 export function registerPrompts(server: McpServer) {
+  // Resolved at registration time (still respects "lazy init" — registerPrompts
+  // is called from the per-request handler in src/index.ts, not module-top).
+  const DOCS_URL = getDocsUrl();
+  const API_PUBLIC_URL = getApiPublicUrl();
   // ── 1. Create a campaign ─────────────────────────────────────────────────
   server.registerPrompt(
     "create-campaign",
@@ -183,10 +189,10 @@ For full API and tool reference, read the docs: ${DOCS_URL}/llms.txt`,
       argsSchema: {
         stack: z.enum(["nextjs", "react", "node", "python", "curl"]).describe("Your tech stack"),
         events: z.string().describe("Comma-separated events to track, e.g. 'user_signed_up, plan_upgraded, feature_used'"),
-        apiUrl: z.string().optional().describe("Your OpenMail API URL (defaults to https://api.openmail.win)"),
+        apiUrl: z.string().optional().describe(`Your OpenMail API URL (defaults to ${API_PUBLIC_URL})`),
       },
     },
-    ({ stack, events, apiUrl = "https://api.openmail.win" }) => ({
+    ({ stack, events, apiUrl = API_PUBLIC_URL }) => ({
       messages: [
         {
           role: "user",
