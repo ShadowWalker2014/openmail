@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import CodeBlock from "./CodeBlock";
+import StabilityBadge from "./StabilityBadge";
 
 function extractText(node: ReactNode): string {
   if (typeof node === "string") return node;
@@ -63,4 +64,5 @@ export const mdxComponents = {
   pre: Pre,
   Callout,
   EndpointBadge,
+  StabilityBadge,
 };

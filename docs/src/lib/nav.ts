@@ -171,6 +171,16 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    group: "Project",
+    items: [
+      {
+        title: "Roadmap",
+        href: "/roadmap",
+        description: "Stable / Beta / Roadmap — what ships when",
+      },
+    ],
+  },
+  {
     group: "Self-Hosting",
     items: [
       {

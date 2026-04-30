@@ -9,6 +9,208 @@ Campaigns are automated email sequences triggered by customer events or segment 
 
 **Base URL:** `/api/v1/campaigns`
 
+## State Machine (Stage 2) <StabilityBadge level="stable" />
+
+Campaigns now have explicit lifecycle verb endpoints. The state machine is:
+
+```
+                          ┌──────────────┐
+                          │    draft     │
+                          └──────┬───────┘
+                                 │ activate (PATCH status=active)
+                                 ▼
+        ┌─────────► ┌──────────────┐ ◄─────────┐
+        │           │    active    │           │
+        │           └──┬───────────┘           │
+        │              │  POST /:id/pause      │
+        │              ▼                       │
+        │           ┌──────────────┐           │
+        │           │    paused    │ ──────────┘ POST /:id/resume {mode:"immediate"}
+        │           └──────────────┘
+        │ POST /:id/stop
+        │                ▼
+        │       ┌─────────────────┐    sweeper drains in-flight enrollments
+        │       │    stopping     │ ──────────────────────────►
+        │       └─────────────────┘
+        │                │ (or POST /:id/stop {mode:"force",confirm_force:true} from active|paused)
+        │                ▼
+        │       ┌─────────────────┐
+        │       │     stopped     │
+        │       └─────────┬───────┘
+        │                 │
+        ▼                 ▼
+              ┌─────────────────────┐
+              │      archived       │  ⚠ TERMINAL — cannot be reactivated
+              └─────────────────────┘
+```
+
+States:
+- `draft` — never enrolled, fully editable
+- `active` — enrolling and processing
+- `paused` — no new enrollments; in-flight wait jobs cancelled (resumable)
+- `stopping` — drain in progress; sweeper promotes → `stopped` once empty
+- `stopped` — terminal stop (drain or force); audit trail preserved
+- `archived` — terminal, cannot be reactivated
+
+All transitions are recorded in the `enrollment_events` audit log with a `lifecycle_op_id` correlation key.
+
+## Verb Endpoints <StabilityBadge level="stable" />
+
+### Pause
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/pause" />
+
+Pause an `active` campaign. Returns `409 INVALID_TRANSITION` from any other state.
+
+**Request:** no body required.
+
+```bash
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/pause \
+  -H "Authorization: Bearer om_..."
+```
+
+**Response:**
+```json
+{
+  "campaign": { "id": "cmp_abc", "status": "paused", ... },
+  "lifecycle_op_id": "lop_api_a1b2c3d4e5f6"
+}
+```
+
+### Resume <StabilityBadge level="beta" />
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/resume" />
+
+Resume a `paused` campaign. Stage 3 supports four resume modes covering the full spectrum from "send everything now" to "drop everything stale and gently spread the rest".
+
+> **Industry first:** No competing platform (Customer.io, Mailchimp, Mautic, HubSpot, ActiveCampaign) implements burst-send mitigation on resume. See [`/concepts/burst-mitigation`](../concepts/burst-mitigation) for context.
+
+**Request body (discriminated union by `mode`):**
+
+| Mode | Extra fields | Behaviour |
+|------|--------------|-----------|
+| `"immediate"` | none | Send all overdue messages at once. Safe for short pauses; **dangerous for >24h pauses** (recipient inbox spam, Resend rate-limit hits). |
+| `"spread"` | `spread_window_seconds?`, `spread_strategy?` | Distribute overdue sends evenly across the chosen window. Rate-limiter as floor (CR-01). |
+| `"skip_stale"` | `stale_threshold_seconds?` | Drop sends scheduled longer ago than the threshold; advance enrollments to next step. |
+| `"skip_stale_spread"` | `spread_window_seconds?`, `stale_threshold_seconds?`, `spread_strategy?` | Combine — drop stale, then spread the remainder. Best for very long pauses. |
+
+**Field bounds:**
+- `spread_window_seconds` ∈ [60, 2_592_000] (1min – 30d). Out-of-bounds → `400 INVALID_SPREAD_WINDOW`.
+- `stale_threshold_seconds` ∈ [3_600, 31_536_000] (1h – 365d).
+- `spread_strategy`: `"fifo_by_original_time"` (default) or `"fifo_by_resume_time"`.
+
+When omitted, params default to the workspace's `lifecycle-settings` (see Workspace Settings docs).
+
+**Error codes:**
+| HTTP | error code | Cause |
+|------|------------|-------|
+| 400 | `INVALID_SPREAD_WINDOW` | `spread_window_seconds` out of bounds |
+| 409 | `SPREAD_IN_PROGRESS` | Concurrent resume in flight on this campaign |
+| 409 | `INVALID_TRANSITION` | Campaign not in `paused` status |
+| 503 | `RATE_LIMIT_CONFIG_MISSING` | Workspace has no rate-limit config (required for spread modes) |
+
+```bash
+# Immediate (Stage 2 default — short pauses only)
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/resume \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "mode": "immediate" }'
+
+# Spread over 4 hours (recommended for long pauses)
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/resume \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "mode": "spread", "spread_window_seconds": 14400 }'
+
+# Skip stale + spread (best for >7-day pauses)
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/resume \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "skip_stale_spread",
+    "spread_window_seconds": 14400,
+    "stale_threshold_seconds": 604800
+  }'
+```
+
+### Overdue count
+
+<EndpointBadge method="GET" path="/api/v1/campaigns/:id/overdue-count" />
+
+Returns the count + min/max `next_run_at` of `active` enrollments whose scheduled run-time is in the past. Operators (and the dashboard's resume dialog) read this BEFORE choosing a resume mode.
+
+**Response:**
+```json
+{
+  "count": 1234,
+  "oldest_scheduled_at": "2024-04-21T08:00:00.000Z",
+  "newest_scheduled_at": "2024-04-29T11:42:00.000Z"
+}
+```
+
+### Stop
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/stop" />
+
+Stop a campaign. **Two modes:**
+
+- **`drain`** (recommended) — flips `active|paused → stopping`. The background sweeper promotes to `stopped` when no progressing enrollments remain.
+- **`force`** — cancels all pending wait jobs immediately and force-exits in-flight enrollments. **REQUIRES `confirm_force: true`** to prevent accidents.
+
+**Request body (discriminated union):**
+```json
+{ "mode": "drain" }
+```
+or
+```json
+{ "mode": "force", "confirm_force": true }
+```
+
+```bash
+# Drain (graceful)
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/stop \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "mode": "drain" }'
+
+# Force (destructive — confirm_force required)
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/stop \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "mode": "force", "confirm_force": true }'
+```
+
+### Archive
+
+<EndpointBadge method="POST" path="/api/v1/campaigns/:id/archive" />
+
+⚠️ **TERMINAL** — archived campaigns cannot be reactivated. **REQUIRES `confirm_terminal: true`** at the body level. Idempotent on already-archived campaigns (returns 200 with `idempotent: true`).
+
+```bash
+curl -X POST https://your-api/api/v1/campaigns/cmp_abc/archive \
+  -H "Authorization: Bearer om_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "confirm_terminal": true }'
+```
+
+## Re-enrollment Policy (Stage 2) <StabilityBadge level="stable" />
+
+`POST /api/v1/campaigns` and `PATCH /api/v1/campaigns/:id` accept two new fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `re_enrollment_policy` | enum | `"never"` | `never` / `always` / `after_cooldown` / `on_attribute_change` |
+| `re_enrollment_cooldown_seconds` | integer | — | REQUIRED when policy is `after_cooldown` (HTTP 400 otherwise) |
+
+Policy semantics:
+
+- `never` — contact who completed or exited cannot re-enter on future trigger
+- `always` — contact re-enters every time trigger fires (use sparingly — may cause repeat sends)
+- `after_cooldown` — contact may re-enter after `re_enrollment_cooldown_seconds` elapsed since last enrollment
+- `on_attribute_change` — contact re-enters only if their attributes changed since last enrollment
+
+PATCH on `re_enrollment_policy` is allowed for campaigns in `draft|active|paused`; rejected with HTTP 409 on `stopping|stopped|archived`.
+
 ## List Campaigns
 
 <EndpointBadge method="GET" path="/api/v1/campaigns" />
@@ -21,178 +223,68 @@ Returns all campaigns in the workspace.
 
 Returns a campaign with its steps included.
 
-```json
-{
-  "id": "cmp_abc123def456",
-  "name": "Welcome Series",
-  "status": "active",
-  "triggerType": "event",
-  "triggerConfig": { "eventName": "user_signed_up" },
-  "steps": [
-    {
-      "id": "stp_xxx",
-      "campaignId": "cmp_abc123def456",
-      "stepType": "email",
-      "position": 0,
-      "config": { "templateId": "tpl_welcome", "subject": "Welcome!" }
-    },
-    {
-      "id": "stp_yyy",
-      "campaignId": "cmp_abc123def456",
-      "stepType": "wait",
-      "position": 1,
-      "config": { "delaySeconds": 259200 }
-    }
-  ]
-}
-```
-
 ## Create Campaign
 
 <EndpointBadge method="POST" path="/api/v1/campaigns" />
 
 Creates a new campaign in `draft` status. A campaign cannot be activated until it has at least one step.
 
-### Request Body
-
 | Field | Type | Required | Description |
 |-------|------|:--------:|-------------|
 | `name` | string | ✓ | Campaign name |
-| `triggerType` | enum | ✓ | What triggers this campaign (see below) |
-| `triggerConfig` | object | * | Trigger configuration — required fields depend on trigger type |
+| `triggerType` | enum | ✓ | `event` / `segment_enter` / `segment_exit` / `manual` |
+| `triggerConfig` | object | * | Trigger configuration |
 | `description` | string | — | Optional description |
+| `re_enrollment_policy` | enum | — | See above (default `"never"`) |
+| `re_enrollment_cooldown_seconds` | integer | * | Required when `re_enrollment_policy === "after_cooldown"` |
 
-### Trigger Types
-
-| `triggerType` | Description | Required `triggerConfig` |
-|---------------|-------------|--------------------------|
-| `event` | Fires when a contact triggers a named event | `{ "eventName": "user_signed_up" }` |
-| `segment_enter` | Fires when a contact joins a segment | `{ "segmentId": "seg_xxx" }` |
-| `segment_exit` | Fires when a contact leaves a segment | `{ "segmentId": "seg_xxx" }` |
-| `manual` | Triggered via API only | `{}` |
-
-```bash
-curl -X POST https://your-api/api/v1/campaigns \
-  -H "Authorization: Bearer om_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Welcome Series",
-    "triggerType": "event",
-    "triggerConfig": { "eventName": "user_signed_up" },
-    "description": "Onboard new users"
-  }'
-```
-
-## Update Campaign
+## Deprecated: PATCH `status`
 
 <EndpointBadge method="PATCH" path="/api/v1/campaigns/:id" />
 
-Updates a campaign's name, description, status, or trigger configuration.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | New campaign name |
-| `description` | string | New description |
-| `status` | string | New status: `active`, `paused`, or `archived` |
-| `triggerConfig` | object | Update trigger configuration (e.g. change `eventName` or `segmentId`) |
-
-### Status Transitions
-
-Campaigns follow a strict state machine:
-
-```
-draft → active ⇄ paused
-     ↘          ↘
-      archived   archived (terminal — cannot undo)
-```
-
-- `draft → active`: Activates the campaign (**requires at least one step**)
-- `active → paused`: Stops enrolling new contacts
-- `paused → active`: Resumes the campaign
-- Any → `archived`: Terminal state — cannot be reactivated
-
-```bash
-# Activate a campaign
-curl -X PATCH https://your-api/api/v1/campaigns/cmp_abc123def456 \
-  -H "Authorization: Bearer om_..." \
-  -H "Content-Type: application/json" \
-  -d '{ "status": "active" }'
-```
+> ⚠️ **Deprecated** — every PATCH response includes the `X-Deprecated: Use POST /api/v1/campaigns/:id/{verb} instead` header. The PATCH-status alias is preserved with FROZEN semantics for backward compatibility (Stage 2 [CN-11]):
+>
+> | PATCH `status` | Internal dispatch |
+> |----------------|-------------------|
+> | `paused` | Equivalent to POST `/:id/pause` |
+> | `active` (from paused) | Equivalent to POST `/:id/resume {mode:"immediate"}` |
+> | `archived` | Equivalent to POST `/:id/archive` (no `confirm_terminal` requirement on PATCH path) |
+> | `stopping` / `stopped` | **HTTP 400** — PATCH cannot drive stop transitions; use POST `/:id/stop` |
+>
+> Self-hoster scripts using PATCH continue working unchanged. AI agents and SDK consumers should migrate to the verb endpoints for richer behaviour and full audit trail.
 
 ## Delete Campaign
 
 <EndpointBadge method="DELETE" path="/api/v1/campaigns/:id" />
 
-Permanently deletes a campaign and all its steps.
+Permanently deletes a campaign and all its steps. Cannot delete an `active` campaign — pause or archive it first.
 
-<Callout type="warning">
-Cannot delete an `active` campaign — pause or archive it first. Returns `400` if attempted.
-</Callout>
+## Campaign Steps <StabilityBadge level="stable" />
 
-Returns `200 { "success": true }` on success.
-
-## Campaign Steps
-
-Campaign steps define what happens to an enrolled contact. Steps execute in order by `position`.
-
-### Step Types
+Campaign steps define what happens to an enrolled contact. Steps execute in order by `position`. Multi-step progression (`email → wait → email → ...`) is shipped and validated by Stage 1's integration suite.
 
 | `stepType` | Description | Config fields |
 |------------|-------------|---------------|
 | `email` | Send an email | `{ "templateId": "tpl_xxx", "subject": "...", "fromEmail": "...", "fromName": "..." }` |
-| `wait` | Delay before next step | `{ "delaySeconds": 259200 }` (e.g. 259200 = 3 days) |
+| `wait` | Delay before next step | `{ "duration": 3, "unit": "days" }` or `{ "delaySeconds": 259200 }` |
 
 ### Add Step
 
 <EndpointBadge method="POST" path="/api/v1/campaigns/:id/steps" />
 
-Adds a step to a campaign. **Campaign must be in `draft` status.**
-
 | Field | Type | Required | Description |
 |-------|------|:--------:|-------------|
 | `stepType` | `"email"` or `"wait"` | ✓ | Type of step |
-| `config` | object | — | Step configuration (see step types above) |
-| `position` | integer | — | Zero-based position (appended to end if omitted) |
-
-```bash
-# Add an email step
-curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/steps \
-  -H "Authorization: Bearer om_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "stepType": "email",
-    "config": {
-      "templateId": "tpl_welcome",
-      "subject": "Welcome to Acme!"
-    }
-  }'
-
-# Add a 3-day wait step
-curl -X POST https://your-api/api/v1/campaigns/cmp_abc123def456/steps \
-  -H "Authorization: Bearer om_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "stepType": "wait",
-    "config": { "delaySeconds": 259200 }
-  }'
-```
+| `config` | object | — | Step configuration |
+| `position` | integer | — | Zero-based position (appended if omitted) |
 
 ### Update Step
 
 <EndpointBadge method="PATCH" path="/api/v1/campaigns/:id/steps/:stepId" />
 
-Updates a step's config or position.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `config` | object | New step configuration |
-| `position` | integer | New zero-based position |
-
 ### Delete Step
 
 <EndpointBadge method="DELETE" path="/api/v1/campaigns/:id/steps/:stepId" />
-
-Permanently deletes a step from the campaign. Returns `200 { "success": true }`.
 
 ## Campaign Object
 
@@ -201,9 +293,11 @@ Permanently deletes a step from the campaign. Returns `200 { "success": true }`.
 | `id` | string | Unique ID (`cmp_` prefix) |
 | `name` | string | Campaign name |
 | `description` | string or null | Optional description |
-| `status` | string | `draft`, `active`, `paused`, or `archived` |
+| `status` | string | `draft`, `active`, `paused`, `stopping`, `stopped`, or `archived` |
 | `triggerType` | string | Event or segment-based trigger |
 | `triggerConfig` | object | Trigger-specific configuration |
+| `reEnrollmentPolicy` | enum | See above |
+| `reEnrollmentCooldownSeconds` | integer or null | Cooldown when policy is `after_cooldown` |
 | `steps` | array | Included when fetching by ID |
 | `createdAt` | timestamp | Creation time |
 | `updatedAt` | timestamp | Last update time |

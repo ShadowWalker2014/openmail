@@ -19,7 +19,8 @@
     "dev:web": "bun --cwd web dev",
     "db:generate": "bun --cwd packages/shared db:generate",
     "db:migrate": "bun --cwd packages/shared db:migrate",
-    "db:studio": "bun --cwd packages/shared db:studio"
+    "db:studio": "bun --cwd packages/shared db:studio",
+    "lint:stability": "bun run scripts/check-stability-mapping.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
