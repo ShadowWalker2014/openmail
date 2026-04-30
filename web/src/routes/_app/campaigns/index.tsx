@@ -36,10 +36,14 @@ import {
   Settings,
   Archive,
   Search,
+  Square,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { StopDialog, type StopDialogPayload } from "@/components/lifecycle/stop-dialog";
+import { ArchiveDialog } from "@/components/lifecycle/archive-dialog";
+import { GoalList } from "@/components/goals/goal-list";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   component: CampaignsPage,
@@ -62,6 +66,10 @@ interface CampaignStep {
   config: Record<string, unknown>;
   position: number;
   createdAt: string;
+  // Stage 4 — per-step pause status. Defaults to 'active' for any step that
+  // predates the migration.
+  status?: "active" | "paused";
+  pausedAt?: string | null;
 }
 
 interface CampaignDetail extends Campaign {
@@ -75,6 +83,9 @@ const STATUS_BADGE: Record<
   draft: "secondary",
   active: "success",
   paused: "warning",
+  // Stage 2 — new transitional / terminal states
+  stopping: "warning",
+  stopped: "default",
   archived: "default",
 };
 
@@ -186,6 +197,39 @@ function StepConfigPanel({
       qc.invalidateQueries({ queryKey: ["campaign-detail", campaignId] });
       toast.success("Step deleted");
       onDeleted();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Stage 4 — per-step pause/resume.
+  const pauseStepMutation = useMutation({
+    mutationFn: async () =>
+      (await sessionFetch(
+        workspaceId,
+        `/campaigns/${campaignId}/steps/${step!.id}/pause`,
+        { method: "POST", body: JSON.stringify({}) },
+      )) as { held_count?: number; cancelled_jobs?: number },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaignId] });
+      toast.success(
+        `Step paused (${data?.held_count ?? 0} held, ${data?.cancelled_jobs ?? 0} jobs cancelled)`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const resumeStepMutation = useMutation({
+    mutationFn: async () =>
+      (await sessionFetch(
+        workspaceId,
+        `/campaigns/${campaignId}/steps/${step!.id}/resume`,
+        { method: "POST", body: JSON.stringify({ mode: "immediate" }) },
+      )) as { resumed_count?: number; held_count?: number },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaignId] });
+      toast.success(
+        `Step resumed (${data?.resumed_count ?? data?.held_count ?? 0} enrollments)`,
+      );
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -361,16 +405,38 @@ function StepConfigPanel({
       </div>
 
       <div className="shrink-0 px-5 py-3 border-t flex items-center justify-between gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-          onClick={handleDelete}
-          disabled={deleteMutation.isPending}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete step
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete step
+          </Button>
+          {/* Stage 4 — per-step pause/resume */}
+          {step?.status === "paused" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => resumeStepMutation.mutate()}
+              disabled={resumeStepMutation.isPending}
+            >
+              {resumeStepMutation.isPending ? "Resuming…" : "Resume step"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pauseStepMutation.mutate()}
+              disabled={pauseStepMutation.isPending}
+            >
+              {pauseStepMutation.isPending ? "Pausing…" : "Pause step"}
+            </Button>
+          )}
+        </div>
         <Button
           size="sm"
           onClick={handleSave}
@@ -442,11 +508,16 @@ function CampaignDetailDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: (status: string) =>
+  // ── Stage 2 lifecycle verb mutations ───────────────────────────────────────
+  // Each verb POSTs to the dedicated endpoint instead of PATCH-status. Activate
+  // remains on PATCH because there's no Stage-2 "activate" verb; it's the only
+  // forward-progressing legacy transition kept on the alias.
+
+  const activateMutation = useMutation({
+    mutationFn: () =>
       sessionFetch(workspaceId, `/campaigns/${campaign.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: "active" }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
@@ -455,7 +526,71 @@ function CampaignDetailDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const pauseMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(workspaceId, `/campaigns/${campaign.id}/pause`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(workspaceId, `/campaigns/${campaign.id}/resume`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "immediate" }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: (payload: StopDialogPayload) =>
+      sessionFetch(workspaceId, `/campaigns/${campaign.id}/stop`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      setStopDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+      toast.success("Campaign stop initiated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: () =>
+      sessionFetch(workspaceId, `/campaigns/${campaign.id}/archive`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_terminal: true }),
+      }),
+    onSuccess: () => {
+      setArchiveDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["campaign-detail", campaign.id] });
+      toast.success("Campaign archived");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+
   const currentStatus = detail?.status ?? campaign.status;
+  const anyMutationPending =
+    activateMutation.isPending ||
+    pauseMutation.isPending ||
+    resumeMutation.isPending ||
+    stopMutation.isPending ||
+    archiveMutation.isPending;
 
   return (
     <Dialog
@@ -541,7 +676,14 @@ function CampaignDetailDialog({
                       <div className="flex items-start gap-2">
                         <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium">Send Email</p>
+                          <p className="text-[13px] font-medium flex items-center gap-1.5">
+                            Send Email
+                            {step.status === "paused" && (
+                              <span className="text-[10px] uppercase font-semibold tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                paused
+                              </span>
+                            )}
+                          </p>
                           {(step.config.subject as string | undefined) && (
                             <p className="text-[11px] text-muted-foreground truncate">
                               {step.config.subject as string}
@@ -554,7 +696,14 @@ function CampaignDetailDialog({
                       <div className="flex items-center gap-2">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium">Wait</p>
+                          <p className="text-[13px] font-medium flex items-center gap-1.5">
+                            Wait
+                            {step.status === "paused" && (
+                              <span className="text-[10px] uppercase font-semibold tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                paused
+                              </span>
+                            )}
+                          </p>
                           <p className="text-[11px] text-muted-foreground">
                             {(step.config.duration as number) ?? "?"}{" "}
                             {(step.config.unit as string) ?? "days"}
@@ -599,29 +748,91 @@ function CampaignDetailDialog({
               </div>
             </div>
 
-            {/* Status footer */}
-            <div className="px-4 py-3 border-t bg-card shrink-0">
-              {(currentStatus === "draft" || currentStatus === "paused") && (
+            {/* Stage 5 — Goals (early-exit conditions) */}
+            <GoalList
+              workspaceId={workspaceId}
+              campaignId={campaign.id}
+              campaignStatus={currentStatus}
+            />
+
+            {/* Status footer — state-aware actions per [REQ-19] */}
+            <div className="px-4 py-3 border-t bg-card shrink-0 flex flex-col gap-1.5">
+              {currentStatus === "draft" && (
                 <Button
                   size="sm"
                   className="w-full"
-                  onClick={() => toggleStatusMutation.mutate("active")}
-                  disabled={toggleStatusMutation.isPending}
+                  onClick={() => activateMutation.mutate()}
+                  disabled={anyMutationPending}
                 >
                   <Play className="h-3.5 w-3.5" />
                   Activate
                 </Button>
               )}
               {currentStatus === "active" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => pauseMutation.mutate()}
+                    disabled={anyMutationPending}
+                  >
+                    <Pause className="h-3.5 w-3.5" />
+                    Pause
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setStopDialogOpen(true)}
+                    disabled={anyMutationPending}
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    Stop
+                  </Button>
+                </>
+              )}
+              {currentStatus === "paused" && (
+                <>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => resumeMutation.mutate()}
+                    disabled={anyMutationPending}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Resume
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setStopDialogOpen(true)}
+                    disabled={anyMutationPending}
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    Stop
+                  </Button>
+                </>
+              )}
+              {(currentStatus === "stopping" || currentStatus === "stopped") && (
+                <p className="text-[12px] text-center text-muted-foreground py-1">
+                  View only —{" "}
+                  {currentStatus === "stopping"
+                    ? "drain in progress"
+                    : "campaign stopped"}
+                </p>
+              )}
+              {currentStatus !== "archived" && (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-full"
-                  onClick={() => toggleStatusMutation.mutate("paused")}
-                  disabled={toggleStatusMutation.isPending}
+                  className="w-full text-muted-foreground"
+                  onClick={() => setArchiveDialogOpen(true)}
+                  disabled={anyMutationPending}
                 >
-                  <Pause className="h-3.5 w-3.5" />
-                  Pause
+                  <Archive className="h-3.5 w-3.5" />
+                  Archive
                 </Button>
               )}
             </div>
@@ -638,6 +849,22 @@ function CampaignDetailDialog({
             />
           </div>
         </div>
+
+        {/* Stage 2 lifecycle dialogs */}
+        <StopDialog
+          open={stopDialogOpen}
+          campaignName={campaign.name}
+          onOpenChange={setStopDialogOpen}
+          onConfirm={(payload) => stopMutation.mutate(payload)}
+          loading={stopMutation.isPending}
+        />
+        <ArchiveDialog
+          open={archiveDialogOpen}
+          campaignName={campaign.name}
+          onOpenChange={setArchiveDialogOpen}
+          onConfirm={() => archiveMutation.mutate()}
+          loading={archiveMutation.isPending}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -650,6 +877,8 @@ function CampaignsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [stopTarget, setStopTarget] = useState<Campaign | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Campaign | null>(null);
   const [detailCampaignId, setDetailCampaignId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
@@ -657,6 +886,11 @@ function CampaignsPage() {
   const descRef = useRef<HTMLInputElement>(null);
   const eventNameRef = useRef<HTMLInputElement>(null);
   const [triggerType, setTriggerType] = useState<"event" | "manual">("event");
+  // Stage 2 [V2.3] — re-enrollment policy + cooldown form fields
+  const [reEnrollmentPolicy, setReEnrollmentPolicy] = useState<
+    "never" | "always" | "after_cooldown" | "on_attribute_change"
+  >("never");
+  const [cooldownHours, setCooldownHours] = useState<number>(24);
 
   const { data: campaigns = [], isLoading, isError } = useQuery<Campaign[]>({
     queryKey: ["campaigns", activeWorkspaceId],
@@ -671,6 +905,8 @@ function CampaignsPage() {
     if (descRef.current) descRef.current.value = "";
     if (eventNameRef.current) eventNameRef.current.value = "";
     setTriggerType("event");
+    setReEnrollmentPolicy("never");
+    setCooldownHours(24);
   }
 
   const createMutation = useMutation({
@@ -689,16 +925,25 @@ function CampaignsPage() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      sessionFetch(activeWorkspaceId!, `/campaigns/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      }),
-    onMutate: async ({ id, status }) => {
+    // Stage 2: list-view inline toggle for activate/pause uses POST verbs.
+    // Activate stays on PATCH (no Stage-2 activate verb).
+    mutationFn: ({ id, action }: { id: string; action: "activate" | "pause" }) => {
+      if (action === "activate") {
+        return sessionFetch(activeWorkspaceId!, `/campaigns/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "active" }),
+        });
+      }
+      return sessionFetch(activeWorkspaceId!, `/campaigns/${id}/pause`, {
+        method: "POST",
+      });
+    },
+    onMutate: async ({ id, action }) => {
       await qc.cancelQueries({ queryKey: ["campaigns", activeWorkspaceId] });
       const previous = qc.getQueryData<Campaign[]>(["campaigns", activeWorkspaceId]);
+      const newStatus = action === "activate" ? "active" : "paused";
       qc.setQueryData<Campaign[]>(["campaigns", activeWorkspaceId], (old) =>
-        old?.map((c) => (c.id === id ? { ...c, status } : c)) ?? []
+        old?.map((c) => (c.id === id ? { ...c, status: newStatus } : c)) ?? []
       );
       return { previous };
     },
@@ -711,6 +956,34 @@ function CampaignsPage() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] });
     },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: StopDialogPayload }) =>
+      sessionFetch(activeWorkspaceId!, `/campaigns/${id}/stop`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      setStopTarget(null);
+      qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] });
+      toast.success("Campaign stop initiated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) =>
+      sessionFetch(activeWorkspaceId!, `/campaigns/${id}/archive`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_terminal: true }),
+      }),
+    onSuccess: () => {
+      setArchiveTarget(null);
+      qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] });
+      toast.success("Campaign archived");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteMutation = useMutation({
@@ -770,6 +1043,10 @@ function CampaignsPage() {
                     triggerType === "event"
                       ? { eventName: eventNameRef.current!.value }
                       : {},
+                  re_enrollment_policy: reEnrollmentPolicy,
+                  ...(reEnrollmentPolicy === "after_cooldown"
+                    ? { re_enrollment_cooldown_seconds: cooldownHours * 3600 }
+                    : {}),
                 });
               }}
               className="space-y-4"
@@ -819,6 +1096,58 @@ function CampaignsPage() {
                   />
                 </div>
               </div>
+
+              {/* Stage 2 [V2.3] — re-enrollment policy */}
+              <div className="space-y-1.5">
+                <Label>Re-enrollment policy</Label>
+                <select
+                  value={reEnrollmentPolicy}
+                  onChange={(e) =>
+                    setReEnrollmentPolicy(
+                      e.target.value as
+                        | "never"
+                        | "always"
+                        | "after_cooldown"
+                        | "on_attribute_change",
+                    )
+                  }
+                  className="w-full h-9 rounded-md border border-input bg-input px-3 text-[13px] focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                >
+                  <option value="never">
+                    Never — contacts who completed/exited cannot re-enter
+                  </option>
+                  <option value="always">
+                    Always — re-enter every time trigger fires (caution: repeat sends)
+                  </option>
+                  <option value="after_cooldown">
+                    After cooldown — re-enter after waiting period
+                  </option>
+                  <option value="on_attribute_change">
+                    On attribute change — re-enter only if attributes changed
+                  </option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Determines whether a contact who has already gone through this campaign
+                  can be re-enrolled when the trigger fires again.
+                </p>
+              </div>
+              {reEnrollmentPolicy === "after_cooldown" && (
+                <div className="space-y-1.5">
+                  <Label>Cooldown (hours)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={cooldownHours}
+                    onChange={(e) => setCooldownHours(Number(e.target.value) || 1)}
+                    placeholder="24"
+                    required
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Minimum hours between consecutive enrollments per contact.
+                  </p>
+                </div>
+              )}
+
               <DialogFooter>
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating…" : "Create Campaign"}
@@ -905,22 +1234,41 @@ function CampaignsPage() {
                     ? format(new Date(campaign.createdAt), "MMM d")
                     : ""}
                 </span>
-                {(campaign.status === "draft" ||
-                  campaign.status === "paused") && (
+                {campaign.status === "draft" && (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={toggleMutation.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleMutation.mutate({
-                        id: campaign.id,
-                        status: "active",
-                      });
+                      toggleMutation.mutate({ id: campaign.id, action: "activate" });
                     }}
                   >
                     <Play className="h-3.5 w-3.5" />
                     Activate
+                  </Button>
+                )}
+                {campaign.status === "paused" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={toggleMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Resume — POST /:id/resume — uses Resume button label so users
+                      // distinguish from cold "activate" of a draft.
+                      sessionFetch(activeWorkspaceId!, `/campaigns/${campaign.id}/resume`, {
+                        method: "POST",
+                        body: JSON.stringify({ mode: "immediate" }),
+                      })
+                        .then(() =>
+                          qc.invalidateQueries({ queryKey: ["campaigns", activeWorkspaceId] }),
+                        )
+                        .catch((err: Error) => toast.error(err.message));
+                    }}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Resume
                   </Button>
                 )}
                 {campaign.status === "active" && (
@@ -930,19 +1278,33 @@ function CampaignsPage() {
                     disabled={toggleMutation.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleMutation.mutate({
-                        id: campaign.id,
-                        status: "paused",
-                      });
+                      toggleMutation.mutate({ id: campaign.id, action: "pause" });
                     }}
                   >
                     <Pause className="h-3.5 w-3.5" />
                     Pause
                   </Button>
                 )}
-                {campaign.status !== "active" && campaign.status !== "archived" && (
+                {(campaign.status === "active" || campaign.status === "paused") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={stopMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStopTarget(campaign);
+                    }}
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    Stop
+                  </Button>
+                )}
+                {campaign.status !== "archived" && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); toggleMutation.mutate({ id: campaign.id, status: "archived" }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setArchiveTarget(campaign);
+                    }}
                     className="rounded p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-150 hover:bg-accent hover:text-foreground group-hover:opacity-100 cursor-pointer"
                     title="Archive"
                   >
@@ -1026,6 +1388,28 @@ function CampaignsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Stage 2 — Stop verb dialog (page-level, list-row trigger) */}
+      <StopDialog
+        open={!!stopTarget}
+        campaignName={stopTarget?.name ?? ""}
+        onOpenChange={(o) => !o && setStopTarget(null)}
+        onConfirm={(payload) =>
+          stopTarget && stopMutation.mutate({ id: stopTarget.id, payload })
+        }
+        loading={stopMutation.isPending}
+      />
+
+      {/* Stage 2 — Archive verb dialog (page-level, list-row trigger) */}
+      <ArchiveDialog
+        open={!!archiveTarget}
+        campaignName={archiveTarget?.name ?? ""}
+        onOpenChange={(o) => !o && setArchiveTarget(null)}
+        onConfirm={() =>
+          archiveTarget && archiveMutation.mutate(archiveTarget.id)
+        }
+        loading={archiveMutation.isPending}
+      />
     </div>
   );
 }

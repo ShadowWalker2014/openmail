@@ -36,6 +36,69 @@
       "when": 1773114030723,
       "tag": "0004_shocking_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777498352075,
+      "tag": "0005_lifecycle_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777498352076,
+      "tag": "0006_enrollment_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777498352077,
+      "tag": "0007_audit_chokepoint_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777504716368,
+      "tag": "0008_workspace_lifecycle_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777506087482,
+      "tag": "0009_step_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777506139407,
+      "tag": "0010_event_types_step_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777507478182,
+      "tag": "0011_campaign_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777507511181,
+      "tag": "0012_event_types_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777600000000,
+      "tag": "0013_archive_outbox",
+      "breakpoints": true
     }
   ]
 }

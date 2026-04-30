@@ -1,8 +1,11 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getDocsUrl } from "./lib/public-urls.js";
 
-// Public URL for the live llms.txt — update once if the domain ever changes
-const DOCS_BASE_URL = process.env.OPENMAIL_DOCS_URL ?? "https://openmail.win/docs";
+// Public URL for the live llms.txt is resolved per Stage 2 [A2.12]:
+//   DOCS_PUBLIC_URL / OPENMAIL_DOCS_URL env-var override → WEB_URL-derived
+//   (subdomain or /docs path) → SaaS default. Self-hosters get the right
+//   URL automatically when subdomain conventions match.
 
 /**
  * Fetch a URL and return its text content, with a short in-process TTL cache
@@ -33,6 +36,8 @@ async function fetchText(url: string): Promise<string> {
  * redeployed when the documentation changes — the docs are always current.
  */
 export function registerResources(server: McpServer) {
+  // Resolved at registration time per [A2.12]; AGENTS.md "lazy init" preserved.
+  const DOCS_BASE_URL = getDocsUrl();
   // ── 1. Full documentation index (llms.txt) ────────────────────────────────
   // The canonical LLM-friendly entry point. Lists all doc pages with summaries
   // so the AI knows what's available and where to look for details.

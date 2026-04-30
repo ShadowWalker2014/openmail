@@ -49,6 +49,9 @@ export const fixtures = {
     status: "draft" as const,
     triggerType: "event" as const,
     triggerConfig: { eventName: "user_signed_up" },
+    // Stage 2 [V2.3] additive fields
+    reEnrollmentPolicy: "never" as const,
+    reEnrollmentCooldownSeconds: null,
     createdAt: "2025-01-01T00:00:00.000Z",
     updatedAt: "2025-01-01T00:00:00.000Z",
     steps: [],

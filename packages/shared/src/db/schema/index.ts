@@ -8,3 +8,8 @@ export * from "./broadcasts";
 export * from "./sends";
 export * from "./assets";
 export * from "./groups";
+export * from "./enrollment-events";
+export * from "./enrollment-events-archive";
+export * from "./campaign-edit-outbox";
+export * from "./workspace-lifecycle-settings";
+export * from "./campaign-goals";

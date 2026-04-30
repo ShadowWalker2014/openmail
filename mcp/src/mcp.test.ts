@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { registerContactTools } from "./tools/contacts.js";
 import { registerBroadcastTools } from "./tools/broadcasts.js";
 import { registerCampaignTools } from "./tools/campaigns.js";
+import { registerLifecycleTools } from "./tools/lifecycle.js";
 import { registerTemplateTools } from "./tools/templates.js";
 import { registerSegmentTools } from "./tools/segments.js";
 import { registerAnalyticsTools } from "./tools/analytics.js";
@@ -43,7 +44,12 @@ class MockServer {
 
 // ── Controllable mock API client ──────────────────────────────────────────────
 
-type Call = { method: "get" | "post" | "patch" | "delete"; path: string; body?: any };
+type Call = {
+  method: "get" | "post" | "patch" | "delete";
+  path: string;
+  body?: any;
+  extraHeaders?: Record<string, string>;
+};
 
 function makeClient(returnValue: any = {}) {
   const calls: Call[] = [];
@@ -54,8 +60,14 @@ function makeClient(returnValue: any = {}) {
     calls,
     lastCall(): Call { return calls[calls.length - 1]; },
     get: async (path: string) => { calls.push({ method: "get", path }); return _return; },
-    post: async (path: string, body: any) => { calls.push({ method: "post", path, body }); return _return; },
-    patch: async (path: string, body: any) => { calls.push({ method: "patch", path, body }); return _return; },
+    post: async (path: string, body?: any, extraHeaders?: Record<string, string>) => {
+      calls.push({ method: "post", path, body, extraHeaders });
+      return _return;
+    },
+    patch: async (path: string, body: any, extraHeaders?: Record<string, string>) => {
+      calls.push({ method: "patch", path, body, extraHeaders });
+      return _return;
+    },
     delete: async (path: string) => { calls.push({ method: "delete", path }); return _return; },
   };
   return client;
@@ -70,6 +82,8 @@ function setup() {
   registerContactTools(server as any, () => client);
   registerBroadcastTools(server as any, () => client);
   registerCampaignTools(server as any, () => client);
+  // Stage 2 — lifecycle.* verbs (4 tools).
+  registerLifecycleTools(server as any, () => client);
   registerTemplateTools(server as any, () => client);
   registerSegmentTools(server as any, () => client);
   registerAnalyticsTools(server as any, () => client);
@@ -84,9 +98,14 @@ function textOf(result: any): string {
 // ── TOOL REGISTRATION ─────────────────────────────────────────────────────────
 
 describe("tool registration", () => {
-  it("registers exactly 20 tools (all tools from AGENTS.md)", () => {
+  it("registers exactly 29 tools (Stage 4 added 2 step lifecycle verbs)", () => {
+    // 24 base tools (6 modules) + 3 Stage-2 lifecycle verbs (resume, stop,
+    // archive). pause_campaign is registered ONLY by campaigns.ts (the legacy
+    // tool now routes through the audited PATCH alias post Round 5).
+    // MCP SDK requires unique tool names — registering pause twice would
+    // cause silent overwrite, so lifecycle.ts deliberately skips it.
     const { server } = setup();
-    expect(server.names()).toHaveLength(20);
+    expect(server.names()).toHaveLength(29);
   });
 
   const expected = [
@@ -96,6 +115,8 @@ describe("tool registration", () => {
     "list_templates", "create_template", "update_template",
     "list_segments", "create_segment",
     "get_analytics", "get_broadcast_analytics",
+    // Stage 2 — lifecycle.* verbs
+    "resume_campaign", "stop_campaign", "archive_campaign",
   ];
 
   for (const name of expected) {
@@ -382,19 +403,74 @@ describe("update_campaign", () => {
   });
 });
 
-describe("pause_campaign", () => {
-  it("PATCH /campaigns/:id with { status: 'paused' }", async () => {
+describe("pause_campaign (legacy → audited PATCH alias)", () => {
+  // Stage 2 R5: pause_campaign stays registered ONLY by campaigns.ts. It
+  // PATCHes /campaigns/:id with {status:"paused"}. Post R5, the API PATCH
+  // handler routes the status mutation through commitLifecycleStatus so the
+  // audit chokepoint trigger admits the UPDATE — equivalent audit trail to
+  // the lifecycle.* verbs.
+  it("PATCHes /campaigns/:id with status=paused", async () => {
     const { server, client } = setup();
     await server.call("pause_campaign", { campaignId: "cmp_abc" });
     expect(client.lastCall().method).toBe("patch");
     expect(client.lastCall().path).toBe("/campaigns/cmp_abc");
     expect(client.lastCall().body).toEqual({ status: "paused" });
   });
+});
 
-  it("body does NOT include campaignId", async () => {
+describe("resume_campaign (lifecycle.*)", () => {
+  it("POST /campaigns/:id/resume with mode=immediate by default", async () => {
     const { server, client } = setup();
-    await server.call("pause_campaign", { campaignId: "cmp_abc" });
-    expect(client.lastCall().body.campaignId).toBeUndefined();
+    await server.call("resume_campaign", { campaignId: "cmp_abc" });
+    expect(client.lastCall().method).toBe("post");
+    expect(client.lastCall().path).toBe("/campaigns/cmp_abc/resume");
+    expect(client.lastCall().body).toEqual({ mode: "immediate" });
+  });
+
+  it("forwards X-Lifecycle-Op-Id", async () => {
+    const { server, client } = setup();
+    await server.call("resume_campaign", { campaignId: "cmp_abc" });
+    expect(client.lastCall().extraHeaders!["X-Lifecycle-Op-Id"]).toMatch(/^lop_mcp_/);
+  });
+});
+
+describe("stop_campaign (lifecycle.*)", () => {
+  it("POST /campaigns/:id/stop with drain mode", async () => {
+    const { server, client } = setup();
+    await server.call("stop_campaign", { campaignId: "cmp_abc", mode: "drain" });
+    expect(client.lastCall().method).toBe("post");
+    expect(client.lastCall().path).toBe("/campaigns/cmp_abc/stop");
+    expect(client.lastCall().body).toEqual({ mode: "drain" });
+  });
+
+  it("requires confirm_force when mode='force' (rejects without it)", async () => {
+    const { server } = setup();
+    await expect(
+      server.call("stop_campaign", { campaignId: "cmp_abc", mode: "force" }),
+    ).rejects.toThrow(/confirm_force/);
+  });
+
+  it("POST /campaigns/:id/stop with force mode + confirm_force", async () => {
+    const { server, client } = setup();
+    await server.call("stop_campaign", {
+      campaignId: "cmp_abc",
+      mode: "force",
+      confirm_force: true,
+    });
+    expect(client.lastCall().body).toEqual({ mode: "force", confirm_force: true });
+  });
+});
+
+describe("archive_campaign (lifecycle.*)", () => {
+  it("POST /campaigns/:id/archive with confirm_terminal", async () => {
+    const { server, client } = setup();
+    await server.call("archive_campaign", {
+      campaignId: "cmp_abc",
+      confirm_terminal: true,
+    });
+    expect(client.lastCall().method).toBe("post");
+    expect(client.lastCall().path).toBe("/campaigns/cmp_abc/archive");
+    expect(client.lastCall().body).toEqual({ confirm_terminal: true });
   });
 });
 

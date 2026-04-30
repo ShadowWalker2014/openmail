@@ -5,6 +5,8 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { registerContactTools } from "./tools/contacts.js";
 import { registerBroadcastTools } from "./tools/broadcasts.js";
 import { registerCampaignTools } from "./tools/campaigns.js";
+import { registerLifecycleTools } from "./tools/lifecycle.js";
+import { registerGoalTools } from "./tools/goals.js";
 import { registerTemplateTools } from "./tools/templates.js";
 import { registerSegmentTools } from "./tools/segments.js";
 import { registerAnalyticsTools } from "./tools/analytics.js";
@@ -40,10 +42,16 @@ app.post("/mcp", async (c) => {
     description: "OpenMail — email marketing automation platform API",
   });
 
-  // Tools (29 total — contacts, broadcasts, campaigns, templates, segments, analytics, assets)
+  // Tools (contacts, broadcasts, campaigns, lifecycle, templates, segments, analytics, assets).
+  // Lifecycle tools (Stage 2) register `resume_campaign`, `stop_campaign`,
+  // `archive_campaign` only — `pause_campaign` is registered exclusively by
+  // the campaigns module (which now routes through the audited PATCH alias).
+  // MCP SDK requires unique tool names so we cannot register pause twice.
   registerContactTools(server, () => client);
   registerBroadcastTools(server, () => client);
   registerCampaignTools(server, () => client);
+  registerLifecycleTools(server, () => client);
+  registerGoalTools(server, () => client);
   registerTemplateTools(server, () => client);
   registerSegmentTools(server, () => client);
   registerAnalyticsTools(server, () => client);
